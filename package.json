@@ -5,13 +5,14 @@
   "version": "0.2.0",
   "publisher": "mcpp-community",
   "license": "Apache-2.0",
+  "icon": "images/logo.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mcpp-community/mcpp-vscode.git"
+    "url": "https://github.com/wellwei/mcpp-vscode.git"
   },
-  "homepage": "https://github.com/mcpp-community/mcpp-vscode#readme",
+  "homepage": "https://github.com/wellwei/mcpp-vscode#readme",
   "bugs": {
-    "url": "https://github.com/mcpp-community/mcpp-vscode/issues"
+    "url": "https://github.com/wellwei/mcpp-vscode/issues"
   },
   "engines": {
     "vscode": "^1.90.0"

@@ -12,7 +12,8 @@
   toolchain 与 target 分轴处理，首版 UI 不提供结构化 `--target` 选择器。
 - 全局默认选择过滤普通 target-only payload，保留 mcpp 在 Windows 上将 host GCC 映射到
   MinGW payload 的官方规则，并明确设置 host 默认会清空 `default_target`；
-  安装入口把 mcpp 兼容 spec 原样传给 CLI，MSVC 走系统检测，隐含 target 的别名走对应 payload。
+  安装入口接受省略版本和 namespace，把兼容 spec 安全规范化为单个参数后交给 mcpp 最终解析；
+  MSVC 走系统检测，已知 target 别名走对应 payload，泛化 triple 由 mcpp 校验。
 - 工具链安装和全局默认修改均需要用户确认；Restricted Mode 不执行 mcpp 或其他外部工具。
 
 ## 0.1.5

@@ -151,6 +151,22 @@ test("规范化输入并构造参数数组", () => {
   assert.deepEqual(mcppCommandArguments("build"), ["build"]);
 });
 
+test("保留 mcpp 支持的省略版本和 namespace 输入", () => {
+  const inputs = [
+    "gcc",
+    "llvm",
+    "clang",
+    "musl-gcc",
+    "mingw",
+    "xim:gcc@16",
+  ];
+  assert.deepEqual(inputs.map(normalizeToolchainSpec), inputs);
+  assert.equal(normalizeToolchainSpec("xim:gcc 16"), "xim:gcc@16");
+  assert.equal(normalizeToolchainSpec("xim:gcc@system"), "xim:gcc@system");
+  assert.equal(normalizeToolchainSpec("future@preview"), "future@preview");
+  assert.equal(isMsvcToolchainSpec("xim:msvc@system"), true);
+});
+
 test("识别系统项和隐含 target 别名", () => {
   assert.equal(isMsvcToolchainSpec("msvc"), true);
   assert.equal(isMsvcToolchainSpec("msvc@system"), true);

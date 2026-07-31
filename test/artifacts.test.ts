@@ -5,6 +5,10 @@ import test from "node:test";
 
 interface PackageManifest {
   version?: string;
+  icon?: string;
+  repository?: { url?: string };
+  homepage?: string;
+  bugs?: { url?: string };
   extensionDependencies?: string[];
   activationEvents?: string[];
   capabilities?: { untrustedWorkspaces?: { supported?: string; description?: string } };
@@ -105,6 +109,26 @@ test("安装流程把系统工具链和 target 兼容 spec 交给 mcpp 解析", 
     /if \(isMsvcToolchainSpec\(spec\) \|\| toolchainSpecTargetHint\(spec\) !== undefined\)/,
   );
   assert.match(method, /toolchainInstallKind\(spec\)/);
+});
+
+test("泛化 triple 工具链由 mcpp 最终校验", () => {
+  const source = readFileSync(path.join(root, "src/cliController.ts"), "utf8");
+  const start = source.indexOf("public async installToolchain");
+  const end = source.indexOf("public async selectDefaultToolchain", start);
+  const method = source.slice(start, end);
+
+  assert.match(method, /可能携带 target 语义.*最终由 mcpp 校验/s);
+});
+
+test("声明 GitHub 仓库和扩展图标", () => {
+  const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
+  assert.equal(manifest.icon, "images/logo.png");
+  assert.equal(manifest.repository?.url, "https://github.com/wellwei/mcpp-vscode.git");
+  assert.equal(manifest.homepage, "https://github.com/wellwei/mcpp-vscode#readme");
+  assert.equal(manifest.bugs?.url, "https://github.com/wellwei/mcpp-vscode/issues");
+
+  const icon = readFileSync(path.join(root, manifest.icon));
+  assert.deepEqual([...icon.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
 });
 
 test("README 区分 mcpp 的 MSVC 构建能力和 clangd 的 IFC 限制", () => {

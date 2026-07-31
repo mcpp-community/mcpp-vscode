@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="images/logo.png" width="160" alt="mcpp 标志">
+</p>
+
 # mcpp VS Code 扩展
 
 本扩展把 mcpp 工程接入官方
@@ -79,10 +83,12 @@ mcpp 会把 `compile_commands.json` 写到工程根目录。扩展只读取它�
 - **mcpp: 查看工具链**：执行 `mcpp toolchain list`，保留原始输出并在 Quick Pick 中
   展示当前有效工具链、全局默认、系统工具链、target 状态和可安装版本。
 - **mcpp: 安装工具链**：从 mcpp 列出的可用项或兼容 spec 中选择，执行
-  `mcpp toolchain install <spec>`。规范的 `gcc@V` / `llvm@V` 按 host target 安装；
-  `gcc@V-musl`、`mingw@V`、`<triple>-gcc@V` 等显式兼容写法原样交给 mcpp 规范化并安装
-  对应 target。输入 `msvc` 时，同一命令只检测系统 Visual Studio 或显示官方安装指引，
-  不会由 mcpp 下载、升级或删除 MSVC。本版本暂不提供结构化 `--target` 选择器。
+  `mcpp toolchain install <spec>`。`gcc`、`llvm` 等省略版本的 family 会由 mcpp 选择最高
+  可用版本；`xim:gcc@16` 等 namespace 输入也可直接使用。插件只把输入安全规范化为单个
+  参数，family、别名和 triple 的合法性最终由 mcpp 解析。`gcc@V-musl`、`mingw@V` 等
+  兼容写法会携带 target；泛化的 `<triple>-gcc@V` 可能携带 target，仍由 mcpp 校验 triple。
+  输入 `msvc` 时，同一命令只检测系统 Visual Studio 或显示官方安装指引，不会由 mcpp
+  下载、升级或删除 MSVC。本版本暂不提供结构化 `--target` 选择器。
 - **mcpp: 选择全局默认工具链**：从当前主机可作为默认值的已安装项或检测到的系统项中
   选择，执行 `mcpp toolchain default <spec>`。普通 target-only payload 不会混入列表；
   Windows 上省略 target 的 GCC 按 mcpp 官方规则映射到已安装的 MinGW payload。按 mcpp 的官方
@@ -143,8 +149,9 @@ clangd 21 及更高版本会请求 `--experimental-modules-support`。`on` 强�
   `import std`、命名模块、`.ifc`、增量构建和运行。
 - `musl-gcc`、`gcc@<version>-musl`、`mingw@<version>`、`mingw-gcc@<version>`、
   `mingw-cross-gcc@<version>`、`<triple>-gcc@<version>` 和 `clang@<version>` 等旧拼写仍由
-  mcpp 兼容；其中除 `clang@<version>` 外的这些变体会隐含 target。插件通过参数数组把
-  用户选择原样交给 mcpp，不自行重写其规范化结果。
+  mcpp 兼容；其中除 `clang@<version>` 外的已知变体会隐含 target，泛化 triple 写法的
+  合法性由 mcpp 判断。插件通过参数数组把用户输入安全规范化为单个参数后交给 mcpp，
+  最终由 mcpp 解析，不自行复制其 family、alias 或 triple 规则。
 
 当前 0.2.0 在消费编译数据库并配置 clangd 的基础上增加了 mcpp CLI 菜单；首版 UI
 只读展示 target，不提供结构化 target 选择。用户仍可输入 mcpp 兼容 spec 安装 target

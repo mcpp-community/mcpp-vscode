@@ -8,6 +8,7 @@ import {
   normalizeToolchainSpec,
   parseToolchainList,
   toolchainInstallKind,
+  toolchainSpecTargetHint,
   type ToolchainInventory,
   type ToolchainItem,
 } from "./cli";
@@ -186,17 +187,22 @@ export class McppCliController {
       return;
     }
     const installKind = toolchainInstallKind(spec);
+    const targetHint = toolchainSpecTargetHint(spec);
     const confirmLabel = installKind === "system-detect" ? CONFIRM_DETECT : CONFIRM_INSTALL;
     const confirmation = installKind === "system-detect"
       ? `将调用 mcpp 检测系统 MSVC（${spec}）。`
-      : installKind === "managed-target"
-        ? `将把携带 target 语义的兼容 spec ${spec} 交给 mcpp 安装。`
-        : `将安装 mcpp 工具链 ${spec}（不指定 target，使用 host target）。`;
+      : targetHint === "target"
+        ? `将把可能携带 target 语义的兼容 spec ${spec} 交给 mcpp 安装，最终由 mcpp 校验。`
+        : installKind === "managed-target"
+          ? `将把携带 target 语义的兼容 spec ${spec} 交给 mcpp 安装。`
+          : `将安装 mcpp 工具链 ${spec}（不指定 target，使用 host target）。`;
     const detail = installKind === "system-detect"
       ? "mcpp 不会下载或安装 MSVC；它会检测 Visual Studio，并在缺失时给出官方安装指引。"
-      : installKind === "managed-target"
-        ? "mcpp 会规范化兼容写法，并可能下载对应 target 的较大工具链包。"
-        : "安装可能下载较大的工具链包，并修改 mcpp 全局缓存。";
+      : targetHint === "target"
+        ? "mcpp 会判断编译器前缀是否为有效 triple；有效时可能下载对应 target 的较大工具链包。"
+        : installKind === "managed-target"
+          ? "mcpp 会规范化兼容写法，并可能下载对应 target 的较大工具链包。"
+          : "安装可能下载较大的工具链包，并修改 mcpp 全局缓存。";
 
     const choice = await vscode.window.showWarningMessage(
       confirmation,
@@ -362,7 +368,7 @@ export class McppCliController {
     }
     items.push({
       label: INSTALL_CUSTOM_LABEL,
-      detail: "支持 family@version、部分版本和 mcpp 兼容旧拼写",
+      detail: "支持 family、family@version、namespace、部分版本和 mcpp 兼容旧拼写",
       customInput: true,
     });
 
@@ -381,12 +387,12 @@ export class McppCliController {
 
     const input = await vscode.window.showInputBox({
       title: "输入工具链 spec",
-      prompt: "例如 gcc@16、llvm@20.1.7、msvc、mingw@16；兼容写法由 mcpp 规范化",
+      prompt: "例如 gcc、llvm@20.1.7、xim:gcc@16、msvc、mingw；兼容写法由 mcpp 规范化",
       placeHolder: "gcc@16",
       validateInput: (value) => {
         const normalized = normalizeToolchainSpec(value);
         if (normalized === undefined) {
-          return "请输入 family@version、family version 或 mcpp 支持的兼容 spec";
+          return "请输入 family、family@version、family version、namespace 或 mcpp 兼容 spec";
         }
         return undefined;
       },

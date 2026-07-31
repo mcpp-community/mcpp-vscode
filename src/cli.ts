@@ -32,9 +32,11 @@ export interface ToolchainInventory {
 type Section = "managed" | "system" | "available" | "targets" | undefined;
 
 const ANSI_ESCAPE = /\u001b\[[0-?]*[ -/]*[@-~]/g;
-const FAMILY_PATTERN = "[A-Za-z][A-Za-z0-9+_.-]*";
+const NAME_PATTERN = "[A-Za-z][A-Za-z0-9+_.-]*";
+const FAMILY_PATTERN = `(?:${NAME_PATTERN}:)?${NAME_PATTERN}`;
 const VERSION_PATTERN = "[0-9][A-Za-z0-9+_.:-]*";
 const SPEC_VERSION_PATTERN = `(?:${VERSION_PATTERN}|system)`;
+const INPUT_VERSION_PATTERN = "[A-Za-z0-9][A-Za-z0-9+_.:-]*";
 const AUXILIARY_WORDS = new Set([
   "available",
   "default",
@@ -55,6 +57,11 @@ export function mcppCommandArguments(...args: string[]): string[] {
   return [...args];
 }
 
+function unqualifiedFamily(value: string): string {
+  const colon = value.indexOf(":");
+  return (colon === -1 ? value : value.slice(colon + 1)).toLowerCase();
+}
+
 export function normalizeToolchainSpec(input: string): string | undefined {
   let value = input.trim();
   if (value.length >= 2) {
@@ -70,22 +77,26 @@ export function normalizeToolchainSpec(input: string): string | undefined {
   }
 
   const atMatch = value.match(
-    new RegExp(`^(${FAMILY_PATTERN})@(${SPEC_VERSION_PATTERN})$`, "i"),
+    new RegExp(`^(${FAMILY_PATTERN})@(${INPUT_VERSION_PATTERN})$`),
   );
   if (atMatch !== null) {
     const family = atMatch[1].toLowerCase();
     const version = atMatch[2];
-    if (version.toLowerCase() === "system" && family !== "msvc") {
-      return undefined;
-    }
     return `${family}@${version}`;
   }
 
   const spacedMatch = value.match(
-    new RegExp(`^(${FAMILY_PATTERN})\\s+(${VERSION_PATTERN})$`),
+    new RegExp(`^(${FAMILY_PATTERN})\\s+(${INPUT_VERSION_PATTERN})$`),
   );
   if (spacedMatch !== null) {
-    return `${spacedMatch[1].toLowerCase()}@${spacedMatch[2]}`;
+    const family = spacedMatch[1].toLowerCase();
+    const version = spacedMatch[2];
+    return `${family}@${version}`;
+  }
+
+  const bareMatch = value.match(new RegExp(`^(${FAMILY_PATTERN})$`));
+  if (bareMatch !== null) {
+    return bareMatch[1].toLowerCase();
   }
 
   return undefined;
@@ -93,14 +104,15 @@ export function normalizeToolchainSpec(input: string): string | undefined {
 
 export function isMsvcToolchainSpec(input: string): boolean {
   const normalized = normalizeToolchainSpec(input);
-  return normalized === "msvc" || normalized?.startsWith("msvc@") === true;
+  const compiler = normalized?.split("@", 1)[0];
+  return compiler !== undefined && unqualifiedFamily(compiler) === "msvc";
 }
 
 export type ToolchainInstallKind = "managed-host" | "managed-target" | "system-detect";
 
 /**
- * 返回 mcpp 旧兼容拼写隐含的 target 轴；undefined 表示没有隐含 target。
- * 首版插件不传 --target，因此这类输入交给 mcpp CLI 处理。
+ * 返回兼容拼写可能隐含的 target 提示；undefined 表示没有对应提示。
+ * 结果只用于 UI 分流，输入和 triple 的合法性最终由 mcpp CLI 判断。
  */
 export type ToolchainSpecTargetHint = "musl" | "windows-gnu" | "target";
 
@@ -109,20 +121,19 @@ export function toolchainSpecTargetHint(input: string): ToolchainSpecTargetHint 
   if (normalized === undefined) {
     return undefined;
   }
+  const qualifiedCompiler = normalized.split("@", 1)[0];
+  const compiler = unqualifiedFamily(qualifiedCompiler);
   if (
-    normalized.startsWith("musl-gcc@")
-    || (normalized.startsWith("gcc@") && normalized.endsWith("-musl"))
+    compiler === "musl-gcc"
+    || (compiler === "gcc" && normalized.endsWith("-musl"))
   ) {
     return "musl";
   }
-  const atIndex = normalized.indexOf("@");
-  const compiler = atIndex === -1 ? normalized : normalized.slice(0, atIndex);
   if (compiler.includes("mingw")) {
     return "windows-gnu";
   }
   // mcpp 还接受带 triple 的旧编译器写法，例如
-  // `aarch64-linux-musl-gcc@16`。即使环境不是上面列出的 host-only 别名，
-  // 这种写法仍然携带 target 轴。
+  // `aarch64-linux-musl-gcc@16`。这里只识别其外形，triple 是否有效由 mcpp 判断。
   if (compiler.endsWith("-gcc")) {
     return compiler.includes("-musl-") ? "musl" : "target";
   }
