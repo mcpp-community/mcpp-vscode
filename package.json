@@ -1,0 +1,119 @@
+{
+  "name": "mcpp-vscode",
+  "displayName": "mcpp",
+  "description": "mcpp 与 C++ 模块的 VS Code 集成",
+  "version": "0.1.5",
+  "publisher": "mcpp-community",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mcpp-community/mcpp-vscode.git"
+  },
+  "homepage": "https://github.com/mcpp-community/mcpp-vscode#readme",
+  "bugs": {
+    "url": "https://github.com/mcpp-community/mcpp-vscode/issues"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "extensionDependencies": [
+    "llvm-vs-code-extensions.vscode-clangd"
+  ],
+  "activationEvents": [
+    "workspaceContains:mcpp.toml",
+    "onLanguage:cpp",
+    "onCommand:mcpp.configureClangd",
+    "onCommand:mcpp.refreshCompilationDatabase",
+    "onCommand:mcpp.checkModuleSupport"
+  ],
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "未受信任工作区仅启用模块语法高亮，不执行 CDB、mcpp 或 clangd 指定的任何程序，也不接管 clangd 配置。"
+    }
+  },
+  "main": "./dist/src/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "mcpp.configureClangd",
+        "title": "mcpp: 配置 clangd"
+      },
+      {
+        "command": "mcpp.refreshCompilationDatabase",
+        "title": "mcpp: 刷新编译数据库"
+      },
+      {
+        "command": "mcpp.checkModuleSupport",
+        "title": "mcpp: 检查模块支持"
+      }
+    ],
+    "configuration": {
+      "title": "mcpp 设置",
+      "properties": {
+        "mcpp.path": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "description": "仅供“刷新编译数据库”执行 mcpp build 使用；留空时从 VS Code 进程的 PATH 查找 mcpp。"
+        },
+        "mcpp.clangd.path": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "description": "与 CDB 中 LLVM 编译器来自同一 revision 的 clangd 可执行文件路径；不要求与 mcpp 安装在同一位置。"
+        },
+        "mcpp.modulesSupport": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "on",
+            "off"
+          ],
+          "default": "auto",
+          "scope": "resource",
+          "description": "控制 clangd 的 C++ 模块实验支持参数。"
+        },
+        "mcpp.configureCppTools": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "配置 clangd 时，是否询问关闭 Microsoft C/C++ IntelliSense。"
+        }
+      }
+    },
+    "configurationDefaults": {
+      "files.associations": {
+        "*.ccm": "cpp",
+        "*.cppm": "cpp",
+        "*.ixx": "cpp",
+        "*.mpp": "cpp"
+      }
+    },
+    "grammars": [
+      {
+        "scopeName": "source.cpp.mcpp-modules",
+        "injectTo": [
+          "source.cpp"
+        ],
+        "path": "./syntaxes/mcpp-modules.tmLanguage.json"
+      }
+    ]
+  },
+  "scripts": {
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "compile": "tsc -p tsconfig.json",
+    "test": "npm run clean && npm run compile && node --test dist/test/*.test.js",
+    "package": "npm run clean && npm run compile && vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.9.2",
+    "typescript": "^5.9.0"
+  }
+}

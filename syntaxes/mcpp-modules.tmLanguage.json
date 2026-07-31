@@ -1,0 +1,72 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "mcpp C++ Modules",
+  "scopeName": "source.cpp.mcpp-modules",
+  "injectionSelector": "L:source.cpp",
+  "patterns": [
+    {
+      "include": "#module-declaration"
+    },
+    {
+      "include": "#import-declaration"
+    }
+  ],
+  "repository": {
+    "module-declaration": {
+      "match": "^\\s*(?:(export)\\s+)?(module)\\b\\s*(?:([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*)(?:\\s*(:)\\s*([A-Za-z_][A-Za-z0-9_]*))?|(:)\\s*([A-Za-z_][A-Za-z0-9_]*))?(?:\\s*;)?",
+      "captures": {
+        "1": {
+          "name": "keyword.control.export.cpp"
+        },
+        "2": {
+          "name": "keyword.control.module.cpp"
+        },
+        "3": {
+          "name": "entity.name.namespace.module.cpp"
+        },
+        "4": {
+          "name": "punctuation.separator.module-partition.cpp"
+        },
+        "5": {
+          "name": "entity.name.namespace.module.partition.cpp"
+        },
+        "6": {
+          "name": "punctuation.separator.module-partition.cpp"
+        },
+        "7": {
+          "name": "entity.name.namespace.module.partition.cpp"
+        }
+      }
+    },
+    "import-declaration": {
+      "match": "^\\s*(?:(export)\\s+)?(import)\\b\\s*(?:(:)([A-Za-z_][A-Za-z0-9_]*)|([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*(?::[A-Za-z_][A-Za-z0-9_]*)?)|(<[^>]+>)|(\\\"[^\\\"]+\\\"))(?:\\s*;)?",
+      "captures": {
+        "1": {
+          "name": "keyword.control.export.cpp"
+        },
+        "2": {
+          "name": "keyword.control.import.cpp"
+        },
+        "3": {
+          "name": "punctuation.separator.module-partition.cpp"
+        },
+        "4": {
+          "name": "entity.name.namespace.module.partition.cpp"
+        },
+        "5": {
+          "name": "entity.name.namespace.module.cpp"
+        },
+        "6": {
+          "name": "string.quoted.other.header.cpp"
+        },
+        "7": {
+          "name": "string.quoted.double.header.cpp"
+        }
+      }
+    },
+    "module-name": {
+      "match": "\\b[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*(?::[A-Za-z_][A-Za-z0-9_]*)?\\b",
+      "name": "entity.name.namespace.module.cpp"
+    }
+  }
+}
