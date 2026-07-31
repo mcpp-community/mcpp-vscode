@@ -1,0 +1,34 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { CLI_COMMANDS, quickMenuItems } from "../src/commands";
+
+test("CLI 命令覆盖项目、工具链和 IDE", () => {
+  assert.deepEqual(Object.values(CLI_COMMANDS), [
+    "mcpp.showMenu",
+    "mcpp.build",
+    "mcpp.run",
+    "mcpp.test",
+    "mcpp.clean",
+    "mcpp.showToolchains",
+    "mcpp.installToolchain",
+    "mcpp.selectDefaultToolchain",
+  ]);
+  assert.deepEqual(
+    quickMenuItems.map((item) => item.command),
+    [
+      "mcpp.build",
+      "mcpp.run",
+      "mcpp.test",
+      "mcpp.clean",
+      "mcpp.showToolchains",
+      "mcpp.installToolchain",
+      "mcpp.selectDefaultToolchain",
+      "mcpp.configureClangd",
+      "mcpp.refreshCompilationDatabase",
+      "mcpp.checkModuleSupport",
+    ],
+  );
+  assert.ok(quickMenuItems.every((item) => item.label.length > 0));
+});
+

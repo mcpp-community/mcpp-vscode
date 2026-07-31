@@ -18,12 +18,8 @@ import {
   findNearestMcppProject,
   type McppProjectDiscovery,
 } from "./discovery";
-import {
-  runClangdCheck,
-  runMcppBuild,
-  runToolVersion,
-  type ToolVersionResult,
-} from "./process";
+import { McppCliController } from "./cliController";
+import { runClangdCheck, runToolVersion, type ToolVersionResult } from "./process";
 import {
   configurationReadyAfterRestart,
   configurationAffectsModuleSupport,
@@ -695,9 +691,57 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
     requestCurrentProjectReconciliation(true);
   });
 
+  const afterProjectTask = async (
+    project: McppProjectDiscovery,
+    kind: "build" | "run" | "test" | "clean",
+    completion: { state: "succeeded" | "failed" | "cancelled"; exitCode?: number },
+  ): Promise<void> => {
+    if (!shouldUseWorkspaceClangd(findCurrentProject()?.root, project.root)) {
+      invalidateModuleStatus(project.root);
+      refreshStatus();
+      return;
+    }
+
+    const reconciled = await reconcileProject(project, true);
+    if (kind === "build") {
+      if (reconciled.context?.analysis.capability === "syntax-only") {
+        const buildMessage = completion.state === "succeeded" ? "mcpp 构建完成" : "mcpp 构建失败";
+        await vscode.window.showWarningMessage(
+          `${buildMessage}；${reconciled.context.analysis.reason}。模块语法高亮仍然可用。`,
+        );
+        return;
+      }
+      const outcome = describeRefreshOutcome(
+        completion.exitCode ?? 1,
+        reconciled.databaseFound,
+        reconciled.configured,
+      );
+      if (outcome.level === "information") {
+        await vscode.window.showInformationMessage(outcome.message);
+      } else if (outcome.level === "warning") {
+        await vscode.window.showWarningMessage(outcome.message);
+      } else {
+        await vscode.window.showErrorMessage(outcome.message);
+      }
+      return;
+    }
+
+    if (completion.state === "succeeded") {
+      const label = kind === "run" ? "运行" : kind === "test" ? "测试" : "清理";
+      await vscode.window.showInformationMessage(`mcpp ${label}完成；clangd/CDB 状态已重新检查。`);
+    }
+  };
+  const cliController = new McppCliController({
+    output,
+    currentProject: findCurrentProject,
+    afterProjectTask,
+    isTrusted: () => vscode.workspace.isTrusted,
+  });
+
   extensionContext.subscriptions.push(
     output,
     status,
+    ...cliController.register(),
     vscode.commands.registerCommand(COMMAND_CONFIGURE, runGuarded(async () => {
       const project = findCurrentProject();
       if (project === undefined) {
@@ -717,57 +761,7 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
       });
     })),
     vscode.commands.registerCommand(COMMAND_REFRESH, runGuarded(async () => {
-      const context = loadProjectContext();
-      if (context === undefined) {
-        await vscode.window.showWarningMessage("当前工作区没有找到 mcpp.toml。");
-        return;
-      }
-      if (!workspaceAllowsToolExecution(vscode.workspace.isTrusted)) {
-        await vscode.window.showWarningMessage(
-          "当前工作区未受信任，mcpp 刷新可能执行 build.mcpp 和依赖安装。请先信任工作区后重试。",
-        );
-        return;
-      }
-
-      output.show(true);
-      const configuredMcppPath = projectConfiguration(context.project).get<string>("path", "").trim();
-      const mcppExecutable = configuredMcppPath.length > 0 ? configuredMcppPath : "mcpp";
-      const result = await runMcppBuild(context.project.root, mcppExecutable);
-      appendProcessOutput(output, "刷新编译数据库", mcppExecutable, ["build"], result);
-
-      if (!shouldUseWorkspaceClangd(findCurrentProject()?.root, context.project.root)) {
-        invalidateModuleStatus(context.project.root);
-        const message = result.exitCode === 0
-          ? "mcpp 构建完成；切回该工程后将自动配置 clangd。"
-          : "mcpp 构建失败；切回该工程后仍会自动检查现有编译数据库。";
-        if (result.exitCode === 0) {
-          await vscode.window.showInformationMessage(message);
-        } else {
-          await vscode.window.showWarningMessage(message);
-        }
-        return;
-      }
-      const reconciled = await reconcileProject(context.project, true);
-      if (reconciled.context?.analysis.capability === "syntax-only") {
-        const buildMessage = result.exitCode === 0 ? "mcpp 构建完成" : "mcpp 构建失败";
-        await vscode.window.showWarningMessage(
-          `${buildMessage}；${reconciled.context.analysis.reason}。模块语法高亮仍然可用。`,
-        );
-        return;
-      }
-
-      const outcome = describeRefreshOutcome(
-        result.exitCode,
-        reconciled.databaseFound,
-        reconciled.configured,
-      );
-      if (outcome.level === "information") {
-        await vscode.window.showInformationMessage(outcome.message);
-      } else if (outcome.level === "warning") {
-        await vscode.window.showWarningMessage(outcome.message);
-      } else {
-        await vscode.window.showErrorMessage(outcome.message);
-      }
+      await cliController.runProjectTask("build");
     })),
     vscode.commands.registerCommand(COMMAND_CHECK, runGuarded(async () => {
       const project = findCurrentProject();
@@ -800,9 +794,18 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
   );
 
   extensionContext.subscriptions.push(
-    manifestWatcher.onDidCreate(refreshStatus),
-    manifestWatcher.onDidChange(refreshStatus),
-    manifestWatcher.onDidDelete(refreshStatus),
+    manifestWatcher.onDidCreate(() => {
+      refreshStatus();
+      cliController.refreshStatus();
+    }),
+    manifestWatcher.onDidChange(() => {
+      refreshStatus();
+      cliController.refreshStatus();
+    }),
+    manifestWatcher.onDidDelete(() => {
+      refreshStatus();
+      cliController.refreshStatus();
+    }),
     ...registerCompilationDatabaseReconciliation(
       compilationDatabaseWatcher,
       requestAutomaticReconciliation,

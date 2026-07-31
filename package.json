@@ -2,7 +2,7 @@
   "name": "mcpp-vscode",
   "displayName": "mcpp",
   "description": "mcpp 与 C++ 模块的 VS Code 集成",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "publisher": "mcpp-community",
   "license": "Apache-2.0",
   "repository": {
@@ -24,7 +24,15 @@
     "onLanguage:cpp",
     "onCommand:mcpp.configureClangd",
     "onCommand:mcpp.refreshCompilationDatabase",
-    "onCommand:mcpp.checkModuleSupport"
+    "onCommand:mcpp.checkModuleSupport",
+    "onCommand:mcpp.showMenu",
+    "onCommand:mcpp.build",
+    "onCommand:mcpp.run",
+    "onCommand:mcpp.test",
+    "onCommand:mcpp.clean",
+    "onCommand:mcpp.showToolchains",
+    "onCommand:mcpp.installToolchain",
+    "onCommand:mcpp.selectDefaultToolchain"
   ],
   "categories": [
     "Programming Languages",
@@ -39,6 +47,38 @@
   "main": "./dist/src/extension.js",
   "contributes": {
     "commands": [
+      {
+        "command": "mcpp.showMenu",
+        "title": "mcpp: 打开快捷菜单"
+      },
+      {
+        "command": "mcpp.build",
+        "title": "mcpp: 构建"
+      },
+      {
+        "command": "mcpp.run",
+        "title": "mcpp: 运行"
+      },
+      {
+        "command": "mcpp.test",
+        "title": "mcpp: 测试"
+      },
+      {
+        "command": "mcpp.clean",
+        "title": "mcpp: 清理 target"
+      },
+      {
+        "command": "mcpp.showToolchains",
+        "title": "mcpp: 查看工具链"
+      },
+      {
+        "command": "mcpp.installToolchain",
+        "title": "mcpp: 安装工具链"
+      },
+      {
+        "command": "mcpp.selectDefaultToolchain",
+        "title": "mcpp: 选择全局默认工具链"
+      },
       {
         "command": "mcpp.configureClangd",
         "title": "mcpp: 配置 clangd"
@@ -59,7 +99,7 @@
           "type": "string",
           "default": "",
           "scope": "resource",
-          "description": "仅供“刷新编译数据库”执行 mcpp build 使用；留空时从 VS Code 进程的 PATH 查找 mcpp。"
+          "description": "供扩展执行全部 mcpp CLI 命令使用；留空时从 VS Code 进程的 PATH 查找 mcpp。"
         },
         "mcpp.clangd.path": {
           "type": "string",

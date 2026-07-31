@@ -2,9 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  isMsvcToolchainSpec,
+  hostDefaultToolchains,
   mcppCommandArguments,
   normalizeToolchainSpec,
   parseToolchainList,
+  toolchainInstallKind,
+  toolchainSpecTargetHint,
 } from "../src/cli";
 
 const plainOutput = [
@@ -64,6 +68,59 @@ test("支持系统 MSVC 和合法的空安装状态", () => {
   assert.deepEqual(empty.installed, []);
 });
 
+test("解析 mcpp 实际的可安装标题、斜线版本和 msvc@system", () => {
+  const inventory = parseToolchainList([
+    "Toolchains:",
+    "  *  msvc 17.10             (default)",
+    "  (* = effective toolchain from project mcpp.toml [toolchain]; global default is 'msvc@system')",
+    "",
+    "Available toolchains (run `mcpp toolchain install <family> <version>`):",
+    "     gcc 15.1.0 / 13.3.0 / 11.5.0 / 9.4.0",
+  ].join("\n"));
+  assert.equal(inventory.globalDefaultSpec, "msvc@system");
+  assert.deepEqual(
+    inventory.available.map((item) => item.spec),
+    ["gcc@15.1.0", "gcc@13.3.0", "gcc@11.5.0", "gcc@9.4.0"],
+  );
+});
+
+test("解析独立的 target 轴和默认 target", () => {
+  const inventory = parseToolchainList([
+    "Toolchains:",
+    "  *  gcc 16.1.0             (default)",
+    "",
+    "Targets:",
+    "     TARGET                  NOTE                  TOOLCHAIN         STATUS",
+    "  *  x86_64-linux-musl       static                gcc 16.1.0        installed",
+    "     aarch64-linux-musl      static, cross         gcc 16.1.0        available",
+    "     riscv64-linux-musl      static, cross         —                 planned",
+  ].join("\n"));
+  assert.deepEqual(
+    inventory.targets.map((target) => [
+      target.target,
+      target.toolchainSpec,
+      target.status,
+      target.effective,
+    ]),
+    [
+      ["x86_64-linux-musl", "gcc@16.1.0", "installed", true],
+      ["aarch64-linux-musl", "gcc@16.1.0", "available", false],
+      ["riscv64-linux-musl", undefined, "planned", false],
+    ],
+  );
+  assert.equal(inventory.effectiveTarget, "x86_64-linux-musl");
+});
+
+test("全局默认明确为 none 时不回退成有效工具链", () => {
+  const inventory = parseToolchainList([
+    "Toolchains:",
+    "  *  llvm 22.1.8             (default)",
+    "  (* = effective toolchain from project mcpp.toml [toolchain]; global default is '<none>')",
+  ].join("\n"));
+  assert.equal(inventory.globalDefaultSpec, undefined);
+  assert.equal(inventory.projectOverridesGlobal, true);
+});
+
 test("未知输出不伪造工具链", () => {
   const inventory = parseToolchainList("unexpected output\n");
   assert.equal(inventory.recognized, false);
@@ -81,11 +138,82 @@ test("未知输出不伪造工具链", () => {
 test("规范化输入并构造参数数组", () => {
   assert.equal(normalizeToolchainSpec(" llvm@20 "), "llvm@20");
   assert.equal(normalizeToolchainSpec("gcc 16.1.0"), "gcc@16.1.0");
-  assert.equal(normalizeToolchainSpec("MSVC 17.10"), "msvc");
+  assert.equal(normalizeToolchainSpec("MSVC 17.10"), "msvc@17.10");
+  assert.equal(normalizeToolchainSpec("gcc@16.1.0-musl"), "gcc@16.1.0-musl");
+  assert.equal(normalizeToolchainSpec("musl-gcc 16"), "musl-gcc@16");
+  assert.equal(normalizeToolchainSpec("mingw@16.1.0"), "mingw@16.1.0");
+  assert.equal(normalizeToolchainSpec("clang@19"), "clang@19");
   assert.equal(normalizeToolchainSpec("gcc; rm -rf /"), undefined);
   assert.deepEqual(
     mcppCommandArguments("toolchain", "default", "llvm@22.1.8"),
     ["toolchain", "default", "llvm@22.1.8"],
   );
   assert.deepEqual(mcppCommandArguments("build"), ["build"]);
+});
+
+test("识别系统项和隐含 target 别名", () => {
+  assert.equal(isMsvcToolchainSpec("msvc"), true);
+  assert.equal(isMsvcToolchainSpec("msvc@system"), true);
+  assert.equal(isMsvcToolchainSpec("llvm@20"), false);
+  assert.equal(toolchainSpecTargetHint("gcc@16-musl"), "musl");
+  assert.equal(toolchainSpecTargetHint("musl-gcc@16"), "musl");
+  assert.equal(toolchainSpecTargetHint("mingw@16"), "windows-gnu");
+  assert.equal(toolchainSpecTargetHint("clang@19"), undefined);
+});
+
+test("安装流程区分 host、target 和系统检测但都交给 mcpp", () => {
+  assert.equal(toolchainInstallKind("llvm@20"), "managed-host");
+  assert.equal(toolchainInstallKind("clang@19"), "managed-host");
+  assert.equal(toolchainInstallKind("mingw@16"), "managed-target");
+  assert.equal(toolchainInstallKind("aarch64-linux-musl-gcc@16"), "managed-target");
+  assert.equal(toolchainInstallKind("msvc"), "system-detect");
+  assert.equal(toolchainInstallKind("msvc@19.44"), "system-detect");
+});
+
+test("覆盖 mcpp 兼容层的扩展 target 别名", () => {
+  assert.equal(toolchainSpecTargetHint("mingw-gcc@16"), "windows-gnu");
+  assert.equal(toolchainSpecTargetHint("mingw-cross-gcc@16"), "windows-gnu");
+  assert.equal(toolchainSpecTargetHint("x86_64-w64-mingw32-gcc@16"), "windows-gnu");
+  assert.equal(toolchainSpecTargetHint("aarch64-linux-musl-gcc@16"), "musl");
+  assert.equal(toolchainSpecTargetHint("aarch64-linux-gnu-gcc@16"), "target");
+});
+
+test("全局默认选择只暴露 host target 的已安装 payload", () => {
+  const targetOnly = parseToolchainList([
+    "Toolchains:",
+    "  *  gcc 16.1.0             (default)",
+    "",
+    "Targets:",
+    "     TARGET                  NOTE                  TOOLCHAIN         STATUS",
+    "  *  x86_64-linux-musl       static                gcc 16.1.0        installed",
+  ].join("\n"));
+  assert.deepEqual(hostDefaultToolchains(targetOnly), []);
+
+  const hostAndTarget = parseToolchainList([
+    "Toolchains:",
+    "     gcc 16.1.0",
+    "",
+    "Targets:",
+    "     TARGET                  NOTE                  TOOLCHAIN         STATUS",
+    "     x86_64-linux-gnu        host                  gcc 16.1.0        installed",
+    "     x86_64-linux-musl       static                gcc 16.1.0        installed",
+  ].join("\n"));
+  assert.deepEqual(hostDefaultToolchains(hostAndTarget).map((item) => item.spec), ["gcc@16.1.0"]);
+});
+
+test("Windows 上 GCC 的 host 默认使用已安装的 MinGW payload", () => {
+  const windowsInventory = parseToolchainList([
+    "Toolchains:",
+    "     gcc 16.1.0",
+    "",
+    "Targets:",
+    "     TARGET                  NOTE                  TOOLCHAIN         STATUS",
+    "     x86_64-windows-gnu      PE, static            gcc 16.1.0        installed",
+    "     x86_64-windows-msvc     host, PE              —                 available",
+  ].join("\n"));
+
+  assert.deepEqual(
+    hostDefaultToolchains(windowsInventory).map((item) => item.spec),
+    ["gcc@16.1.0"],
+  );
 });

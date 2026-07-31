@@ -1,5 +1,20 @@
 # 更新日志
 
+## 0.2.0
+
+- 新增 `$(tools) mcpp` 状态栏快捷菜单和命令面板命令：构建、运行、测试、清理 target、
+  查看工具链、安装工具链、选择全局默认工具链。
+- 项目任务使用 VS Code 的无 shell `ProcessExecution`，显示实时任务终端；同一工程任务
+  互斥，工具链安装/默认值操作共享全局锁，取消不会误报成功。
+- 项目任务结束后复用 CDB/clangd 自动协调；`mcpp.refreshCompilationDatabase` 与构建
+  命令共用同一任务路径，避免并发写入工程构建目录。
+- 按 mcpp 官方工具链契约解析 `Toolchains:`、`System:`、`Targets:` 和可安装列表：
+  toolchain 与 target 分轴处理，首版 UI 不提供结构化 `--target` 选择器。
+- 全局默认选择过滤普通 target-only payload，保留 mcpp 在 Windows 上将 host GCC 映射到
+  MinGW payload 的官方规则，并明确设置 host 默认会清空 `default_target`；
+  安装入口把 mcpp 兼容 spec 原样传给 CLI，MSVC 走系统检测，隐含 target 的别名走对应 payload。
+- 工具链安装和全局默认修改均需要用户确认；Restricted Mode 不执行 mcpp 或其他外部工具。
+
 ## 0.1.5
 
 - 打开已有编译数据库的 LLVM mcpp 工程时自动执行 `clangd --check`，状态栏无需点击即可显示“模块可用”或“模块不可用”。

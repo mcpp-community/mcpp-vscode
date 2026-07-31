@@ -4,6 +4,7 @@ import path from "node:path";
 import test from "node:test";
 
 interface PackageManifest {
+  version?: string;
   extensionDependencies?: string[];
   activationEvents?: string[];
   capabilities?: { untrustedWorkspaces?: { supported?: string; description?: string } };
@@ -19,6 +20,7 @@ const root = path.resolve(process.cwd());
 
 test("declares the official clangd dependency and mcpp commands", () => {
   const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
+  assert.equal(manifest.version, "0.2.0");
   assert.ok(manifest.extensionDependencies?.includes("llvm-vs-code-extensions.vscode-clangd"));
   assert.ok(manifest.activationEvents?.includes("workspaceContains:mcpp.toml"));
   assert.equal(manifest.capabilities?.untrustedWorkspaces?.supported, "limited");
@@ -28,7 +30,19 @@ test("declares the official clangd dependency and mcpp commands", () => {
   );
   assert.deepEqual(
     manifest.contributes?.commands?.map((command) => command.command),
-    ["mcpp.configureClangd", "mcpp.refreshCompilationDatabase", "mcpp.checkModuleSupport"],
+    [
+      "mcpp.showMenu",
+      "mcpp.build",
+      "mcpp.run",
+      "mcpp.test",
+      "mcpp.clean",
+      "mcpp.showToolchains",
+      "mcpp.installToolchain",
+      "mcpp.selectDefaultToolchain",
+      "mcpp.configureClangd",
+      "mcpp.refreshCompilationDatabase",
+      "mcpp.checkModuleSupport",
+    ],
   );
   assert.ok(manifest.contributes?.configuration?.properties?.["mcpp.path"]);
   assert.ok(manifest.contributes?.configuration?.properties?.["mcpp.modulesSupport"]);
@@ -63,4 +77,45 @@ test("ships an injection grammar with module-specific scopes", () => {
   const importPattern = new RegExp(javascriptPattern);
   assert.match("import xxx", importPattern);
   assert.match("export import foo.bar;", importPattern);
+});
+
+test("设置全局默认后先释放工具链锁再提供立即构建", () => {
+  const source = readFileSync(path.join(root, "src/cliController.ts"), "utf8");
+  const start = source.indexOf("private async selectDefaultToolchainFromInventory");
+  const end = source.indexOf("private async pickInstallSpec", start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+
+  const method = source.slice(start, end);
+  const unlock = method.indexOf("this.operations.finishGlobal(token)");
+  const immediateBuild = method.indexOf("const buildChoice");
+  assert.ok(unlock >= 0 && unlock < immediateBuild);
+});
+
+test("安装流程把系统工具链和 target 兼容 spec 交给 mcpp 解析", () => {
+  const source = readFileSync(path.join(root, "src/cliController.ts"), "utf8");
+  const start = source.indexOf("public async installToolchain");
+  const end = source.indexOf("public async selectDefaultToolchain", start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+
+  const method = source.slice(start, end);
+  assert.doesNotMatch(
+    method,
+    /if \(isMsvcToolchainSpec\(spec\) \|\| toolchainSpecTargetHint\(spec\) !== undefined\)/,
+  );
+  assert.match(method, /toolchainInstallKind\(spec\)/);
+});
+
+test("README 区分 mcpp 的 MSVC 构建能力和 clangd 的 IFC 限制", () => {
+  const readme = readFileSync(path.join(root, "README.md"), "utf8");
+  assert.match(readme, /0\.0\.90 起 native `cl\.exe` 后端支持/);
+  assert.match(readme, /mcpp 可以正常构建它们，但 clangd\s+不能直接消费/);
+  assert.doesNotMatch(readme, /native MSVC\s+构建仍提示/);
+});
+
+test("嵌套工程提示不猜测它一定是 mcpp 工作区成员", () => {
+  const source = readFileSync(path.join(root, "src/cliController.ts"), "utf8");
+  assert.doesNotMatch(source, /isWorkspaceMember/);
+  assert.doesNotMatch(source, /当前是工作区成员/);
 });
