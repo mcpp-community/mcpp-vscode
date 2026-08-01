@@ -1,0 +1,60 @@
+name: 发布 VSIX
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出 tag
+        uses: actions/checkout@v4
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 校验 tag 与扩展版本
+        shell: bash
+        run: |
+          PACKAGE_VERSION="$(node -p 'require("./package.json").version')"
+          if [[ "$GITHUB_REF_NAME" != "v${PACKAGE_VERSION}" ]]; then
+            echo "tag $GITHUB_REF_NAME 与 package.json 版本 $PACKAGE_VERSION 不一致。"
+            exit 1
+          fi
+          echo "PACKAGE_VERSION=$PACKAGE_VERSION" >> "$GITHUB_ENV"
+
+      - name: 运行测试
+        run: npm test
+
+      - name: 打包 VSIX
+        run: npm run package
+
+      - name: 生成 SHA-256 校验文件
+        shell: bash
+        run: sha256sum "mcpp-vscode-${PACKAGE_VERSION}.vsix" > "mcpp-vscode-${PACKAGE_VERSION}.vsix.sha256"
+
+      - name: 创建或更新 GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VSIX="mcpp-vscode-${PACKAGE_VERSION}.vsix"
+          CHECKSUM="${VSIX}.sha256"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$VSIX" "$CHECKSUM" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$VSIX" "$CHECKSUM" \
+              --title "mcpp-vscode ${PACKAGE_VERSION}" \
+              --generate-notes
+          fi

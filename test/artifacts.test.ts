@@ -24,7 +24,7 @@ const root = path.resolve(process.cwd());
 
 test("declares the official clangd dependency and mcpp commands", () => {
   const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
-  assert.equal(manifest.version, "0.2.0");
+  assert.equal(manifest.version, "0.2.1");
   assert.ok(manifest.extensionDependencies?.includes("llvm-vs-code-extensions.vscode-clangd"));
   assert.ok(manifest.activationEvents?.includes("workspaceContains:mcpp.toml"));
   assert.equal(manifest.capabilities?.untrustedWorkspaces?.supported, "limited");
@@ -96,6 +96,19 @@ test("设置全局默认后先释放工具链锁再提供立即构建", () => {
   assert.ok(unlock >= 0 && unlock < immediateBuild);
 });
 
+test("项目任务结束后先释放项目锁再重新协调 IDE", () => {
+  const source = readFileSync(path.join(root, "src/cliController.ts"), "utf8");
+  const start = source.indexOf("public async runProjectTask");
+  const end = source.indexOf("public async showToolchains", start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+
+  const method = source.slice(start, end);
+  const unlock = method.indexOf("this.operations.finishProject(project.root, token)");
+  const reconcile = method.indexOf("this.options.afterProjectTask(project, kind, completion)");
+  assert.ok(unlock >= 0 && unlock < reconcile);
+});
+
 test("安装流程把系统工具链和 target 兼容 spec 交给 mcpp 解析", () => {
   const source = readFileSync(path.join(root, "src/cliController.ts"), "utf8");
   const start = source.indexOf("public async installToolchain");
@@ -142,4 +155,17 @@ test("嵌套工程提示不猜测它一定是 mcpp 工作区成员", () => {
   const source = readFileSync(path.join(root, "src/cliController.ts"), "utf8");
   assert.doesNotMatch(source, /isWorkspaceMember/);
   assert.doesNotMatch(source, /当前是工作区成员/);
+});
+
+test("tag release 工作流校验版本并发布 VSIX", () => {
+  const workflow = readFileSync(path.join(root, ".github/workflows/release.yml"), "utf8");
+  assert.match(workflow, /push:\s*\n\s+tags:\s*\n\s+- "v\*"/);
+  assert.match(workflow, /contents: write/);
+  assert.match(workflow, /npm ci/);
+  assert.match(workflow, /npm test/);
+  assert.match(workflow, /npm run package/);
+  assert.match(workflow, /GITHUB_REF_NAME.*v\$\{PACKAGE_VERSION\}/s);
+  assert.match(workflow, /sha256sum/);
+  assert.match(workflow, /gh release create/);
+  assert.match(workflow, /gh release upload.*--clobber/s);
 });

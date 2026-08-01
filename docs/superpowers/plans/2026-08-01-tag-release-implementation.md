@@ -155,7 +155,7 @@ unzip -p mcpp-vscode-0.2.1.vsix extension/package.json
 
 预期：打包成功，压缩包无错误，清单版本为 `0.2.1` 且包含 `images/logo.png`。
 
-- [ ] **Step 3: 检查差异与暂存范围**
+- [x] **Step 3: 检查差异与暂存范围**
 
 运行：
 
@@ -169,7 +169,7 @@ git diff --cached --stat
 预期：仅暂存 CLI 锁修复、`0.2.1` 发布记录、工作流和对应测试；不暂存现有
 `docs/superpowers` 用户改动。
 
-- [ ] **Step 4: 提交实现**
+- [x] **Step 4: 提交实现**
 
 运行：
 

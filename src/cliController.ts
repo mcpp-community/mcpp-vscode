@@ -134,20 +134,22 @@ export class McppCliController {
       return;
     }
 
+    let completion: TaskCompletion | undefined;
     try {
       const plan = projectTaskPlan(kind);
-      const completion = await this.executeTask(
+      completion = await this.executeTask(
         project.root,
         this.mcppExecutable(project),
         plan.title,
         plan.args,
       );
       this.appendTaskCompletion(project.root, plan.title, plan.args, completion);
-      if (shouldReconcileAfterTask(kind, completion)) {
-        await this.options.afterProjectTask(project, kind, completion);
-      }
     } finally {
       this.operations.finishProject(project.root, token);
+    }
+
+    if (completion !== undefined && shouldReconcileAfterTask(kind, completion)) {
+      await this.options.afterProjectTask(project, kind, completion);
     }
   }
 

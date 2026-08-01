@@ -153,7 +153,7 @@ clangd 21 及更高版本会请求 `--experimental-modules-support`。`on` 强�
   合法性由 mcpp 判断。插件通过参数数组把用户输入安全规范化为单个参数后交给 mcpp，
   最终由 mcpp 解析，不自行复制其 family、alias 或 triple 规则。
 
-当前 0.2.0 在消费编译数据库并配置 clangd 的基础上增加了 mcpp CLI 菜单；首版 UI
+当前 0.2.1 在消费编译数据库并配置 clangd 的基础上增加了 mcpp CLI 菜单；首版 UI
 只读展示 target，不提供结构化 target 选择。用户仍可输入 mcpp 兼容 spec 安装 target
 payload；target 专用默认值设置继续使用带 `--target` 的 mcpp CLI。
 `Available toolchains:` 是 mcpp 按 family 汇总多个 host 可读取 payload 索引后的版本集合，
@@ -236,7 +236,7 @@ IDE CDB 与模块图至少需要保证：
   在没有独立 LLVM 分析配置前仍只保证模块语法高亮。
 - clangd 负责编辑期语法和语义，不替代链接、代码生成、运行期或完整打包检查；这些错误
   仍由正式 `mcpp build`/`mcpp test` 报告。
-- 当前 `0.2.0` 仍是过渡方案：它能在用户显式构建后自动接管 CDB，并提供常用 CLI 操作，
+- 当前 `0.2.1` 仍是过渡方案：它能在用户显式构建后自动接管 CDB，并提供常用 CLI 操作，
   但无法仅凭现有插件
   在无 CDB 时推导完整依赖图。最终体验依赖上述 mcpp 核心协议和 IDE 配置阶段。
 
@@ -266,3 +266,17 @@ npm run compile
 
 生成的 `dist/` 是扩展运行时目录。请在 Extension Development Host 中运行上述
 扩展，验证 VS Code API 集成。
+
+## 发布
+
+先更新 `package.json`、`package-lock.json` 和更新日志中的版本并提交到主分支，然后
+推送与扩展版本完全一致的 tag：
+
+```sh
+git tag -a v0.2.1 -m "mcpp-vscode 0.2.1"
+git push origin v0.2.1
+```
+
+`.github/workflows/release.yml` 会自动执行完整测试、打包 VSIX、生成 SHA-256 校验文件，
+并创建或更新对应的 GitHub Release。tag 与 `package.json` 版本不一致时发布会失败；
+该工作流不发布 VS Marketplace。
