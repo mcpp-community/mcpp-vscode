@@ -1,5 +1,19 @@
 # 更新日志
 
+## 0.2.2
+
+- 新增 **mcpp: 一键配置模块代码提示**：自动检测匹配的 clangd，缺失时通过 xlings 下载
+  对应版本的 llvm-tools，配置 clangd 并刷新模块状态，无需重启 VS Code。
+- 检测 PCM 版本不匹配（`ast_file_version_too_new`、`ast_file_version_too_old`、
+  `ast_file_different_branch`），并在诊断信息中引导一键配置。
+- 非 LLVM 工具链（GCC/MSVC）项目提供清晰的引导说明而非催促安装：状态栏点击弹出
+  QuickPick，一键配置向导显示原因并提供工具链安装/选择入口。
+- 优化编辑器标签切换性能：相同工程内切换文件不再重复协调 clangd。
+- 序列执行器使用 AsyncLocalStorage 范围标记替代全局深度计数，修复不相关并发调用
+  绕过队列的问题。
+- 完善 xlings 检测：检查 PATH 中是否实际存在 xlings 而非无条件返回路径名，确保
+  未安装时的引导分支可达。
+
 ## 0.2.1
 
 - 修复项目任务已经结束后，clangd/CDB 重协调仍占用项目锁，导致下一条 CLI 命令误报

@@ -6,7 +6,7 @@
 
 把 mcpp 工程、C++ 模块语法和官方 clangd 扩展接入 VS Code。
 
-当前版本为 `0.2.1`。扩展负责工程发现、clangd 配置、模块状态检查以及常用
+当前版本为 `0.2.2`。扩展负责工程发现、clangd 配置、模块状态检查以及常用
 mcpp CLI 操作；它不实现新的 C++ 语言服务器，也不替代 mcpp 的构建逻辑。
 
 > 当前完整的模块语义能力只支持 LLVM/Clang 工具链。GCC 和 MSVC 工程仍可使用
@@ -35,7 +35,7 @@ mcpp CLI 操作；它不实现新的 C++ 语言服务器，也不替代 mcpp 的
 VSIX，然后在 VS Code 中执行 **Extensions: Install from VSIX...**，或者运行：
 
 ```sh
-code --install-extension /path/to/mcpp-vscode-0.2.1.vsix
+code --install-extension /path/to/mcpp-vscode-0.2.2.vsix
 ```
 
 安装后确认当前 VS Code profile 中同时存在 `mcpp-community.mcpp-vscode` 和
@@ -104,6 +104,10 @@ TextMate 语法规则提供。
 检查可以区分模块可用、PCM 不匹配、模块产物不可用、语言模式错误和一般检查失败。
 完整命令及输出会写入 `mcpp` 输出频道。
 
+当 clangd 与编译器不匹配时，**mcpp: 一键配置模块代码提示** 会通过 xlings 自动下载
+匹配版本的 llvm-tools（含 clangd），完成后配置 clangd 并刷新状态栏，无需 Reload
+Window。非 LLVM 工具链（GCC/MSVC）项目会得到清晰的引导说明，不做自动切换。
+
 ### 自动协调与多根工作区
 
 - CDB 创建或变化后自动重新分析、配置、重启和检查；删除后更新为缺少 CDB 状态。
@@ -146,6 +150,7 @@ TextMate 语法规则提供。
 | **mcpp: 配置 clangd** | 手动重新应用当前 LLVM 工程的 clangd 配置 |
 | **mcpp: 刷新编译数据库** | 执行 `mcpp build`，随后重新读取 CDB 并协调 clangd |
 | **mcpp: 检查模块支持** | 立即执行 clangd 直接检查并刷新模块状态 |
+| **mcpp: 一键配置模块代码提示** | 自动检测匹配 clangd，缺失时通过 xlings 安装 llvm-tools 并配置 |
 
 ## 设置
 
@@ -279,6 +284,7 @@ GCC `.gcm` 和 MSVC `.ifc` 是编译器专用产物。mcpp 可以正常构建它
 
 - 使用用户显式构建后产生的 LLVM CDB 和 PCM。
 - 自动配置 clangd、检查模块、监听变化并提供 CLI/工具链菜单。
+- 一键自动安装匹配的 llvm-tools 并配置模块代码提示。
 - GCC/MSVC 保持语法高亮和 mcpp 构建操作，不增加语义后端。
 
 ### 阶段 2：mcpp IDE 协议
@@ -327,6 +333,8 @@ macOS 从图形界面启动 VS Code 时可能没有继承终端 `PATH`。将 `mc
 
 ### clangd 未安装或无法匹配
 
+- 执行 **mcpp: 一键配置模块代码提示**，扩展会自动通过 xlings 安装与当前编译器
+  版本匹配的 llvm-tools（含 clangd）。
 - `mcpp.clangd.path` 可以指向任意安装来源的真实 clangd，不要求与 mcpp 同目录。
 - 自动发现会尝试编译器同目录、匹配的 xlings `xim-x-llvm-tools/<version>/bin` 和
   `PATH`。
@@ -363,8 +371,8 @@ API、状态栏、任务和 clangd 集成。
 版本完全一致的 tag：
 
 ```sh
-git tag -a v0.2.1 -m "mcpp-vscode 0.2.1"
-git push origin v0.2.1
+git tag -a v0.2.2 -m "mcpp-vscode 0.2.2"
+git push origin v0.2.2
 ```
 
 `.github/workflows/release.yml` 会校验 tag，执行测试和打包，生成 VSIX 与 SHA-256 文件，
