@@ -79,8 +79,28 @@ export function findXlingsExecutable(): string | undefined {
     }
   }
 
-  // Fall back to PATH — execFile will resolve it
-  return "xlings";
+  // Fall back to PATH, but only when "xlings" actually resolves there. Always
+  // returning "xlings" hid the not-installed case, so callers could never show
+  // the "xlings 未安装" guidance.
+  return xlingsResolvableOnPath() ? "xlings" : undefined;
+}
+
+function xlingsResolvableOnPath(): boolean {
+  const names = process.platform === "win32"
+    ? ["xlings.exe", "xlings.cmd", "xlings.bat"]
+    : ["xlings"];
+  const pathValue = process.env.PATH ?? "";
+  for (const dir of pathValue.split(path.delimiter)) {
+    if (dir.length === 0) {
+      continue;
+    }
+    for (const name of names) {
+      if (existsSync(path.join(dir, name))) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 export async function runXlingsCommand(

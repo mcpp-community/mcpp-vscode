@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 import type { CheckResult, ModuleCapability } from "./analysis";
 
 export type RefreshOutcomeLevel = "information" | "warning" | "error";
@@ -102,19 +104,30 @@ export function createKeyedSingleFlightReconciler<K, T>(
 
 export function createSerialExecutor(): <T>(operation: () => Promise<T>) => Promise<T> {
   let tail: Promise<void> = Promise.resolve();
-  let depth = 0;
+  // `running` is scoped to the async context of the in-flight operation via
+  // AsyncLocalStorage instead of a global counter, so only genuinely reentrant
+  // calls bypass the queue:
+  //   - a call made from inside an operation's own async chain (e.g.
+  //     wizard → build → reconcile → executor) sees `running` and executes
+  //     immediately — the outer operation is awaiting it, so queuing would hang;
+  //   - an unrelated concurrent caller (a separate command/event that has its
+  //     own async context) does not see it and queues behind the in-flight
+  //     operation, which the previous `depth > 0` check would wrongly let run
+  //     concurrently.
+  const state = { running: false };
+  const storage = new AsyncLocalStorage<{ running: boolean }>();
 
   return <T>(operation: () => Promise<T>): Promise<T> => {
-    if (depth > 0) {
+    if (storage.getStore() === state && state.running) {
       return operation();
     }
 
     const wrapped = async (): Promise<T> => {
-      depth += 1;
+      state.running = true;
       try {
-        return await operation();
+        return await storage.run(state, operation);
       } finally {
-        depth -= 1;
+        state.running = false;
       }
     };
 

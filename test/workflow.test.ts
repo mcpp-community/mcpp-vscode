@@ -3,6 +3,7 @@ import test from "node:test";
 
 import * as workflow from "../src/workflow";
 import {
+  createSerialExecutor,
   createSingleFlightReconciler,
   describeRefreshOutcome,
   statusCommandForCapability,
@@ -130,6 +131,85 @@ test("serializes operations that share the workspace clangd configuration", asyn
   releaseFirst();
   assert.deepEqual(await Promise.all([first, second]), ["a", "b"]);
   assert.deepEqual(calls, ["a:start", "a:end", "b:start", "b:end"]);
+});
+
+test("queues an unrelated concurrent caller behind an in-flight operation", async () => {
+  let releaseFirst: (() => void) | undefined;
+  const firstGate = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  const calls: string[] = [];
+  let maxConcurrent = 0;
+  let active = 0;
+  const execute = createSerialExecutor();
+
+  const first = execute(async () => {
+    active += 1;
+    maxConcurrent = Math.max(maxConcurrent, active);
+    calls.push("a:start");
+    await firstGate;
+    calls.push("a:end");
+    active -= 1;
+    return "a";
+  });
+
+  // A second, unrelated invocation arrives while the first is still in flight,
+  // from a separate async context (a macrotask, like a user command event).
+  let second: Promise<string> | undefined;
+  const secondArrived = new Promise<void>((resolve) => {
+    setTimeout(() => {
+      second = execute(async () => {
+        active += 1;
+        maxConcurrent = Math.max(maxConcurrent, active);
+        calls.push("b:start");
+        calls.push("b:end");
+        active -= 1;
+        return "b";
+      });
+      resolve();
+    }, 10);
+  });
+  await secondArrived;
+
+  assert.deepEqual(calls, ["a:start"]);
+  assert.ok(releaseFirst);
+  releaseFirst();
+  assert.ok(second);
+  assert.deepEqual(await Promise.all([first, second]), ["a", "b"]);
+  assert.deepEqual(calls, ["a:start", "a:end", "b:start", "b:end"]);
+  assert.equal(maxConcurrent, 1);
+});
+
+test("runs a reentrant call from inside an operation without queuing", async () => {
+  const calls: string[] = [];
+  let releaseInner: (() => void) | undefined;
+  const innerGate = new Promise<void>((resolve) => {
+    releaseInner = resolve;
+  });
+  const execute = createSerialExecutor();
+
+  const outer = execute(async () => {
+    calls.push("outer:start");
+    await Promise.resolve();
+    const inner = execute(async () => {
+      calls.push("inner:start");
+      await innerGate;
+      calls.push("inner:end");
+      return "inner";
+    });
+    calls.push("outer:mid");
+    const value = await inner;
+    calls.push("outer:end");
+    return value;
+  });
+
+  // The outer operation's continuation (which makes the reentrant call) runs in
+  // the microtask queue, before the timer below fires.
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  assert.ok(releaseInner);
+  releaseInner();
+  assert.equal(await outer, "inner");
+  assert.deepEqual(calls, ["outer:start", "inner:start", "outer:mid", "inner:end", "outer:end"]);
 });
 
 test("retries a queued reconciliation after a transient failure", async () => {
