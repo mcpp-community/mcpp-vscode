@@ -102,9 +102,23 @@ export function createKeyedSingleFlightReconciler<K, T>(
 
 export function createSerialExecutor(): <T>(operation: () => Promise<T>) => Promise<T> {
   let tail: Promise<void> = Promise.resolve();
+  let depth = 0;
 
   return <T>(operation: () => Promise<T>): Promise<T> => {
-    const result = tail.then(operation, operation);
+    if (depth > 0) {
+      return operation();
+    }
+
+    const wrapped = async (): Promise<T> => {
+      depth += 1;
+      try {
+        return await operation();
+      } finally {
+        depth -= 1;
+      }
+    };
+
+    const result = tail.then(wrapped, wrapped);
     tail = result.then(
       () => undefined,
       () => undefined,

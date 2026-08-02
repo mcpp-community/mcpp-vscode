@@ -13,6 +13,7 @@ test("CLI 命令覆盖项目、工具链和 IDE", () => {
     "mcpp.showToolchains",
     "mcpp.installToolchain",
     "mcpp.selectDefaultToolchain",
+    "mcpp.autoConfigureModules",
   ]);
   assert.deepEqual(
     quickMenuItems.map((item) => item.command),
@@ -27,6 +28,7 @@ test("CLI 命令覆盖项目、工具链和 IDE", () => {
       "mcpp.configureClangd",
       "mcpp.refreshCompilationDatabase",
       "mcpp.checkModuleSupport",
+      "mcpp.autoConfigureModules",
     ],
   );
   assert.ok(quickMenuItems.every((item) => item.label.length > 0));

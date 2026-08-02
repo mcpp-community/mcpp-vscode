@@ -81,4 +81,8 @@ export class McppOperationRegistry<T> {
       this.globalToken = undefined;
     }
   }
+
+  public hasActive(): boolean {
+    return this.projectTokens.size > 0 || this.globalToken !== undefined;
+  }
 }

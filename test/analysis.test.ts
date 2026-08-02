@@ -277,6 +277,18 @@ test("classifies clangd check failures into actionable states", () => {
     "pcm-mismatch",
   );
   assert.equal(
+    classifyCheckResult(1, "error: module file '.../std.pcm' uses a newer format that cannot be read"),
+    "pcm-mismatch",
+  );
+  assert.equal(
+    classifyCheckResult(1, "Module file uses a newer format that cannot be read ast_file_version_too_new"),
+    "pcm-mismatch",
+  );
+  assert.equal(
+    classifyCheckResult(1, "error: module file uses an older format that is no longer supported"),
+    "pcm-mismatch",
+  );
+  assert.equal(
     classifyCheckResult(1, "Failed to build module std; Don't get the module unit"),
     "module-unavailable",
   );

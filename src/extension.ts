@@ -18,6 +18,11 @@ import {
   findNearestMcppProject,
   type McppProjectDiscovery,
 } from "./discovery";
+import {
+  findXlingsExecutable,
+  llvmToolsVersionSpec,
+  xlingsInstallArgs,
+} from "./llvmTools";
 import { McppCliController } from "./cliController";
 import { runClangdCheck, runToolVersion, type ToolVersionResult } from "./process";
 import {
@@ -37,6 +42,7 @@ import {
   workspaceAllowsToolExecution,
   type ModuleSupportState,
 } from "./workflow";
+import { classifyTaskExit, type TaskCompletion } from "./tasks";
 
 const COMMAND_CONFIGURE = "mcpp.configureClangd";
 const COMMAND_REFRESH = "mcpp.refreshCompilationDatabase";
@@ -68,6 +74,7 @@ type ConfigureMode = "automatic" | "interactive";
 
 const moduleStatusByProject = new Map<string, ModuleStatus>();
 const moduleCheckOperations = createLatestOperationTracker<string>();
+let lastReconciledProjectRoot: string | undefined;
 
 function findCurrentProject(): McppProjectDiscovery | undefined {
   const activePath = vscode.window.activeTextEditor?.document.uri.scheme === "file"
@@ -420,7 +427,7 @@ function checkResultMessage(classification: CheckResult): string {
     case "ready":
       return "clangd 已加载 mcpp 编译命令和模块产物。";
     case "pcm-mismatch":
-      return "clangd 与 mcpp 编译器或 PCM 来自不同的 LLVM 构建，请选择同一 LLVM revision 的 clangd。";
+      return "clangd 与 mcpp 编译器或 PCM 来自不同的 LLVM 构建。建议运行“一键配置模块代码提示”安装匹配的 llvm-tools，或设置 mcpp.clangd.path。";
     case "module-unavailable":
       return "clangd 无法加载所需模块产物，请运行“mcpp: 刷新编译数据库”，并检查 CDB 中的 PCM 路径。";
     case "wrong-language-mode":
@@ -574,6 +581,254 @@ async function updateModuleSupportForContext(
     storeModuleStatus(status, context, { state: "unavailable", message });
   }
   return false;
+}
+
+async function executeXlingsInstallTask(
+  xlingsPath: string,
+  args: string[],
+  cwd: string,
+): Promise<TaskCompletion> {
+  const task = new vscode.Task(
+    { type: "mcpp-xlings", command: args[0] ?? "xlings" },
+    vscode.TaskScope.Workspace,
+    "mcpp: 安装 llvm-tools",
+    "mcpp",
+    new vscode.ProcessExecution(xlingsPath, args, { cwd }),
+  );
+  task.presentationOptions = {
+    reveal: vscode.TaskRevealKind.Always,
+    panel: vscode.TaskPanelKind.Dedicated,
+    focus: true,
+    clear: true,
+    showReuseMessage: false,
+  };
+
+  let execution: vscode.TaskExecution | undefined;
+  let earlyCompletion: TaskCompletion | undefined;
+  let settled = false;
+  let processEndSubscription: vscode.Disposable | undefined;
+  let taskEndSubscription: vscode.Disposable | undefined;
+  const disposeListeners = (): void => {
+    processEndSubscription?.dispose();
+    taskEndSubscription?.dispose();
+  };
+  const finish = (completion: TaskCompletion): void => {
+    if (settled) {
+      return;
+    }
+    settled = true;
+    disposeListeners();
+    resolveCompletion?.(completion);
+  };
+  let resolveCompletion: ((completion: TaskCompletion) => void) | undefined;
+
+  const completion = new Promise<TaskCompletion>((resolve) => {
+    resolveCompletion = resolve;
+    processEndSubscription = vscode.tasks.onDidEndTaskProcess((event) => {
+      if (event.execution.task !== task) {
+        return;
+      }
+      const classified = classifyTaskExit(event.exitCode);
+      if (execution === undefined) {
+        earlyCompletion ??= classified;
+        return;
+      }
+      finish(classified);
+    });
+    taskEndSubscription = vscode.tasks.onDidEndTask((event) => {
+      if (event.execution.task !== task) {
+        return;
+      }
+      const classified = classifyTaskExit(undefined);
+      if (execution === undefined) {
+        earlyCompletion ??= classified;
+        return;
+      }
+      finish(classified);
+    });
+  });
+
+  try {
+    execution = await vscode.tasks.executeTask(task);
+  } catch (error) {
+    disposeListeners();
+    throw error;
+  }
+  if (earlyCompletion !== undefined) {
+    finish(earlyCompletion);
+  }
+  return completion;
+}
+
+async function autoConfigureModulesWizard(
+  context: ProjectContext,
+  status: vscode.StatusBarItem,
+  output: vscode.OutputChannel,
+  cliController: McppCliController,
+): Promise<void> {
+  appendOutputLine(output, "[一键配置] 开始一键配置模块代码提示...");
+
+  // Step 1: Guard checks
+  if (context.analysis.capability === "unavailable") {
+    await vscode.window.showErrorMessage(context.analysis.reason);
+    return;
+  }
+  if (context.analysis.capability === "syntax-only") {
+    const kind = context.analysis.kind.toUpperCase();
+    const install = "安装 LLVM 工具链";
+    const choice = await vscode.window.showWarningMessage(
+      `当前工具链是 ${kind}，其模块产物不能被 clangd 使用。是否安装 LLVM 工具链？`,
+      install,
+      "跳过",
+    );
+    if (choice === install) {
+      await vscode.commands.executeCommand("mcpp.installToolchain");
+    }
+    return;
+  }
+  if (context.analysis.compilerPath === undefined) {
+    await vscode.window.showErrorMessage("compile_commands.json 中没有可用的编译器路径。");
+    return;
+  }
+  if (!workspaceAllowsToolExecution(vscode.workspace.isTrusted)) {
+    await vscode.window.showWarningMessage(
+      "当前工作区未受信任，不会执行外部程序。请先信任工作区。",
+    );
+    return;
+  }
+
+  // Step 2: Check current clangd state
+  const compilerVersion = await runToolVersion(context.analysis.compilerPath);
+  appendOutputLine(
+    output,
+    `[一键配置] 编译器版本：LLVM ${llvmToolsVersionSpec(compilerVersion.identity ?? { major: 0, minor: 0, patch: 0 })}`,
+  );
+
+  const clangd = await resolveClangd(context);
+  if (clangd?.comparison.compatible) {
+    appendOutputLine(output, "[一键配置] 已找到兼容的 clangd，跳过安装步骤。");
+    // Skip to configuration
+  } else {
+    if (clangd !== undefined) {
+      appendOutputLine(
+        output,
+        `[一键配置] 未找到兼容的 clangd。原因：${clangd.comparison.reason}`,
+      );
+    } else {
+      appendOutputLine(output, "[一键配置] 未找到任何可用的 clangd。");
+    }
+
+    // Step 3: Check xlings
+    const xlingsPath = findXlingsExecutable();
+    if (xlingsPath === undefined) {
+      const installXlings = "安装 xlings";
+      const setPath = "设置自定义 clangd 路径";
+      const choice = await vscode.window.showErrorMessage(
+        "未找到 xlings，无法自动下载匹配的 clangd。请先安装 xlings（https://xlings.org），\n或手动安装与编译器版本匹配的 llvm-tools，或在设置中指定 clangd 路径。",
+        installXlings,
+        setPath,
+        "跳过",
+      );
+      if (choice === installXlings) {
+        await vscode.env.openExternal(
+          vscode.Uri.parse("https://xlings.org"),
+        );
+      } else if (choice === setPath) {
+        await vscode.commands.executeCommand(
+          "workbench.action.openSettings",
+          "mcpp.clangd.path",
+        );
+      }
+      return;
+    }
+
+    // Step 4: Offer installation
+    const version = compilerVersion.identity !== undefined
+      ? llvmToolsVersionSpec(compilerVersion.identity)
+      : "latest";
+    const install = "$(cloud-download) 安装 llvm-tools（推荐）";
+    const setPath = "$(settings-gear) 设置自定义 clangd 路径";
+    const choice = await vscode.window.showWarningMessage(
+      `未找到与 mcpp 编译器匹配的 clangd（LLVM ${version}）。是否通过 xlings 安装 llvm-tools？`,
+      { modal: true, detail: "xlings 将自动下载并安装匹配版本的 clangd、clang-format 和 clang-tidy。" },
+      install,
+      setPath,
+      "跳过",
+    );
+    if (choice === setPath) {
+      await vscode.commands.executeCommand(
+        "workbench.action.openSettings",
+        "mcpp.clangd.path",
+      );
+      return;
+    }
+    if (choice !== install) {
+      return;
+    }
+
+    // Check concurrency
+    if (cliController.isBusy()) {
+      await vscode.window.showWarningMessage(
+        "已有 mcpp 操作正在运行，请等待完成后再试。",
+      );
+      return;
+    }
+
+    // Note: xlings install is not tracked by McppOperationRegistry because it
+    // operates on xlings-managed paths (not mcpp). The serial executor
+    // (executeWithWorkspaceClangd) prevents concurrent wizard runs, and the
+    // isBusy() check catches active mcpp operations before install starts.
+
+    // Execute xlings install
+    appendOutputLine(output, `[一键配置] 正在通过 xlings 安装 llvm-tools（${xlingsPath}）...`);
+    const installArgs = xlingsInstallArgs(
+      compilerVersion.identity !== undefined ? version : undefined,
+    );
+    const xlingsResult = await executeXlingsInstallTask(
+      xlingsPath,
+      installArgs,
+      context.project.root,
+    );
+    appendOutputLine(
+      output,
+      `[一键配置] xlings install 完成（退出码 ${xlingsResult.exitCode ?? "未知"}）`,
+    );
+    if (xlingsResult.state !== "succeeded") {
+      await vscode.window.showErrorMessage(
+        `llvm-tools 安装${xlingsResult.state === "cancelled" ? "已取消" : "失败"}。请查看任务终端获取详细信息。`,
+      );
+      return;
+    }
+  }
+
+  // Step 5: Re-resolve clangd
+  const resolvedClangd = await resolveClangd(context);
+  if (resolvedClangd === undefined || !resolvedClangd.comparison.compatible) {
+    await vscode.window.showErrorMessage(
+      "llvm-tools 安装完成，但未找到匹配的 clangd。请检查 xlings 安装日志或手动设置 mcpp.clangd.path。",
+    );
+    return;
+  }
+  appendOutputLine(output, `[一键配置] 已找到 clangd：${resolvedClangd.path}`);
+
+  // Step 6: Configure clangd
+  await configureClangd(context, status, output, "interactive", true);
+
+  // Step 7: Offer rebuild
+  const rebuild = "$(sync) 刷新编译数据库";
+  const done = "$(close) 完成";
+  const postChoice = await vscode.window.showInformationMessage(
+    "clangd 配置完成。建议刷新编译数据库以生成模块 PCM。",
+    rebuild,
+    done,
+  );
+  if (postChoice === rebuild) {
+    await cliController.runProjectTask("build");
+  }
+
+  // Step 8: Refresh module status and update status bar
+  await runModuleSupportCheck(context, status, output, "automatic");
+  appendOutputLine(output, `[一键配置] 一键配置完成。clangd：${resolvedClangd.path}`);
 }
 
 export async function activate(extensionContext: vscode.ExtensionContext): Promise<void> {
@@ -773,9 +1028,70 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
         if (!shouldUseWorkspaceClangd(findCurrentProject()?.root, project.root)) {
           return;
         }
-        const context = loadProjectContext(project);
-        if (context !== undefined) {
-          await runModuleSupportCheck(context, status, output, "interactive");
+        const ctx = loadProjectContext(project);
+        if (ctx === undefined) {
+          return;
+        }
+
+        // When module support is already known to be unavailable, offer actionable choices
+        const currentStatus = moduleStatusByProject.get(ctx.project.root);
+        if (currentStatus?.state === "unavailable" && ctx.analysis.capability === "full") {
+          interface StatusActionItem extends vscode.QuickPickItem {
+            action: "auto-configure" | "recheck" | "rebuild";
+          }
+          const choice = await vscode.window.showQuickPick<StatusActionItem>([
+            {
+              label: "$(rocket) 一键配置模块代码提示",
+              description: "自动安装匹配的 llvm-tools 并配置 clangd",
+              action: "auto-configure",
+            },
+            {
+              label: "$(check) 重新检查模块支持",
+              description: "再次运行 clangd 模块检查",
+              action: "recheck",
+            },
+            {
+              label: "$(database) 刷新编译数据库",
+              description: "重新生成 compile_commands.json",
+              action: "rebuild",
+            },
+          ], {
+            title: "mcpp 模块代码提示不可用",
+            placeHolder: "选择操作以修复模块代码提示",
+          });
+          if (choice === undefined) {
+            return;
+          }
+          switch (choice.action) {
+            case "auto-configure":
+              await autoConfigureModulesWizard(ctx, status, output, cliController);
+              return;
+            case "recheck":
+              await runModuleSupportCheck(ctx, status, output, "interactive");
+              return;
+            case "rebuild":
+              await cliController.runProjectTask("build");
+              return;
+          }
+        }
+
+        // Original flow: run module check
+        await runModuleSupportCheck(ctx, status, output, "interactive");
+      });
+    })),
+    vscode.commands.registerCommand("mcpp.autoConfigureModules", runGuarded(async () => {
+      const project = findCurrentProject();
+      if (project === undefined) {
+        await vscode.window.showWarningMessage("当前工作区没有找到 mcpp.toml。");
+        return;
+      }
+      await executeWithWorkspaceClangd(async () => {
+        if (!shouldUseWorkspaceClangd(findCurrentProject()?.root, project.root)) {
+          return;
+        }
+        const ctx = loadProjectContext(project);
+        if (ctx !== undefined) {
+          await autoConfigureModulesWizard(ctx, status, output, cliController);
         }
       });
     })),
@@ -783,10 +1099,15 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
     trustWatcher,
     vscode.window.onDidChangeActiveTextEditor(() => {
       refreshStatus();
-      requestCurrentProjectReconciliation(true);
+      const current = findCurrentProject();
+      if (current !== undefined && current.root !== lastReconciledProjectRoot) {
+        lastReconciledProjectRoot = current.root;
+        requestCurrentProjectReconciliation(false);
+      }
     }),
     vscode.workspace.onDidChangeWorkspaceFolders(() => {
       refreshStatus();
+      lastReconciledProjectRoot = undefined;
       requestCurrentProjectReconciliation(true);
     }),
     manifestWatcher,

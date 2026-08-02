@@ -72,3 +72,21 @@ test("项目任务锁和全局工具链锁互相阻塞且只接受原 token 解�
   registry.finishProject("/work/app", second);
   assert.equal(registry.beginGlobal(second), undefined);
 });
+
+test("查询注册表是否有活跃操作", () => {
+  const registry = new McppOperationRegistry<object>();
+  assert.equal(registry.hasActive(), false);
+
+  const token = {};
+  assert.equal(registry.beginProject("/a", token), undefined);
+  assert.equal(registry.hasActive(), true);
+
+  registry.finishProject("/a", token);
+  assert.equal(registry.hasActive(), false);
+
+  assert.equal(registry.beginGlobal(token), undefined);
+  assert.equal(registry.hasActive(), true);
+
+  registry.finishGlobal(token);
+  assert.equal(registry.hasActive(), false);
+});

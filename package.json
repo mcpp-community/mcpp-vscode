@@ -2,7 +2,7 @@
   "name": "mcpp-vscode",
   "displayName": "mcpp",
   "description": "mcpp 与 C++ 模块的 VS Code 集成",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "publisher": "mcpp-community",
   "license": "Apache-2.0",
   "icon": "images/logo.png",
@@ -33,7 +33,8 @@
     "onCommand:mcpp.clean",
     "onCommand:mcpp.showToolchains",
     "onCommand:mcpp.installToolchain",
-    "onCommand:mcpp.selectDefaultToolchain"
+    "onCommand:mcpp.selectDefaultToolchain",
+    "onCommand:mcpp.autoConfigureModules"
   ],
   "categories": [
     "Programming Languages",
@@ -91,6 +92,10 @@
       {
         "command": "mcpp.checkModuleSupport",
         "title": "mcpp: 检查模块支持"
+      },
+      {
+        "command": "mcpp.autoConfigureModules",
+        "title": "mcpp: 一键配置模块代码提示"
       }
     ],
     "configuration": {

@@ -24,7 +24,7 @@ const root = path.resolve(process.cwd());
 
 test("declares the official clangd dependency and mcpp commands", () => {
   const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
-  assert.equal(manifest.version, "0.2.1");
+  assert.equal(manifest.version, "0.2.2");
   assert.ok(manifest.extensionDependencies?.includes("llvm-vs-code-extensions.vscode-clangd"));
   assert.ok(manifest.activationEvents?.includes("workspaceContains:mcpp.toml"));
   assert.equal(manifest.capabilities?.untrustedWorkspaces?.supported, "limited");
@@ -46,6 +46,7 @@ test("declares the official clangd dependency and mcpp commands", () => {
       "mcpp.configureClangd",
       "mcpp.refreshCompilationDatabase",
       "mcpp.checkModuleSupport",
+      "mcpp.autoConfigureModules",
     ],
   );
   assert.ok(manifest.contributes?.configuration?.properties?.["mcpp.path"]);

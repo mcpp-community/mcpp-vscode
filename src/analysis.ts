@@ -372,6 +372,10 @@ export function classifyCheckResult(exitCode: number, output: string): CheckResu
     normalized.includes("ast_file_different_branch")
     || normalized.includes("different branch")
     || normalized.includes("pch file uses an older pch format")
+    || normalized.includes("ast_file_version_too_new")
+    || normalized.includes("newer format that cannot be read")
+    || normalized.includes("ast_file_version_too_old")
+    || normalized.includes("older format that is no longer supported")
   ) {
     return "pcm-mismatch";
   }

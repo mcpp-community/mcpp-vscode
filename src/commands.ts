@@ -7,6 +7,7 @@ export const CLI_COMMANDS = {
   showToolchains: "mcpp.showToolchains",
   installToolchain: "mcpp.installToolchain",
   selectDefaultToolchain: "mcpp.selectDefaultToolchain",
+  autoConfigureModules: "mcpp.autoConfigureModules",
 } as const;
 
 export interface QuickMenuItem {
@@ -26,5 +27,6 @@ export const quickMenuItems: readonly QuickMenuItem[] = [
   { label: "$(symbol-interface) 配置 clangd", command: "mcpp.configureClangd", group: "ide" },
   { label: "$(database) 刷新编译数据库", command: "mcpp.refreshCompilationDatabase", group: "ide" },
   { label: "$(check) 检查模块支持", command: "mcpp.checkModuleSupport", group: "ide" },
+  { label: "$(rocket) 一键配置模块代码提示", command: CLI_COMMANDS.autoConfigureModules, group: "ide" },
 ];
 

@@ -104,6 +104,10 @@ export class McppCliController {
     this.status.show();
   }
 
+  public isBusy(): boolean {
+    return this.operations.hasActive();
+  }
+
   public async runProjectTask(kind: ProjectTaskKind): Promise<void> {
     const project = this.requireProject();
     if (project === undefined || !this.requireTrusted()) {
@@ -351,10 +355,13 @@ export class McppCliController {
     }
 
     const buildChoice = await vscode.window.showInformationMessage(
-      `mcpp 全局默认已更新为 ${picked.spec} + host target。当前项目不会自动切换，下一次构建时才会解析新的默认值。`,
-      ...(project === undefined ? [] : ["立即构建"]),
+      `mcpp 全局默认已更新为 ${picked.spec} + host target。建议清理旧工具链产物后重新构建。`,
+      ...(project === undefined ? [] : ["清理并构建"]),
     );
-    if (buildChoice === "立即构建") {
+    if (buildChoice === "清理并构建" && project !== undefined) {
+      const cleanArgs = mcppCommandArguments("clean");
+      const cleanResult = await runProcess(this.mcppExecutable(project), cleanArgs, project.root);
+      this.appendShortCommand("清理旧产物", this.mcppExecutable(project), cleanArgs, cleanResult);
       await this.runProjectTask("build");
     }
   }
