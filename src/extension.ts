@@ -23,6 +23,7 @@ import {
   llvmToolsVersionSpec,
   xlingsInstallArgs,
 } from "./llvmTools";
+import { CLI_COMMANDS } from "./commands";
 import { McppCliController } from "./cliController";
 import { runClangdCheck, runToolVersion, type ToolVersionResult } from "./process";
 import {
@@ -445,10 +446,18 @@ async function runModuleSupportCheck(
 ): Promise<ModuleStatus | undefined> {
   const interactive = mode === "interactive";
   if (context.analysis.capability === "syntax-only") {
-    const message = `${context.analysis.kind.toUpperCase()} 模块产物不能由 clangd 消费，模块语法高亮仍然可用。`;
+    const message = `${context.analysis.kind.toUpperCase()} 模块产物不能由 clangd 消费，模块代码提示不可用。语法高亮仍然可用。`;
     updateStatusBar(status, context);
     if (interactive) {
-      await vscode.window.showWarningMessage(message);
+      const configure = "一键配置";
+      const choice = await vscode.window.showWarningMessage(
+        `${message}\n\n如需启用模块代码提示，请切换到 LLVM 工具链后重新构建。`,
+        configure,
+        "关闭",
+      );
+      if (choice === configure) {
+        await vscode.commands.executeCommand(CLI_COMMANDS.autoConfigureModules);
+      }
     }
     return undefined;
   }
@@ -676,13 +685,17 @@ async function autoConfigureModulesWizard(
   if (context.analysis.capability === "syntax-only") {
     const kind = context.analysis.kind.toUpperCase();
     const install = "安装 LLVM 工具链";
-    const choice = await vscode.window.showWarningMessage(
-      `当前工具链是 ${kind}，其模块产物不能被 clangd 使用。是否安装 LLVM 工具链？`,
+    const select = "选择默认工具链";
+    const choice = await vscode.window.showErrorMessage(
+      `当前工具链是 ${kind}，其模块产物不能被 clangd 消费，模块代码提示功能不可用。\n\n如需使用模块代码提示，请先切换到 LLVM 工具链后重新构建项目。`,
       install,
-      "跳过",
+      select,
+      "关闭",
     );
     if (choice === install) {
-      await vscode.commands.executeCommand("mcpp.installToolchain");
+      await vscode.commands.executeCommand(CLI_COMMANDS.installToolchain);
+    } else if (choice === select) {
+      await vscode.commands.executeCommand(CLI_COMMANDS.selectDefaultToolchain);
     }
     return;
   }
@@ -1071,6 +1084,48 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
               return;
             case "rebuild":
               await cliController.runProjectTask("build");
+              return;
+          }
+        }
+
+        // QuickPick for syntax-only (GCC/MSVC) projects — no module code intelligence available
+        if (ctx.analysis.capability === "syntax-only") {
+          interface SyntaxOnlyActionItem extends vscode.QuickPickItem {
+            action: "auto-configure" | "install-toolchain" | "select-default";
+          }
+          const kindLabel = ctx.analysis.kind.toUpperCase();
+          const choice = await vscode.window.showQuickPick<SyntaxOnlyActionItem>([
+            {
+              label: "$(rocket) 一键配置模块代码提示",
+              description: `当前为 ${kindLabel} 工具链，查看如何切换到 LLVM`,
+              action: "auto-configure",
+            },
+            {
+              label: "$(cloud-download) 安装 LLVM 工具链",
+              description: "通过 mcpp 下载并安装 LLVM 工具链",
+              action: "install-toolchain",
+            },
+            {
+              label: "$(settings-gear) 选择全局默认工具链",
+              description: "从已安装的工具链中选择默认",
+              action: "select-default",
+            },
+          ], {
+            title: `mcpp: 当前为 ${kindLabel} 工具链，模块代码提示不可用`,
+            placeHolder: "切换到 LLVM 工具链以启用模块代码提示",
+          });
+          if (choice === undefined) {
+            return;
+          }
+          switch (choice.action) {
+            case "auto-configure":
+              await autoConfigureModulesWizard(ctx, status, output, cliController);
+              return;
+            case "install-toolchain":
+              await vscode.commands.executeCommand(CLI_COMMANDS.installToolchain);
+              return;
+            case "select-default":
+              await vscode.commands.executeCommand(CLI_COMMANDS.selectDefaultToolchain);
               return;
           }
         }
