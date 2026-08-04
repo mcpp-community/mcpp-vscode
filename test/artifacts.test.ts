@@ -24,7 +24,7 @@ const root = path.resolve(process.cwd());
 
 test("declares the official clangd dependency and mcpp commands", () => {
   const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
-  assert.equal(manifest.version, "0.2.2");
+  assert.equal(manifest.version, "0.2.3");
   assert.ok(manifest.extensionDependencies?.includes("llvm-vs-code-extensions.vscode-clangd"));
   assert.ok(manifest.activationEvents?.includes("workspaceContains:mcpp.toml"));
   assert.equal(manifest.capabilities?.untrustedWorkspaces?.supported, "limited");
@@ -52,11 +52,22 @@ test("declares the official clangd dependency and mcpp commands", () => {
   assert.ok(manifest.contributes?.configuration?.properties?.["mcpp.path"]);
   assert.ok(manifest.contributes?.configuration?.properties?.["mcpp.modulesSupport"]);
   assert.deepEqual(manifest.contributes?.configurationDefaults?.["files.associations"], {
+    "build.mcpp": "cpp",
     "*.ccm": "cpp",
     "*.cppm": "cpp",
     "*.ixx": "cpp",
     "*.mpp": "cpp",
   });
+});
+
+test("associates the build.mcpp file with the C++ language", () => {
+  const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
+  const associations = manifest.contributes?.configurationDefaults?.["files.associations"] as
+    | Record<string, string>
+    | undefined;
+
+  assert.equal(associations?.["build.mcpp"], "cpp");
+  assert.equal(associations?.["*.mcpp"], undefined);
 });
 
 test("ships an injection grammar with module-specific scopes", () => {

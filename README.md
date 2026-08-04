@@ -6,7 +6,7 @@
 
 把 mcpp 工程、C++ 模块语法和官方 clangd 扩展接入 VS Code。
 
-当前版本为 `0.2.2`。扩展负责工程发现、clangd 配置、模块状态检查以及常用
+当前版本为 `0.2.3`。扩展负责工程发现、clangd 配置、模块状态检查以及常用
 mcpp CLI 操作；它不实现新的 C++ 语言服务器，也不替代 mcpp 的构建逻辑。
 
 > 当前完整的模块语义能力只支持 LLVM/Clang 工具链。GCC 和 MSVC 工程仍可使用
@@ -17,7 +17,7 @@ mcpp CLI 操作；它不实现新的 C++ 语言服务器，也不替代 mcpp 的
 | 能力 | LLVM/Clang | GCC | MSVC |
 | --- | --- | --- | --- |
 | 识别 mcpp 工程 | 支持 | 支持 | 支持 |
-| `.cppm`、`.ixx`、`.mpp`、`.ccm` 文件关联 | 支持 | 支持 | 支持 |
+| `build.mcpp`、`.cppm`、`.ixx`、`.mpp`、`.ccm` 文件关联 | 支持 | 支持 | 支持 |
 | `module`、`export module`、`import` 语法高亮 | 支持 | 支持 | 支持 |
 | 构建、运行、测试、清理命令 | 支持 | 支持 | 支持 |
 | 查看、安装或选择 mcpp 工具链 | 支持 | 支持 | 系统检测与选择 |
@@ -35,7 +35,7 @@ mcpp CLI 操作；它不实现新的 C++ 语言服务器，也不替代 mcpp 的
 VSIX，然后在 VS Code 中执行 **Extensions: Install from VSIX...**，或者运行：
 
 ```sh
-code --install-extension /path/to/mcpp-vscode-0.2.2.vsix
+code --install-extension /path/to/mcpp-vscode-0.2.3.vsix
 ```
 
 安装后确认当前 VS Code profile 中同时存在 `mcpp-community.mcpp-vscode` 和
@@ -80,7 +80,7 @@ xlings 安装。
 
 ### C++ 模块语法高亮
 
-- 将 `.cppm`、`.ixx`、`.mpp` 和 `.ccm` 关联到 VS Code 内置 `cpp` 语言。
+- 将 `build.mcpp`、`.cppm`、`.ixx`、`.mpp` 和 `.ccm` 关联到 VS Code 内置 `cpp` 语言。
 - 向 `source.cpp` 注入模块语法规则。
 - 覆盖 `module`、`export module`、`import`、`export import`、模块名和模块分区。
 - 支持尚未输入分号的编辑中间态。
@@ -371,8 +371,8 @@ API、状态栏、任务和 clangd 集成。
 版本完全一致的 tag：
 
 ```sh
-git tag -a v0.2.2 -m "mcpp-vscode 0.2.2"
-git push origin v0.2.2
+git tag -a v0.2.3 -m "mcpp-vscode 0.2.3"
+git push origin v0.2.3
 ```
 
 `.github/workflows/release.yml` 会校验 tag，执行测试和打包，生成 VSIX 与 SHA-256 文件，
