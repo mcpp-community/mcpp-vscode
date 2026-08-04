@@ -1,0 +1,116 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "mcpp TOML",
+  "scopeName": "source.toml.mcpp",
+  "patterns": [
+    {
+      "include": "#comment"
+    },
+    {
+      "include": "#table"
+    },
+    {
+      "include": "#key"
+    },
+    {
+      "include": "#string"
+    },
+    {
+      "include": "#datetime"
+    },
+    {
+      "include": "#number"
+    },
+    {
+      "include": "#boolean"
+    },
+    {
+      "include": "#punctuation"
+    }
+  ],
+  "repository": {
+    "comment": {
+      "match": "#.*$",
+      "name": "comment.line.number-sign.toml"
+    },
+    "table": {
+      "match": "^\\s*(\\[\\[?)([^\\]\\r\\n]+?)(\\]\\]?)\\s*(?=#|$)",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.table.begin.toml"
+        },
+        "2": {
+          "name": "entity.name.section.toml"
+        },
+        "3": {
+          "name": "punctuation.definition.table.end.toml"
+        }
+      }
+    },
+    "key": {
+      "match": "^\\s*((?:[A-Za-z0-9_-]+|\"[^\"]+\"|'[^']+')(?:\\s*\\.\\s*(?:[A-Za-z0-9_-]+|\"[^\"]+\"|'[^']+'))*)\\s*(=)",
+      "captures": {
+        "1": {
+          "name": "variable.other.key.toml"
+        },
+        "2": {
+          "name": "keyword.operator.assignment.toml"
+        }
+      }
+    },
+    "string": {
+      "patterns": [
+        {
+          "begin": "\"\"\"",
+          "end": "\"\"\"",
+          "name": "string.quoted.triple.basic.toml",
+          "patterns": [
+            {
+              "include": "#escape"
+            }
+          ]
+        },
+        {
+          "begin": "'''",
+          "end": "'''",
+          "name": "string.quoted.triple.literal.toml"
+        },
+        {
+          "begin": "\"",
+          "end": "\"",
+          "name": "string.quoted.double.toml",
+          "patterns": [
+            {
+              "include": "#escape"
+            }
+          ]
+        },
+        {
+          "begin": "'",
+          "end": "'",
+          "name": "string.quoted.single.toml"
+        }
+      ]
+    },
+    "escape": {
+      "match": "\\\\(?:[btnfr\"\\\\]|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8})",
+      "name": "constant.character.escape.toml"
+    },
+    "datetime": {
+      "match": "(?<![A-Za-z0-9_-])(?:\\d{4}-\\d{2}-\\d{2}(?:[Tt ]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:[Zz]|[+-]\\d{2}:\\d{2})?)?|\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?)(?![A-Za-z0-9_-])",
+      "name": "constant.other.datetime.toml"
+    },
+    "number": {
+      "match": "(?<![A-Za-z0-9_-])[-+]?(?:0x[0-9A-Fa-f](?:_?[0-9A-Fa-f])*|0o[0-7](?:_?[0-7])*|0b[01](?:_?[01])*|(?:\\d(?:_?\\d)*)(?:\\.\\d(?:_?\\d)*)?(?:[eE][-+]?\\d(?:_?\\d)*)?|inf|nan)(?![A-Za-z0-9_-])",
+      "name": "constant.numeric.toml"
+    },
+    "boolean": {
+      "match": "(?<![A-Za-z0-9_-])(?:true|false)(?![A-Za-z0-9_-])",
+      "name": "constant.language.boolean.toml"
+    },
+    "punctuation": {
+      "match": "[\\[\\]{},.]",
+      "name": "punctuation.separator.toml"
+    }
+  }
+}

@@ -17,6 +17,7 @@ mcpp CLI 操作；它不实现新的 C++ 语言服务器，也不替代 mcpp 的
 | 能力 | LLVM/Clang | GCC | MSVC |
 | --- | --- | --- | --- |
 | 识别 mcpp 工程 | 支持 | 支持 | 支持 |
+| `mcpp.toml` TOML 语法高亮 | 支持 | 支持 | 支持 |
 | `build.mcpp`、`.cppm`、`.ixx`、`.mpp`、`.ccm` 文件关联 | 支持 | 支持 | 支持 |
 | `module`、`export module`、`import` 语法高亮 | 支持 | 支持 | 支持 |
 | 构建、运行、测试、清理命令 | 支持 | 支持 | 支持 |
@@ -78,8 +79,10 @@ xlings 安装。
 
 扩展激活本身不会静默运行 `mcpp build`，也不会自动下载、安装或切换工具链。
 
-### C++ 模块语法高亮
+### 语法高亮
 
+- 将精确文件名 `mcpp.toml` 识别为独立的 mcpp TOML 语言，内置表、键、字符串、数字、
+  布尔、日期时间和注释高亮。
 - 将 `build.mcpp`、`.cppm`、`.ixx`、`.mpp` 和 `.ccm` 关联到 VS Code 内置 `cpp` 语言。
 - 向 `source.cpp` 注入模块语法规则。
 - 覆盖 `module`、`export module`、`import`、`export import`、模块名和模块分区。

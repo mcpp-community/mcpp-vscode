@@ -132,6 +132,18 @@
         }
       }
     },
+    "languages": [
+      {
+        "id": "mcpp-toml",
+        "aliases": [
+          "mcpp TOML",
+          "mcpp.toml"
+        ],
+        "filenames": [
+          "mcpp.toml"
+        ]
+      }
+    ],
     "configurationDefaults": {
       "files.associations": {
         "build.mcpp": "cpp",
@@ -142,6 +154,11 @@
       }
     },
     "grammars": [
+      {
+        "language": "mcpp-toml",
+        "scopeName": "source.toml.mcpp",
+        "path": "./syntaxes/mcpp-toml.tmLanguage.json"
+      },
       {
         "scopeName": "source.cpp.mcpp-modules",
         "injectTo": [

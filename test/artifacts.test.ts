@@ -16,7 +16,8 @@ interface PackageManifest {
     commands?: Array<{ command: string }>;
     configuration?: { properties?: Record<string, unknown> };
     configurationDefaults?: Record<string, unknown>;
-    grammars?: Array<{ scopeName: string; injectTo?: string[]; path: string }>;
+    languages?: Array<{ id: string; aliases?: string[]; filenames?: string[] }>;
+    grammars?: Array<{ language?: string; scopeName: string; injectTo?: string[]; path: string }>;
   };
 }
 
@@ -68,6 +69,50 @@ test("associates the build.mcpp file with the C++ language", () => {
 
   assert.equal(associations?.["build.mcpp"], "cpp");
   assert.equal(associations?.["*.mcpp"], undefined);
+});
+
+test("ships TOML highlighting for the exact mcpp.toml filename", () => {
+  const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
+  const language = manifest.contributes?.languages?.find((item) => item.id === "mcpp-toml");
+  assert.deepEqual(language, {
+    id: "mcpp-toml",
+    aliases: ["mcpp TOML", "mcpp.toml"],
+    filenames: ["mcpp.toml"],
+  });
+
+  const grammar = manifest.contributes?.grammars?.find((item) => item.language === "mcpp-toml");
+  assert.deepEqual(grammar, {
+    language: "mcpp-toml",
+    scopeName: "source.toml.mcpp",
+    path: "./syntaxes/mcpp-toml.tmLanguage.json",
+  });
+
+  const grammarText = readFileSync(path.join(root, "syntaxes/mcpp-toml.tmLanguage.json"), "utf8");
+  const grammarDocument = JSON.parse(grammarText) as {
+    repository?: Record<string, { match?: string }>;
+  };
+  for (const key of ["comment", "table", "key", "string", "datetime", "number", "boolean", "punctuation"]) {
+    assert.ok(grammarDocument.repository?.[key], `missing TOML grammar rule: ${key}`);
+  }
+
+  const tablePattern = new RegExp(grammarDocument.repository?.table.match ?? "");
+  assert.match("[package]", tablePattern);
+  assert.match("[[target.generated]]", tablePattern);
+
+  const keyPattern = new RegExp(grammarDocument.repository?.key.match ?? "");
+  assert.match('standard = "c++23"', keyPattern);
+  assert.match('"quoted.key" = true', keyPattern);
+
+  for (const scope of [
+    "comment.line.number-sign.toml",
+    "entity.name.section.toml",
+    "variable.other.key.toml",
+    "string.quoted.double.toml",
+    "constant.numeric.toml",
+    "constant.language.boolean.toml",
+  ]) {
+    assert.match(grammarText, new RegExp(scope.replaceAll(".", "\\.")));
+  }
 });
 
 test("ships an injection grammar with module-specific scopes", () => {
