@@ -138,3 +138,10 @@ Create annotated tag `v0.2.4` on the verified repair commit. Do not push it or c
 Run: `code --install-extension /Users/cltx/projects/mcpp/mcpp-vscode/mcpp-vscode-0.2.4.vsix --force`
 
 Then run `code --list-extensions --show-versions` and verify `mcpp-community.mcpp-vscode@0.2.4`. A VS Code window reload is required before the new language registration and clangd arguments take effect.
+
+### Review follow-up
+
+- [x] Extend module grammar injection to `source.mcpp-build` and cover the import capture scope.
+- [x] Resolve relative compilation-database source paths from each command directory.
+- [x] Treat explicit libc++ and no-default-config commands as hermetic without requiring a sysroot.
+- [x] Keep the release instructions synchronized with the extension version.

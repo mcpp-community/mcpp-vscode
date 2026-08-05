@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
   "name": "mcpp C++ Modules",
   "scopeName": "source.cpp.mcpp-modules",
-  "injectionSelector": "L:source.cpp",
+  "injectionSelector": "L:source.cpp, L:source.mcpp-build",
   "patterns": [
     {
       "include": "#module-declaration"

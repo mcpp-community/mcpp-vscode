@@ -179,12 +179,16 @@ export function analyzeCompilationDatabase(contents: string): CompilationDatabas
       argument.startsWith("-fmodule-file=")
       || argument.startsWith("-fprebuilt-module-path=")
     ));
+    const directory = typeof command.directory === "string" ? command.directory : undefined;
+    const sourceFile = typeof command.file === "string"
+      ? resolveCompilationSourceFile(directory, command.file)
+      : undefined;
     candidates.push({
       kind,
       capability: kind === "llvm" ? "full" : "syntax-only",
       compilerPath: args[0],
-      sourceFile: typeof command.file === "string" ? command.file : undefined,
-      directory: typeof command.directory === "string" ? command.directory : undefined,
+      sourceFile,
+      directory,
       arguments: args,
       hasPrebuiltModules,
       reason: kind === "llvm"
@@ -217,6 +221,16 @@ function isWithinDirectory(directory: string, file: string): boolean {
   const relative = pathApi.relative(pathApi.resolve(directory), pathApi.resolve(file));
   return relative === ""
     || (relative !== ".." && !relative.startsWith(`..${pathApi.sep}`) && !pathApi.isAbsolute(relative));
+}
+
+function resolveCompilationSourceFile(directory: string | undefined, file: string): string {
+  if (directory === undefined) {
+    return file;
+  }
+  const windows = /^[A-Za-z]:[\\/]/.test(directory) || directory.includes("\\")
+    || /^[A-Za-z]:[\\/]/.test(file) || file.includes("\\");
+  const pathApi = windows ? path.win32 : path.posix;
+  return pathApi.isAbsolute(file) ? file : pathApi.resolve(directory, file);
 }
 
 function isProjectSource(directory: string, file: string): boolean {
@@ -252,13 +266,6 @@ function removeManagedArguments(arguments_: readonly string[]): string[] {
   return result;
 }
 
-function hasValueFlag(arguments_: readonly string[], flag: string): boolean {
-  return arguments_.some((argument, index) => (
-    (argument === flag && index + 1 < arguments_.length)
-    || argument.startsWith(`${flag}=`)
-  ));
-}
-
 function hasExplicitLibcxxPath(arguments_: readonly string[]): boolean {
   return arguments_.some((argument, index) => {
     const value = argument === "-isystem"
@@ -276,8 +283,7 @@ function isHermeticClangCommand(arguments_: readonly string[] | undefined): bool
   }
   return arguments_.includes("--no-default-config")
     && arguments_.includes("-nostdinc++")
-    && hasExplicitLibcxxPath(arguments_)
-    && hasValueFlag(arguments_, "--sysroot");
+    && hasExplicitLibcxxPath(arguments_);
 }
 
 function expandWorkspaceVariables(argument: string, workspaceFolder?: string): string {

@@ -137,12 +137,16 @@ test("ships an injection grammar with module-specific scopes", () => {
   const grammar = manifest.contributes?.grammars?.find((item) => item.scopeName === "source.cpp.mcpp-modules");
   assert.deepEqual(grammar, {
     scopeName: "source.cpp.mcpp-modules",
-    injectTo: ["source.cpp"],
+    injectTo: ["source.cpp", "source.mcpp-build"],
     path: "./syntaxes/mcpp-modules.tmLanguage.json",
   });
 
   const grammarText = readFileSync(path.join(root, "syntaxes/mcpp-modules.tmLanguage.json"), "utf8");
-  const grammarDocument = JSON.parse(grammarText) as { repository?: Record<string, unknown> };
+  const grammarDocument = JSON.parse(grammarText) as {
+    injectionSelector?: string;
+    repository?: Record<string, unknown>;
+  };
+  assert.match(grammarDocument.injectionSelector ?? "", /source\.mcpp-build/);
   for (const key of ["module-declaration", "import-declaration", "module-name"]) {
     assert.ok(grammarDocument.repository?.[key], `missing grammar rule: ${key}`);
   }
@@ -155,6 +159,12 @@ test("ships an injection grammar with module-specific scopes", () => {
   const importPattern = new RegExp(javascriptPattern);
   assert.match("import xxx", importPattern);
   assert.match("export import foo.bar;", importPattern);
+
+  const importRuleWithCaptures = importRule as {
+    captures?: Record<string, { name?: string }>;
+  };
+  assert.equal(importRuleWithCaptures.captures?.["2"]?.name, "keyword.control.import.cpp");
+  assert.match("import mcpp;", importPattern);
 });
 
 test("设置全局默认后先释放工具链锁再提供立即构建", () => {

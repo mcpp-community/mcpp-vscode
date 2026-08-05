@@ -178,7 +178,8 @@
       {
         "scopeName": "source.cpp.mcpp-modules",
         "injectTo": [
-          "source.cpp"
+          "source.cpp",
+          "source.mcpp-build"
         ],
         "path": "./syntaxes/mcpp-modules.tmLanguage.json"
       }

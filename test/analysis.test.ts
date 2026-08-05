@@ -115,6 +115,35 @@ test("prefers a project source over an mcpp dependency cache source", () => {
   assert.equal(result.sourceFile, "/work/app/src/main.cpp");
 });
 
+test("resolves relative CDB source files from their command directory", () => {
+  const result = analyzeCompilationDatabase(JSON.stringify([
+    {
+      directory: "/work/app",
+      file: "/work/app/.mcpp/packages/redis/src/transaction.cpp",
+      arguments: [
+        "/tools/clang++",
+        "-std=c++23",
+        "-fprebuilt-module-path=/work/app/target/pcm.cache",
+        "-c",
+        "/work/app/.mcpp/packages/redis/src/transaction.cpp",
+      ],
+    },
+    {
+      directory: "/work/app",
+      file: "src/main.cpp",
+      arguments: [
+        "/tools/clang++",
+        "-std=c++23",
+        "-fprebuilt-module-path=/work/app/target/pcm.cache",
+        "-c",
+        "src/main.cpp",
+      ],
+    },
+  ]));
+
+  assert.equal(result.sourceFile, "/work/app/src/main.cpp");
+});
+
 test("keeps Windows separators when reading a command-form CDB entry", () => {
   const result = analyzeCompilationDatabase(JSON.stringify([
     {
@@ -203,8 +232,10 @@ test("hermetic mcpp commands do not use query-driver discovery", () => {
         "/tools/clang++",
         "--no-default-config",
         "-nostdinc++",
-        "-isystem/tools/llvm/include/c++/v1",
-        "--sysroot=/platform/sdk",
+        "-isystem",
+        "/tools/llvm/include/c++/v1",
+        "-isystem/tools/llvm/include/x86_64-unknown-linux-gnu",
+        "-isystem/tools/llvm/include",
         "-c",
         "/work/app/src/main.cpp",
       ],

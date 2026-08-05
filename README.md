@@ -105,8 +105,8 @@ TextMate 语法规则提供。
 2. 从显式设置、编译器目录、匹配的 xlings `llvm-tools` 目录和 `PATH` 中查找 clangd。
 3. 执行编译器和 clangd 的版本命令，比较 LLVM 版本与 revision。
 4. 保留用户已有的 `clangd.arguments`，展开 `${workspaceFolder}` 和
-   `${workspaceRoot}`；只有在 CDB 未提供完整 sysroot、标准库和 no-default-config
-   参数时，才添加精确的 `--query-driver`。
+   `${workspaceRoot}`；只有在 CDB 未提供 no-default-config 和显式标准库配置时，才添加
+   精确的 `--query-driver`。
 5. 根据 CDB 中是否已有显式 PCM 映射以及 `mcpp.modulesSupport` 设置，决定是否增加
    clangd 实验模块参数。
 6. 必要时重启官方 clangd 扩展，并执行一次最长 60 秒的 `clangd --check`。
@@ -381,8 +381,8 @@ API、状态栏、任务和 clangd 集成。
 版本完全一致的 tag：
 
 ```sh
-git tag -a v0.2.3 -m "mcpp-vscode 0.2.3"
-git push origin v0.2.3
+git tag -a v0.2.4 -m "mcpp-vscode 0.2.4"
+git push origin v0.2.4
 ```
 
 `.github/workflows/release.yml` 会校验 tag，执行测试和打包，生成 VSIX 与 SHA-256 文件，
