@@ -3,8 +3,8 @@
 ## 0.2.4
 
 - 修复 hermetic mcpp 编译数据库被插件追加 `--query-driver` 后导致的 clangd 标准库和
-  模块误诊断；仅在编译命令未自带 no-default-config 和显式标准库配置时补充 query
-  driver。
+  模块误诊断；仅在编译命令未自带 `--no-default-config`、`-nostdinc++` 和显式 libc++
+  路径时补充 query driver。
 - 模块检查优先选择项目源码，避免误选 `.mcpp` 依赖缓存或 `target` 生成源码，改善补全、
   跳转和诊断稳定性。
 - 将 `build.mcpp` 作为独立的语法高亮语言处理，不再让 clangd 把 mcpp 构建脚本当作普通

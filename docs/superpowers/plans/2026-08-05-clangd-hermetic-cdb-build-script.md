@@ -143,5 +143,5 @@ Then run `code --list-extensions --show-versions` and verify `mcpp-community.mcp
 
 - [x] Extend module grammar injection to `source.mcpp-build` and cover the import capture scope.
 - [x] Resolve relative compilation-database source paths from each command directory.
-- [x] Treat explicit libc++ and no-default-config commands as hermetic without requiring a sysroot.
+- [x] Treat no-default-config, nostdinc++, and explicit libc++ commands as hermetic without requiring a sysroot.
 - [x] Keep the release instructions synchronized with the extension version.
