@@ -86,6 +86,35 @@ test("prefers a project source over an external module interface", () => {
   assert.equal(result.sourceFile, "/work/app/src/main.cpp");
 });
 
+test("prefers a project source over an mcpp dependency cache source", () => {
+  const result = analyzeCompilationDatabase(JSON.stringify([
+    {
+      directory: "/work/app",
+      file: "/work/app/.mcpp/packages/redis/src/transaction.cpp",
+      arguments: [
+        "/tools/clang++",
+        "-std=c++23",
+        "-fprebuilt-module-path=/work/app/target/pcm.cache",
+        "-c",
+        "/work/app/.mcpp/packages/redis/src/transaction.cpp",
+      ],
+    },
+    {
+      directory: "/work/app",
+      file: "/work/app/src/main.cpp",
+      arguments: [
+        "/tools/clang++",
+        "-std=c++23",
+        "-fprebuilt-module-path=/work/app/target/pcm.cache",
+        "-c",
+        "/work/app/src/main.cpp",
+      ],
+    },
+  ]));
+
+  assert.equal(result.sourceFile, "/work/app/src/main.cpp");
+});
+
 test("keeps Windows separators when reading a command-form CDB entry", () => {
   const result = analyzeCompilationDatabase(JSON.stringify([
     {
@@ -160,6 +189,44 @@ test("auto consumes explicit mcpp PCMs without invoking clangd's module builder"
     clangdIdentity: { major: 22, minor: 1, patch: 8 },
     platform: "darwin",
     hasPrebuiltModules: true,
+  });
+
+  assert.deepEqual(args, ["--query-driver=/tools/clang++"]);
+});
+
+test("hermetic mcpp commands do not use query-driver discovery", () => {
+  const args = buildClangdArguments(
+    ["--background-index", "--query-driver=/old/compiler"],
+    {
+      compilerPath: "/tools/clang++",
+      compilationArguments: [
+        "/tools/clang++",
+        "--no-default-config",
+        "-nostdinc++",
+        "-isystem/tools/llvm/include/c++/v1",
+        "--sysroot=/platform/sdk",
+        "-c",
+        "/work/app/src/main.cpp",
+      ],
+      modulesSupport: "off",
+      platform: "darwin",
+    },
+  );
+
+  assert.deepEqual(args, ["--background-index"]);
+});
+
+test("non-hermetic commands retain query-driver discovery", () => {
+  const args = buildClangdArguments([], {
+    compilerPath: "/tools/clang++",
+    compilationArguments: [
+      "/tools/clang++",
+      "-std=c++23",
+      "-c",
+      "/work/app/src/main.cpp",
+    ],
+    modulesSupport: "off",
+    platform: "darwin",
   });
 
   assert.deepEqual(args, ["--query-driver=/tools/clang++"]);

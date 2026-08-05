@@ -2,7 +2,7 @@
   "name": "mcpp-vscode",
   "displayName": "mcpp",
   "description": "mcpp 与 C++ 模块的 VS Code 集成",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "publisher": "mcpp-community",
   "license": "Apache-2.0",
   "icon": "images/logo.png",
@@ -23,6 +23,7 @@
   "activationEvents": [
     "workspaceContains:mcpp.toml",
     "onLanguage:cpp",
+    "onLanguage:mcpp-build",
     "onCommand:mcpp.configureClangd",
     "onCommand:mcpp.refreshCompilationDatabase",
     "onCommand:mcpp.checkModuleSupport",
@@ -134,6 +135,17 @@
     },
     "languages": [
       {
+        "id": "mcpp-build",
+        "aliases": [
+          "mcpp build script",
+          "build.mcpp"
+        ],
+        "filenames": [
+          "build.mcpp"
+        ],
+        "configuration": "./syntaxes/mcpp-build-language-configuration.json"
+      },
+      {
         "id": "mcpp-toml",
         "aliases": [
           "mcpp TOML",
@@ -146,7 +158,6 @@
     ],
     "configurationDefaults": {
       "files.associations": {
-        "build.mcpp": "cpp",
         "*.ccm": "cpp",
         "*.cppm": "cpp",
         "*.ixx": "cpp",
@@ -154,6 +165,11 @@
       }
     },
     "grammars": [
+      {
+        "language": "mcpp-build",
+        "scopeName": "source.mcpp-build",
+        "path": "./syntaxes/mcpp-build.tmLanguage.json"
+      },
       {
         "language": "mcpp-toml",
         "scopeName": "source.toml.mcpp",

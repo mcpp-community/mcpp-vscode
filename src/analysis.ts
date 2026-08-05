@@ -35,6 +35,7 @@ export interface ToolIdentityComparison {
 
 export interface ClangdArgumentOptions {
   compilerPath: string;
+  compilationArguments?: readonly string[];
   modulesSupport: ModulesSupportMode;
   clangdIdentity?: ToolIdentity;
   platform: NodeJS.Platform;
@@ -201,6 +202,7 @@ export function analyzeCompilationDatabase(contents: string): CompilationDatabas
     const moduleInterface = /\.(?:cppm|ixx|mpp|ccm)$/i.test(sourceFile);
     const inProject = candidate.directory !== undefined && isWithinDirectory(candidate.directory, sourceFile);
     return (inProject ? 200 : 0)
+      + (candidate.directory !== undefined && isProjectSource(candidate.directory, sourceFile) ? 200 : 0)
       + (moduleInterface ? 100 : 0)
       + (candidate.hasPrebuiltModules ? 10 : 0);
   };
@@ -215,6 +217,18 @@ function isWithinDirectory(directory: string, file: string): boolean {
   const relative = pathApi.relative(pathApi.resolve(directory), pathApi.resolve(file));
   return relative === ""
     || (relative !== ".." && !relative.startsWith(`..${pathApi.sep}`) && !pathApi.isAbsolute(relative));
+}
+
+function isProjectSource(directory: string, file: string): boolean {
+  if (!isWithinDirectory(directory, file)) {
+    return false;
+  }
+  const windows = /^[A-Za-z]:[\\/]/.test(directory) || directory.includes("\\")
+    || /^[A-Za-z]:[\\/]/.test(file) || file.includes("\\");
+  const pathApi = windows ? path.win32 : path.posix;
+  const relative = pathApi.relative(pathApi.resolve(directory), pathApi.resolve(file));
+  const firstComponent = relative.split(pathApi.sep)[0];
+  return firstComponent !== ".mcpp" && firstComponent !== "target";
 }
 
 function removeManagedArguments(arguments_: readonly string[]): string[] {
@@ -236,6 +250,34 @@ function removeManagedArguments(arguments_: readonly string[]): string[] {
   }
 
   return result;
+}
+
+function hasValueFlag(arguments_: readonly string[], flag: string): boolean {
+  return arguments_.some((argument, index) => (
+    (argument === flag && index + 1 < arguments_.length)
+    || argument.startsWith(`${flag}=`)
+  ));
+}
+
+function hasExplicitLibcxxPath(arguments_: readonly string[]): boolean {
+  return arguments_.some((argument, index) => {
+    const value = argument === "-isystem"
+      ? arguments_[index + 1] ?? ""
+      : argument.startsWith("-isystem")
+        ? argument.slice("-isystem".length)
+        : "";
+    return /[\\/]include[\\/]c\+\+[\\/]v1(?:[\\/]|$)/.test(value);
+  });
+}
+
+function isHermeticClangCommand(arguments_: readonly string[] | undefined): boolean {
+  if (arguments_ === undefined) {
+    return false;
+  }
+  return arguments_.includes("--no-default-config")
+    && arguments_.includes("-nostdinc++")
+    && hasExplicitLibcxxPath(arguments_)
+    && hasValueFlag(arguments_, "--sysroot");
 }
 
 function expandWorkspaceVariables(argument: string, workspaceFolder?: string): string {
@@ -276,7 +318,9 @@ export function buildClangdArguments(
 ): string[] {
   const result = removeManagedArguments(existingArguments)
     .map((argument) => expandWorkspaceVariables(argument, options.workspaceFolder));
-  result.push(`--query-driver=${options.compilerPath}`);
+  if (!isHermeticClangCommand(options.compilationArguments)) {
+    result.push(`--query-driver=${options.compilerPath}`);
+  }
 
   if (shouldEnableExperimentalModules(options)) {
     result.push("--experimental-modules-support");

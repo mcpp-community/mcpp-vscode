@@ -310,6 +310,7 @@ async function configureClangd(
     clangd.path,
     {
       compilerPath: context.analysis.compilerPath,
+      compilationArguments: context.analysis.arguments,
       modulesSupport,
       clangdIdentity: clangd.version.identity,
       platform: process.platform,
@@ -522,6 +523,7 @@ async function runModuleSupportCheck(
     officialClangdConfiguration(context.project).get<string[]>("arguments", []),
     {
       compilerPath: context.analysis.compilerPath,
+      compilationArguments: context.analysis.arguments,
       modulesSupport: projectConfiguration(context.project)
         .get<ModulesSupportMode>("modulesSupport", "auto"),
       clangdIdentity: clangd.version.identity,

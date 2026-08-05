@@ -16,7 +16,7 @@ interface PackageManifest {
     commands?: Array<{ command: string }>;
     configuration?: { properties?: Record<string, unknown> };
     configurationDefaults?: Record<string, unknown>;
-    languages?: Array<{ id: string; aliases?: string[]; filenames?: string[] }>;
+    languages?: Array<{ id: string; aliases?: string[]; filenames?: string[]; configuration?: string }>;
     grammars?: Array<{ language?: string; scopeName: string; injectTo?: string[]; path: string }>;
   };
 }
@@ -25,9 +25,10 @@ const root = path.resolve(process.cwd());
 
 test("declares the official clangd dependency and mcpp commands", () => {
   const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
-  assert.equal(manifest.version, "0.2.3");
+  assert.equal(manifest.version, "0.2.4");
   assert.ok(manifest.extensionDependencies?.includes("llvm-vs-code-extensions.vscode-clangd"));
   assert.ok(manifest.activationEvents?.includes("workspaceContains:mcpp.toml"));
+  assert.ok(manifest.activationEvents?.includes("onLanguage:mcpp-build"));
   assert.equal(manifest.capabilities?.untrustedWorkspaces?.supported, "limited");
   assert.equal(
     manifest.capabilities?.untrustedWorkspaces?.description,
@@ -53,7 +54,6 @@ test("declares the official clangd dependency and mcpp commands", () => {
   assert.ok(manifest.contributes?.configuration?.properties?.["mcpp.path"]);
   assert.ok(manifest.contributes?.configuration?.properties?.["mcpp.modulesSupport"]);
   assert.deepEqual(manifest.contributes?.configurationDefaults?.["files.associations"], {
-    "build.mcpp": "cpp",
     "*.ccm": "cpp",
     "*.cppm": "cpp",
     "*.ixx": "cpp",
@@ -61,14 +61,31 @@ test("declares the official clangd dependency and mcpp commands", () => {
   });
 });
 
-test("associates the build.mcpp file with the C++ language", () => {
+test("ships syntax-only C++ highlighting for the exact build.mcpp filename", () => {
   const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
   const associations = manifest.contributes?.configurationDefaults?.["files.associations"] as
     | Record<string, string>
     | undefined;
+  const language = manifest.contributes?.languages?.find((item) => item.id === "mcpp-build");
+  const grammar = manifest.contributes?.grammars?.find((item) => item.language === "mcpp-build");
 
-  assert.equal(associations?.["build.mcpp"], "cpp");
+  assert.equal(associations?.["build.mcpp"], undefined);
   assert.equal(associations?.["*.mcpp"], undefined);
+  assert.deepEqual(language, {
+    id: "mcpp-build",
+    aliases: ["mcpp build script", "build.mcpp"],
+    filenames: ["build.mcpp"],
+    configuration: "./syntaxes/mcpp-build-language-configuration.json",
+  });
+  assert.deepEqual(grammar, {
+    language: "mcpp-build",
+    scopeName: "source.mcpp-build",
+    path: "./syntaxes/mcpp-build.tmLanguage.json",
+  });
+
+  const grammarText = readFileSync(path.join(root, "syntaxes/mcpp-build.tmLanguage.json"), "utf8");
+  const grammarDocument = JSON.parse(grammarText) as { patterns?: Array<{ include?: string }> };
+  assert.ok(grammarDocument.patterns?.some((pattern) => pattern.include === "source.cpp"));
 });
 
 test("ships TOML highlighting for the exact mcpp.toml filename", () => {

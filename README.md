@@ -6,7 +6,7 @@
 
 把 mcpp 工程、C++ 模块语法和官方 clangd 扩展接入 VS Code。
 
-当前版本为 `0.2.3`。扩展负责工程发现、clangd 配置、模块状态检查以及常用
+当前版本为 `0.2.4`。扩展负责工程发现、clangd 配置、模块状态检查以及常用
 mcpp CLI 操作；它不实现新的 C++ 语言服务器，也不替代 mcpp 的构建逻辑。
 
 > 当前完整的模块语义能力只支持 LLVM/Clang 工具链。GCC 和 MSVC 工程仍可使用
@@ -36,7 +36,7 @@ mcpp CLI 操作；它不实现新的 C++ 语言服务器，也不替代 mcpp 的
 VSIX，然后在 VS Code 中执行 **Extensions: Install from VSIX...**，或者运行：
 
 ```sh
-code --install-extension /path/to/mcpp-vscode-0.2.3.vsix
+code --install-extension /path/to/mcpp-vscode-0.2.4.vsix
 ```
 
 安装后确认当前 VS Code profile 中同时存在 `mcpp-community.mcpp-vscode` 和
@@ -83,13 +83,19 @@ xlings 安装。
 
 - 将精确文件名 `mcpp.toml` 识别为独立的 mcpp TOML 语言，内置表、键、字符串、数字、
   布尔、日期时间和注释高亮。
-- 将 `build.mcpp`、`.cppm`、`.ixx`、`.mpp` 和 `.ccm` 关联到 VS Code 内置 `cpp` 语言。
-- 向 `source.cpp` 注入模块语法规则。
+- 将精确文件名 `build.mcpp` 识别为独立的 mcpp build language，并复用 C++ TextMate
+  grammar；`.cppm`、`.ixx`、`.mpp` 和 `.ccm` 继续关联到 VS Code 内置 `cpp` 语言。
+- 向 C++ 源文件注入模块语法规则。
 - 覆盖 `module`、`export module`、`import`、`export import`、模块名和模块分区。
 - 支持尚未输入分号的编辑中间态。
 
 语法高亮只负责词法着色。错误模块名、不可见声明等红色诊断来自语言服务器，不能由
 TextMate 语法规则提供。
+
+`build.mcpp` 是由 mcpp 宿主执行的构建脚本，不是普通 C++ 翻译单元。当前扩展只为它
+提供 C++ 风格的语法高亮和编辑器括号/注释规则，不启动 clangd 语义诊断；因此
+`import mcpp;` 不会再被误报为缺少 C++ 模块。真正的 mcpp API 补全需要 mcpp 核心
+未来生成宿主 helper 的 CDB 和 PCM 映射。
 
 ### LLVM 与 clangd 集成
 
@@ -99,7 +105,8 @@ TextMate 语法规则提供。
 2. 从显式设置、编译器目录、匹配的 xlings `llvm-tools` 目录和 `PATH` 中查找 clangd。
 3. 执行编译器和 clangd 的版本命令，比较 LLVM 版本与 revision。
 4. 保留用户已有的 `clangd.arguments`，展开 `${workspaceFolder}` 和
-   `${workspaceRoot}`，并添加精确的 `--query-driver`。
+   `${workspaceRoot}`；只有在 CDB 未提供完整 sysroot、标准库和 no-default-config
+   参数时，才添加精确的 `--query-driver`。
 5. 根据 CDB 中是否已有显式 PCM 映射以及 `mcpp.modulesSupport` 设置，决定是否增加
    clangd 实验模块参数。
 6. 必要时重启官方 clangd 扩展，并执行一次最长 60 秒的 `clangd --check`。
