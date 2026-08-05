@@ -49,6 +49,20 @@
   },
   "main": "./dist/src/extension.js",
   "contributes": {
+    "menus": {
+      "editor/title": [
+        {
+          "command": "mcpp.run",
+          "group": "navigation@1",
+          "when": "editorLangId == cpp"
+        },
+        {
+          "command": "mcpp.test",
+          "group": "navigation@2",
+          "when": "editorLangId == cpp"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "mcpp.showMenu",
@@ -60,11 +74,13 @@
       },
       {
         "command": "mcpp.run",
-        "title": "mcpp: 运行"
+        "title": "mcpp: 运行",
+        "icon": "$(play)"
       },
       {
         "command": "mcpp.test",
-        "title": "mcpp: 测试"
+        "title": "mcpp: 测试",
+        "icon":"$(beaker)"
       },
       {
         "command": "mcpp.clean",
