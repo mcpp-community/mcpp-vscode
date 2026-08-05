@@ -54,12 +54,12 @@
         {
           "command": "mcpp.run",
           "group": "navigation@1",
-          "when": "editorLangId == cpp"
+          "when": "mcpp.inProject"
         },
         {
           "command": "mcpp.test",
           "group": "navigation@2",
-          "when": "editorLangId == cpp"
+          "when": "mcpp.inProject"
         }
       ]
     },
@@ -80,7 +80,7 @@
       {
         "command": "mcpp.test",
         "title": "mcpp: 测试",
-        "icon":"$(beaker)"
+        "icon": "$(beaker)"
       },
       {
         "command": "mcpp.clean",

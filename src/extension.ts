@@ -44,6 +44,7 @@ import {
   type ModuleSupportState,
 } from "./workflow";
 import { classifyTaskExit, type TaskCompletion } from "./tasks";
+import { MCPP_MANIFEST_GLOB, registerInProjectContext } from "./inProject";
 
 const COMMAND_CONFIGURE = "mcpp.configureClangd";
 const COMMAND_REFRESH = "mcpp.refreshCompilationDatabase";
@@ -849,6 +850,13 @@ async function autoConfigureModulesWizard(
 export async function activate(extensionContext: vscode.ExtensionContext): Promise<void> {
   moduleStatusByProject.clear();
   moduleCheckOperations.clear();
+  extensionContext.subscriptions.push(
+    registerInProjectContext({
+      findMcppManifests: () => vscode.workspace.findFiles(MCPP_MANIFEST_GLOB, null, 1),
+      setContextValue: (key, value) => vscode.commands.executeCommand("setContext", key, value),
+      createManifestWatcher: () => vscode.workspace.createFileSystemWatcher(MCPP_MANIFEST_GLOB),
+    }),
+  );
   const output = vscode.window.createOutputChannel("mcpp");
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
 

@@ -13,7 +13,8 @@ interface PackageManifest {
   activationEvents?: string[];
   capabilities?: { untrustedWorkspaces?: { supported?: string; description?: string } };
   contributes?: {
-    commands?: Array<{ command: string }>;
+    commands?: Array<{ command: string; icon?: string }>;
+    menus?: { "editor/title"?: Array<{ command: string; group?: string; when?: string }> };
     configuration?: { properties?: Record<string, unknown> };
     configurationDefaults?: Record<string, unknown>;
     languages?: Array<{ id: string; aliases?: string[]; filenames?: string[]; configuration?: string }>;
@@ -28,7 +29,7 @@ test("declares the official clangd dependency and mcpp commands", () => {
   assert.equal(manifest.version, "0.2.4");
   assert.ok(manifest.extensionDependencies?.includes("llvm-vs-code-extensions.vscode-clangd"));
   assert.ok(manifest.activationEvents?.includes("workspaceContains:mcpp.toml"));
-  assert.ok(manifest.activationEvents?.includes("onLanguage:mcpp-build"));
+  assert.ok(manifest.activationEvents?.includes("onCommand:mcpp.run"));
   assert.equal(manifest.capabilities?.untrustedWorkspaces?.supported, "limited");
   assert.equal(
     manifest.capabilities?.untrustedWorkspaces?.description,
@@ -59,6 +60,19 @@ test("declares the official clangd dependency and mcpp commands", () => {
     "*.ixx": "cpp",
     "*.mpp": "cpp",
   });
+});
+
+test("shows editor title buttons only inside mcpp projects", () => {
+  const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
+  assert.deepEqual(manifest.contributes?.menus?.["editor/title"], [
+    { command: "mcpp.run", group: "navigation@1", when: "mcpp.inProject" },
+    { command: "mcpp.test", group: "navigation@2", when: "mcpp.inProject" },
+  ]);
+
+  const commands = manifest.contributes?.commands ?? [];
+  assert.equal(commands.find((command) => command.command === "mcpp.run")?.icon, "$(play)");
+  assert.equal(commands.find((command) => command.command === "mcpp.test")?.icon, "$(beaker)");
+  assert.ok(!commands.some((command) => command.command === "mcpp.inProject"));
 });
 
 test("ships syntax-only C++ highlighting for the exact build.mcpp filename", () => {
