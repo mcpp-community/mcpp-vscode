@@ -18,8 +18,21 @@ function unique(values: string[]): string[] {
   return values.filter((value, index) => values.indexOf(value) === index);
 }
 
-export function findNearestMcppProject(startPath: string): McppProjectDiscovery | undefined {
+function isPathWithin(candidate: string, root: string): boolean {
+  const relative = path.relative(root, candidate);
+  return relative === "" || (
+    relative !== ".."
+    && !relative.startsWith(`..${path.sep}`)
+    && !path.isAbsolute(relative)
+  );
+}
+
+export function findNearestMcppProject(
+  startPath: string,
+  workspaceRoot?: string,
+): McppProjectDiscovery | undefined {
   let current = path.resolve(startPath);
+  const boundary = workspaceRoot === undefined ? undefined : path.resolve(workspaceRoot);
 
   try {
     if (statSync(current).isFile()) {
@@ -27,6 +40,10 @@ export function findNearestMcppProject(startPath: string): McppProjectDiscovery 
     }
   } catch {
     // 新创建的 VS Code 工作区路径可能尚不存在，此时按目录处理。
+  }
+
+  if (boundary !== undefined && !isPathWithin(current, boundary)) {
+    return undefined;
   }
 
   while (true) {
@@ -39,6 +56,9 @@ export function findNearestMcppProject(startPath: string): McppProjectDiscovery 
       };
     }
 
+    if (boundary !== undefined && current === boundary) {
+      return undefined;
+    }
     const parent = path.dirname(current);
     if (parent === current) {
       return undefined;

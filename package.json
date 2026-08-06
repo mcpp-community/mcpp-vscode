@@ -2,7 +2,7 @@
   "name": "mcpp-vscode",
   "displayName": "mcpp",
   "description": "mcpp 与 C++ 模块的 VS Code 集成",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "publisher": "mcpp-community",
   "license": "Apache-2.0",
   "icon": "images/logo.png",
@@ -49,6 +49,20 @@
   },
   "main": "./dist/src/extension.js",
   "contributes": {
+    "menus": {
+      "editor/title": [
+        {
+          "command": "mcpp.run",
+          "group": "navigation@1",
+          "when": "mcpp.inProject"
+        },
+        {
+          "command": "mcpp.test",
+          "group": "navigation@2",
+          "when": "mcpp.inProject"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "mcpp.showMenu",
@@ -60,11 +74,13 @@
       },
       {
         "command": "mcpp.run",
-        "title": "mcpp: 运行"
+        "title": "mcpp: 运行",
+        "icon": "$(play)"
       },
       {
         "command": "mcpp.test",
-        "title": "mcpp: 测试"
+        "title": "mcpp: 测试",
+        "icon": "$(beaker)"
       },
       {
         "command": "mcpp.clean",

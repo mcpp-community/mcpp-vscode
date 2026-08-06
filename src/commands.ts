@@ -10,6 +10,8 @@ export const CLI_COMMANDS = {
   autoConfigureModules: "mcpp.autoConfigureModules",
 } as const;
 
+export const quickMenuStatusText = "$(tools) mcpp: 快捷菜单";
+
 export interface QuickMenuItem {
   label: string;
   command: string;
@@ -29,4 +31,3 @@ export const quickMenuItems: readonly QuickMenuItem[] = [
   { label: "$(check) 检查模块支持", command: "mcpp.checkModuleSupport", group: "ide" },
   { label: "$(rocket) 一键配置模块代码提示", command: CLI_COMMANDS.autoConfigureModules, group: "ide" },
 ];
-

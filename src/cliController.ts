@@ -22,7 +22,7 @@ import {
   type ProjectTaskKind,
   type TaskCompletion,
 } from "./tasks";
-import { CLI_COMMANDS, quickMenuItems } from "./commands";
+import { CLI_COMMANDS, quickMenuItems, quickMenuStatusText } from "./commands";
 
 export interface McppCliControllerOptions {
   output: vscode.OutputChannel;
@@ -74,7 +74,7 @@ export class McppCliController {
   public constructor(private readonly options: McppCliControllerOptions) {
     this.status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 40);
     this.status.command = CLI_COMMANDS.showMenu;
-    this.status.text = "$(tools) mcpp";
+    this.status.text = quickMenuStatusText;
     this.status.tooltip = "打开 mcpp 项目和工具链快捷菜单";
   }
 
