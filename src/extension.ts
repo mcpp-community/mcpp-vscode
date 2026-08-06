@@ -26,6 +26,8 @@ import {
 import { CLI_COMMANDS } from "./commands";
 import { McppCliController } from "./cliController";
 import { runClangdCheck, runToolVersion, type ToolVersionResult } from "./process";
+import { runIdeConfigure, type IdeSnapshotPublished } from "./ideProtocol";
+import { ensureIdeConfigured } from "./ideWorkflow";
 import {
   configurationReadyAfterRestart,
   configurationAffectsModuleSupport,
@@ -55,6 +57,7 @@ import {
 } from "./moduleSetup";
 
 const COMMAND_CONFIGURE = "mcpp.configureClangd";
+const COMMAND_IDE_CONFIGURE = "mcpp.configureIde";
 const COMMAND_REFRESH = "mcpp.refreshCompilationDatabase";
 const COMMAND_CHECK = "mcpp.checkModuleSupport";
 
@@ -85,6 +88,43 @@ type ConfigureMode = "automatic" | "interactive";
 const moduleStatusByProject = new Map<string, ModuleStatus>();
 const moduleCheckOperations = createLatestOperationTracker<string>();
 let lastReconciledProjectRoot: string | undefined;
+
+function mcppExecutable(project: McppProjectDiscovery): string {
+  const configured = projectConfiguration(project).get<string>("path", "").trim();
+  return configured.length === 0 ? "mcpp" : configured;
+}
+
+async function runIdeConfigureForProject(
+  project: McppProjectDiscovery,
+  output: vscode.OutputChannel,
+  interactive: boolean,
+): Promise<IdeSnapshotPublished | undefined> {
+  if (!workspaceAllowsToolExecution(vscode.workspace.isTrusted)) {
+    appendOutputLine(output, "[IDE 配置] 工作区未受信任，跳过 mcpp ide configure。");
+    if (interactive) {
+      await vscode.window.showWarningMessage(
+        "当前工作区未受信任，mcpp 不会执行 IDE 配置。请先信任工作区。",
+      );
+    }
+    return undefined;
+  }
+
+  const executable = mcppExecutable(project);
+  const args = ["ide", "configure", "--format", "ndjson"];
+  try {
+    const result = await runIdeConfigure(project.root, executable);
+    appendProcessOutput(output, "IDE 配置", executable, args, result);
+    appendOutputLine(output, `[IDE 配置] 已发布 CDB：${result.compileCommands}`);
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    appendOutputLine(output, `[IDE 配置] ${message}`);
+    if (interactive) {
+      await vscode.window.showErrorMessage(`mcpp IDE 配置失败：${message}`);
+    }
+    return undefined;
+  }
+}
 
 function findCurrentProject(): McppProjectDiscovery | undefined {
   const activeEditor = vscode.window.activeTextEditor;
@@ -902,15 +942,41 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
     project: McppProjectDiscovery | undefined,
     forceRestart: boolean,
   ): Promise<ProjectReconciliation> => {
-    const context = loadProjectContext(project);
-    updateStatusBar(status, context);
+    let context = loadProjectContext(project);
     if (context === undefined) {
+      updateStatusBar(status, context);
       return {
         context,
         databaseFound: false,
         configured: false,
       };
     }
+
+    // 首次打开工程时，先发布配置阶段 CDB，再让 clangd 读取它；普通源码
+    // 是否能编译成功不参与这个决定。已有 CDB 仍走兼容的旧流程。
+    try {
+      const outcome = await ensureIdeConfigured({
+        projectRoot: context.project.root,
+        compilationDatabasePath: context.project.compilationDatabasePath,
+        trusted: vscode.workspace.isTrusted,
+        databaseExists: () => existsSync(context?.project.compilationDatabasePath ?? ""),
+        configure: async () => {
+          const published = await runIdeConfigureForProject(context!.project, output, false);
+          if (published === undefined) {
+            throw new Error("mcpp ide configure 未发布快照");
+          }
+          return published;
+        },
+      });
+      if (outcome.state === "configured") {
+        context = loadProjectContext(context.project) ?? context;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      appendOutputLine(output, `[自动配置] ${message}`);
+    }
+
+    updateStatusBar(status, context);
 
     const configured = await configureClangd(
       context,
@@ -1066,6 +1132,41 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
         }
         const configured = await configureClangd(context, status, output, "interactive");
         await updateModuleSupportForContext(context, configured, status, output);
+      });
+    })),
+    vscode.commands.registerCommand(COMMAND_IDE_CONFIGURE, runGuarded(async () => {
+      const project = findCurrentProject();
+      if (project === undefined) {
+        await vscode.window.showWarningMessage("当前工作区没有找到 mcpp.toml。");
+        return;
+      }
+      await executeWithWorkspaceClangd(async () => {
+        const context = loadProjectContext(project);
+        if (context === undefined) {
+          return;
+        }
+        try {
+          const outcome = await ensureIdeConfigured({
+            projectRoot: project.root,
+            compilationDatabasePath: project.compilationDatabasePath,
+            trusted: vscode.workspace.isTrusted,
+            force: true,
+            databaseExists: () => existsSync(project.compilationDatabasePath),
+            configure: async () => {
+              const published = await runIdeConfigureForProject(project, output, true);
+              if (published === undefined) {
+                throw new Error("mcpp ide configure 未发布快照");
+              }
+              return published;
+            },
+          });
+          if (outcome.state === "configured") {
+            await reconcileProjectContext(project, true);
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          appendOutputLine(output, `[IDE 配置] ${message}`);
+        }
       });
     })),
     vscode.commands.registerCommand(COMMAND_REFRESH, runGuarded(async () => {

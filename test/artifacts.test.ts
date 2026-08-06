@@ -47,6 +47,7 @@ test("declares the official clangd dependency and mcpp commands", () => {
       "mcpp.showToolchains",
       "mcpp.installToolchain",
       "mcpp.selectDefaultToolchain",
+      "mcpp.configureIde",
       "mcpp.configureClangd",
       "mcpp.refreshCompilationDatabase",
       "mcpp.checkModuleSupport",
@@ -111,6 +112,16 @@ test("shows editor title buttons only inside mcpp projects", () => {
   assert.equal(commands.find((command) => command.command === "mcpp.run")?.icon, "$(play)");
   assert.equal(commands.find((command) => command.command === "mcpp.test")?.icon, "$(beaker)");
   assert.ok(!commands.some((command) => command.command === "mcpp.inProject"));
+});
+
+test("wires IDE configure before clangd reconciliation", () => {
+  const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
+  assert.ok(manifest.activationEvents?.includes("onCommand:mcpp.configureIde"));
+
+  const source = readFileSync(path.join(root, "src/extension.ts"), "utf8");
+  assert.match(source, /ensureIdeConfigured/);
+  assert.match(source, /runIdeConfigure/);
+  assert.match(source, /registerCommand\(COMMAND_IDE_CONFIGURE/);
 });
 
 test("ships syntax-only C++ highlighting for the exact build.mcpp filename", () => {
