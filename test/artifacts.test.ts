@@ -39,6 +39,7 @@ test("declares the official clangd dependency and mcpp commands", () => {
     manifest.contributes?.commands?.map((command) => command.command),
     [
       "mcpp.showMenu",
+      "mcpp.newProject",
       "mcpp.build",
       "mcpp.run",
       "mcpp.test",
@@ -229,6 +230,35 @@ test("泛化 triple 工具链由 mcpp 最终校验", () => {
   const method = source.slice(start, end);
 
   assert.match(method, /可能携带 target 语义.*最终由 mcpp 校验/s);
+});
+
+test("新建工程选定位置后先确认再创建，打开前排入刷新请求", () => {
+  const source = readFileSync(path.join(root, "src/cliController.ts"), "utf8");
+  const start = source.indexOf("public async newProject");
+  const end = source.indexOf("private guarded", start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+
+  const method = source.slice(start, end);
+  const locationPick = method.indexOf("showOpenDialog");
+  const confirm = method.indexOf("showWarningMessage");
+  const create = method.indexOf("runProcess");
+  const pending = method.indexOf("globalState.update(PENDING_NEW_PROJECT_KEY");
+  const open = method.indexOf('executeCommand("vscode.openFolder"');
+  assert.ok(locationPick >= 0 && locationPick < confirm);
+  assert.ok(confirm >= 0 && confirm < create);
+  assert.ok(create >= 0 && create < pending);
+  assert.ok(pending >= 0 && pending < open);
+});
+
+test("打开新建工程后刷新编译数据库", () => {
+  const source = readFileSync(path.join(root, "src/extension.ts"), "utf8");
+  const start = source.indexOf("globalState.get<string>(PENDING_NEW_PROJECT_KEY)");
+  assert.notEqual(start, -1);
+
+  // 不能 await 刷新：activate 未完成时按钮等命令会排队，表现为点击无反应。
+  const refresh = source.indexOf("void vscode.commands.executeCommand(COMMAND_REFRESH)", start);
+  assert.ok(refresh >= 0);
 });
 
 test("声明 GitHub 仓库和扩展图标", () => {

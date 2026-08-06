@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import process from "node:process";
 
 import * as vscode from "vscode";
@@ -24,6 +25,8 @@ import {
 } from "./tasks";
 import { CLI_COMMANDS, quickMenuItems, quickMenuStatusText } from "./commands";
 
+export const PENDING_NEW_PROJECT_KEY = "mcpp.pendingNewProject";
+
 export interface McppCliControllerOptions {
   output: vscode.OutputChannel;
   currentProject: () => McppProjectDiscovery | undefined;
@@ -33,6 +36,7 @@ export interface McppCliControllerOptions {
     completion: TaskCompletion,
   ) => Promise<void>;
   isTrusted: () => boolean;
+  globalState: vscode.Memento;
 }
 
 interface ToolchainPickItem extends vscode.QuickPickItem {
@@ -82,6 +86,7 @@ export class McppCliController {
     const disposables: vscode.Disposable[] = [
       this.status,
       vscode.commands.registerCommand(CLI_COMMANDS.showMenu, this.guarded(() => this.showMenu())),
+      vscode.commands.registerCommand(CLI_COMMANDS.newProject, this.guarded(() => this.newProject())),
       vscode.commands.registerCommand(CLI_COMMANDS.build, this.guarded(() => this.runProjectTask("build"))),
       vscode.commands.registerCommand(CLI_COMMANDS.run, this.guarded(() => this.runProjectTask("run"))),
       vscode.commands.registerCommand(CLI_COMMANDS.test, this.guarded(() => this.runProjectTask("test"))),
@@ -491,6 +496,71 @@ export class McppCliController {
     if (picked !== undefined) {
       await vscode.commands.executeCommand(picked.command);
     }
+  }
+
+  public async newProject(): Promise<void> {
+    if (!this.requireTrusted()) {
+      return;
+    }
+
+    const input = await vscode.window.showInputBox({
+      title: "新建 mcpp 工程（1/2）",
+      prompt: "输入项目名，将在所选位置创建同名项目文件夹",
+      placeHolder: "hello-mcpp",
+      validateInput: (value) => {
+        const trimmed = value.trim();
+        if (trimmed.length === 0) {
+          return "项目名不能为空";
+        }
+        if (/[\\/]/.test(trimmed)) {
+          return "项目名不能包含路径分隔符";
+        }
+        return undefined;
+      },
+    });
+    if (input === undefined) {
+      return;
+    }
+    const projectName = input.trim();
+
+    const picked = await vscode.window.showOpenDialog({
+      title: "选择项目位置（2/2）",
+      canSelectFiles: false,
+      canSelectFolders: true,
+      canSelectMany: false,
+      openLabel: "在此创建项目",
+    });
+    const location = picked?.[0];
+    if (location === undefined) {
+      return;
+    }
+
+    const projectRoot = join(location.fsPath, projectName);
+    const confirmCreate = "创建并打开";
+    const choice = await vscode.window.showWarningMessage(
+      `将在 ${location.fsPath} 执行 “mcpp new ${projectName}”，创建项目文件夹 ${projectRoot} 并打开它。`,
+      { modal: true },
+      confirmCreate,
+    );
+    if (choice !== confirmCreate) {
+      return;
+    }
+
+    const executable = this.mcppExecutable(undefined);
+    const args = mcppCommandArguments("new", projectName);
+    const result = await runProcess(executable, args, location.fsPath);
+    this.appendShortCommand("新建工程", executable, args, result);
+    if (result.exitCode !== 0) {
+      await vscode.window.showErrorMessage(
+        `mcpp new ${projectName} 失败（退出码 ${result.exitCode}）。请查看 mcpp 输出频道。`,
+      );
+      return;
+    }
+
+    // vscode.openFolder 会重载窗口；通过 globalState 把刷新请求带到新窗口，
+    // 由 activate() 在新窗口中执行 mcpp.refreshCompilationDatabase 并激活 clangd。
+    await this.options.globalState.update(PENDING_NEW_PROJECT_KEY, projectRoot);
+    await vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(projectRoot));
   }
 
   private guarded(operation: () => Promise<void>): () => Promise<void> {

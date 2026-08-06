@@ -1,5 +1,6 @@
 export const CLI_COMMANDS = {
   showMenu: "mcpp.showMenu",
+  newProject: "mcpp.newProject",
   build: "mcpp.build",
   run: "mcpp.run",
   test: "mcpp.test",

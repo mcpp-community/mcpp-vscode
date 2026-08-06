@@ -10,6 +10,7 @@ test("状态栏快捷菜单名称与模块状态易于区分", () => {
 test("CLI 命令覆盖项目、工具链和 IDE", () => {
   assert.deepEqual(Object.values(CLI_COMMANDS), [
     "mcpp.showMenu",
+    "mcpp.newProject",
     "mcpp.build",
     "mcpp.run",
     "mcpp.test",
