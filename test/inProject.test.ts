@@ -10,40 +10,33 @@ import {
 } from "../src/inProject";
 
 interface FakeState {
-  manifests: unknown[];
+  project: unknown | undefined;
   contextValues: Map<string, boolean>;
-  createListeners: Array<() => void>;
-  deleteListeners: Array<() => void>;
-  watcherDisposed: boolean;
+  changeListeners: Array<() => void>;
+  disposed: boolean;
 }
 
-function fakeEnvironment(manifests: unknown[] = []): { env: InProjectEnvironment; state: FakeState } {
+function fakeEnvironment(project?: unknown): { env: InProjectEnvironment; state: FakeState } {
   const state: FakeState = {
-    manifests: [...manifests],
+    project,
     contextValues: new Map(),
-    createListeners: [],
-    deleteListeners: [],
-    watcherDisposed: false,
+    changeListeners: [],
+    disposed: false,
   };
   const env: InProjectEnvironment = {
-    findMcppManifests: () => Promise.resolve(state.manifests),
+    currentProject: () => state.project,
     setContextValue: (key, value) => {
       state.contextValues.set(key, value);
       return Promise.resolve();
     },
-    createManifestWatcher: () => ({
-      onDidCreate: (listener) => {
-        state.createListeners.push(listener);
-        return { dispose: () => undefined };
-      },
-      onDidDelete: (listener) => {
-        state.deleteListeners.push(listener);
-        return { dispose: () => undefined };
-      },
-      dispose: () => {
-        state.watcherDisposed = true;
-      },
-    }),
+    subscribe: (listener) => {
+      state.changeListeners.push(listener);
+      return [{
+        dispose: () => {
+          state.disposed = true;
+        },
+      }];
+    },
   };
   return { env, state };
 }
@@ -57,47 +50,46 @@ test("exposes the fixed context key and manifest glob", () => {
   assert.equal(MCPP_MANIFEST_GLOB, "**/mcpp.toml");
 });
 
-test("sets the context key to true when an mcpp.toml exists", async () => {
-  const { env, state } = fakeEnvironment(["/work/app/mcpp.toml"]);
+test("sets the context key to true when the active resource resolves to an mcpp project", async () => {
+  const { env, state } = fakeEnvironment({ root: "/work/A" });
   const result = await updateInProjectContext(env);
   assert.equal(result, true);
   assert.equal(state.contextValues.get(IN_PROJECT_CONTEXT_KEY), true);
 });
 
-test("sets the context key to false when no mcpp.toml exists", async () => {
+test("sets the context key to false when the active resource has no mcpp project", async () => {
   const { env, state } = fakeEnvironment();
   const result = await updateInProjectContext(env);
   assert.equal(result, false);
   assert.equal(state.contextValues.get(IN_PROJECT_CONTEXT_KEY), false);
 });
 
-test("writes the context on registration and owns the watcher lifecycle", async () => {
-  const { env, state } = fakeEnvironment(["/work/app/mcpp.toml"]);
+test("writes the context on registration and owns the change subscriptions", async () => {
+  const { env, state } = fakeEnvironment({ root: "/work/A" });
   const registration = registerInProjectContext(env);
   await flushAsync();
   assert.equal(state.contextValues.get(IN_PROJECT_CONTEXT_KEY), true);
-  assert.equal(state.createListeners.length, 1);
-  assert.equal(state.deleteListeners.length, 1);
+  assert.equal(state.changeListeners.length, 1);
 
   registration.dispose();
-  assert.equal(state.watcherDisposed, true);
+  assert.equal(state.disposed, true);
 });
 
-test("re-evaluates the context when mcpp.toml is created or deleted", async () => {
+test("re-evaluates the context when the active project changes", async () => {
   const { env, state } = fakeEnvironment();
   registerInProjectContext(env);
   await flushAsync();
   assert.equal(state.contextValues.get(IN_PROJECT_CONTEXT_KEY), false);
 
-  state.manifests.push("/work/app/mcpp.toml");
-  for (const listener of state.createListeners) {
+  state.project = { root: "/work/A" };
+  for (const listener of state.changeListeners) {
     listener();
   }
   await flushAsync();
   assert.equal(state.contextValues.get(IN_PROJECT_CONTEXT_KEY), true);
 
-  state.manifests.length = 0;
-  for (const listener of state.deleteListeners) {
+  state.project = undefined;
+  for (const listener of state.changeListeners) {
     listener();
   }
   await flushAsync();

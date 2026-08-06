@@ -79,16 +79,21 @@ const moduleCheckOperations = createLatestOperationTracker<string>();
 let lastReconciledProjectRoot: string | undefined;
 
 function findCurrentProject(): McppProjectDiscovery | undefined {
-  const activePath = vscode.window.activeTextEditor?.document.uri.scheme === "file"
-    ? vscode.window.activeTextEditor.document.uri.fsPath
-    : undefined;
-  const searchPaths = [
-    ...(activePath === undefined ? [] : [activePath]),
-    ...(vscode.workspace.workspaceFolders?.map((folder) => folder.uri.fsPath) ?? []),
-  ];
+  const activeEditor = vscode.window.activeTextEditor;
+  if (activeEditor !== undefined) {
+    const activeUri = activeEditor.document.uri;
+    if (activeUri.scheme !== "file") {
+      return undefined;
+    }
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(activeUri);
+    if (workspaceFolder === undefined) {
+      return undefined;
+    }
+    return findNearestMcppProject(activeUri.fsPath, workspaceFolder.uri.fsPath);
+  }
 
-  for (const searchPath of searchPaths) {
-    const project = findNearestMcppProject(searchPath);
+  for (const workspaceFolder of vscode.workspace.workspaceFolders ?? []) {
+    const project = findNearestMcppProject(workspaceFolder.uri.fsPath);
     if (project !== undefined) {
       return project;
     }
@@ -850,13 +855,6 @@ async function autoConfigureModulesWizard(
 export async function activate(extensionContext: vscode.ExtensionContext): Promise<void> {
   moduleStatusByProject.clear();
   moduleCheckOperations.clear();
-  extensionContext.subscriptions.push(
-    registerInProjectContext({
-      findMcppManifests: () => vscode.workspace.findFiles(MCPP_MANIFEST_GLOB, null, 1),
-      setContextValue: (key, value) => vscode.commands.executeCommand("setContext", key, value),
-      createManifestWatcher: () => vscode.workspace.createFileSystemWatcher(MCPP_MANIFEST_GLOB),
-    }),
-  );
   const output = vscode.window.createOutputChannel("mcpp");
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
 
@@ -870,8 +868,18 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
       void vscode.window.showErrorMessage(`mcpp：${message}`);
     }
   };
-  const manifestWatcher = vscode.workspace.createFileSystemWatcher("**/mcpp.toml");
+  const manifestWatcher = vscode.workspace.createFileSystemWatcher(MCPP_MANIFEST_GLOB);
   const compilationDatabaseWatcher = vscode.workspace.createFileSystemWatcher("**/compile_commands.json");
+  const inProjectContext = registerInProjectContext({
+    currentProject: findCurrentProject,
+    setContextValue: (key, value) => vscode.commands.executeCommand("setContext", key, value),
+    subscribe: (listener) => [
+      vscode.window.onDidChangeActiveTextEditor(listener),
+      vscode.workspace.onDidChangeWorkspaceFolders(listener),
+      manifestWatcher.onDidCreate(listener),
+      manifestWatcher.onDidDelete(listener),
+    ],
+  });
   const executeWithWorkspaceClangd = createSerialExecutor();
   const reconcileProjectContext = async (
     project: McppProjectDiscovery | undefined,
@@ -1162,6 +1170,7 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
     })),
     configurationWatcher,
     trustWatcher,
+    inProjectContext,
     vscode.window.onDidChangeActiveTextEditor(() => {
       refreshStatus();
       const current = findCurrentProject();
