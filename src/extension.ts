@@ -87,6 +87,9 @@ type ConfigureMode = "automatic" | "interactive";
 
 const moduleStatusByProject = new Map<string, ModuleStatus>();
 const moduleCheckOperations = createLatestOperationTracker<string>();
+// 记录 manifest/settings 变化触发的 IDE 配置请求；CDB watcher 只重读
+// 已发布快照，避免写 CDB 后再次启动 mcpp 形成重入。
+const forceIdeConfigureByProject = new Set<string>();
 let lastReconciledProjectRoot: string | undefined;
 
 function mcppExecutable(project: McppProjectDiscovery): string {
@@ -912,6 +915,7 @@ const mcppTomlCompletionProvider: vscode.CompletionItemProvider = {
 export async function activate(extensionContext: vscode.ExtensionContext): Promise<void> {
   moduleStatusByProject.clear();
   moduleCheckOperations.clear();
+  forceIdeConfigureByProject.clear();
   const output = vscode.window.createOutputChannel("mcpp");
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
 
@@ -941,6 +945,7 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
   const reconcileProjectContext = async (
     project: McppProjectDiscovery | undefined,
     forceRestart: boolean,
+    forceIdeConfigure: boolean = false,
   ): Promise<ProjectReconciliation> => {
     let context = loadProjectContext(project);
     if (context === undefined) {
@@ -959,6 +964,7 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
         projectRoot: context.project.root,
         compilationDatabasePath: context.project.compilationDatabasePath,
         trusted: vscode.workspace.isTrusted,
+        force: forceIdeConfigure,
         databaseExists: () => existsSync(context?.project.compilationDatabasePath ?? ""),
         configure: async () => {
           const published = await runIdeConfigureForProject(context!.project, output, false);
@@ -1005,7 +1011,11 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
             configured: false,
           };
         }
-        return reconcileProjectContext(project, forceRestart);
+        return reconcileProjectContext(
+          project,
+          forceRestart,
+          forceIdeConfigureByProject.delete(projectRoot),
+        );
       },
     ),
   );
@@ -1053,10 +1063,13 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
     if (configurationAffectsModuleSupport(
       (section) => event.affectsConfiguration(section, uri),
     )) {
+      forceIdeConfigureByProject.add(project.root);
       requestCurrentProjectReconciliation(true);
     }
   });
   const trustWatcher = vscode.workspace.onDidGrantWorkspaceTrust(() => {
+    const project = findCurrentProject();
+    if (project !== undefined) forceIdeConfigureByProject.add(project.root);
     requestCurrentProjectReconciliation(true);
   });
 
@@ -1315,14 +1328,23 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
     manifestWatcher.onDidCreate(() => {
       refreshStatus();
       cliController.refreshStatus();
+      const project = findCurrentProject();
+      if (project !== undefined) forceIdeConfigureByProject.add(project.root);
+      requestCurrentProjectReconciliation(true);
     }),
     manifestWatcher.onDidChange(() => {
       refreshStatus();
       cliController.refreshStatus();
+      const project = findCurrentProject();
+      if (project !== undefined) forceIdeConfigureByProject.add(project.root);
+      requestCurrentProjectReconciliation(true);
     }),
     manifestWatcher.onDidDelete(() => {
       refreshStatus();
       cliController.refreshStatus();
+      const project = findCurrentProject();
+      if (project !== undefined) forceIdeConfigureByProject.add(project.root);
+      requestCurrentProjectReconciliation(true);
     }),
     ...registerCompilationDatabaseReconciliation(
       compilationDatabaseWatcher,
@@ -1346,5 +1368,6 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
 export function deactivate(): void {
   moduleStatusByProject.clear();
   moduleCheckOperations.clear();
+  forceIdeConfigureByProject.clear();
   // VS Code 会释放 activate() 注册的所有订阅。
 }

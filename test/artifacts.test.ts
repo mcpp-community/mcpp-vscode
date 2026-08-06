@@ -122,6 +122,7 @@ test("wires IDE configure before clangd reconciliation", () => {
   assert.match(source, /ensureIdeConfigured/);
   assert.match(source, /runIdeConfigure/);
   assert.match(source, /registerCommand\(COMMAND_IDE_CONFIGURE/);
+  assert.match(source, /manifestWatcher\.onDidChange\(\(\) => \{[\s\S]*requestCurrentProjectReconciliation\(true\)/);
 });
 
 test("ships syntax-only C++ highlighting for the exact build.mcpp filename", () => {
