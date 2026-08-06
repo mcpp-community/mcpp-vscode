@@ -6,7 +6,7 @@
 
 把 mcpp 工程、C++ 模块语法和官方 clangd 扩展接入 VS Code。
 
-当前版本为 `0.2.4`。扩展负责工程发现、clangd 配置、模块状态检查以及常用
+当前版本为 `0.2.5`。扩展负责工程发现、clangd 配置、模块状态检查以及常用
 mcpp CLI 操作；它不实现新的 C++ 语言服务器，也不替代 mcpp 的构建逻辑。
 
 > 当前完整的模块语义能力只支持 LLVM/Clang 工具链。GCC 和 MSVC 工程仍可使用
@@ -36,7 +36,7 @@ mcpp CLI 操作；它不实现新的 C++ 语言服务器，也不替代 mcpp 的
 VSIX，然后在 VS Code 中执行 **Extensions: Install from VSIX...**，或者运行：
 
 ```sh
-code --install-extension /path/to/mcpp-vscode-0.2.4.vsix
+code --install-extension /path/to/mcpp-vscode-0.2.5.vsix
 ```
 
 安装后确认当前 VS Code profile 中同时存在 `mcpp-community.mcpp-vscode` 和
@@ -131,7 +131,7 @@ Window。非 LLVM 工具链（GCC/MSVC）项目会得到清晰的引导说明，
 
 ### mcpp CLI 与工具链管理
 
-状态栏中的 `$(tools) mcpp` 菜单提供：
+状态栏中的 `$(tools) mcpp: 快捷菜单` 提供：
 
 - 在当前工程根目录执行 `mcpp build`、`run`、`test` 和 `clean`。
 - 在 VS Code 任务终端中实时显示完整输出。
@@ -381,8 +381,8 @@ API、状态栏、任务和 clangd 集成。
 版本完全一致的 tag：
 
 ```sh
-git tag -a v0.2.4 -m "mcpp-vscode 0.2.4"
-git push origin v0.2.4
+git tag -a v0.2.5 -m "mcpp-vscode 0.2.5"
+git push origin v0.2.5
 ```
 
 `.github/workflows/release.yml` 会校验 tag，执行测试和打包，生成 VSIX 与 SHA-256 文件，
