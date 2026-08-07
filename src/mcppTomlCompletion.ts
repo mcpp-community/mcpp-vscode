@@ -1,6 +1,7 @@
 // mcpp.toml 的代码补全：字段表取自 mcpp 主仓库文档（docs/zh/05-mcpp-toml.md，
-// 另含 03-toolchains.md 的 [toolchain]/[build].target 与 06-workspace.md 的
-// [workspace]、[package].namespace、依赖 spec 的 workspace 继承键）。
+// 另含 02-pack-and-release.md 的 [pack]、03-toolchains.md 的 [toolchain]/
+// [build].target 与 06-workspace.md 的 [workspace]、[package].namespace、
+// 依赖 spec 的 workspace 继承键）。
 // 本模块不依赖 vscode API，便于在 node --test 下直接测试；extension.ts 负责
 // 把建议映射为 CompletionItem。
 
@@ -209,6 +210,21 @@ const WORKSPACE_KEYS: readonly KeySpec[] = [
   arrayKey("exclude", "从 members glob 中排除的路径"),
 ];
 
+const PACK_KEYS: readonly KeySpec[] = [
+  stringKey("default_mode", "覆盖裸 mcpp pack 的默认打包模式", "system 只能经 --mode system 显式选择。", [
+    { value: "static", detail: "全静态发布包（需 [target.<triple>] 配 musl 工具链）", quoted: true },
+    { value: "bundle-project", detail: "打包项目依赖", quoted: true },
+    { value: "bundle-all", detail: "打包全部依赖", quoted: true },
+  ]),
+  arrayKey("include", "额外打包的文件 glob"),
+  arrayKey("exclude", "打包时排除的文件 glob"),
+];
+
+const PACK_BUNDLE_PROJECT_KEYS: readonly KeySpec[] = [
+  arrayKey("also_skip", "假定目标系统已具备、不打包的库"),
+  arrayKey("force_bundle", "即使命中 PEP 600 名单也强制打包的库"),
+];
+
 const TARGET_TRIPLE_KEYS: readonly KeySpec[] = [
   stringKey("toolchain", "该目标三元组使用的工具链"),
   stringKey("linkage", "链接方式", undefined, [
@@ -409,6 +425,8 @@ const SECTION_GROUPS: Record<string, SectionGroupSpec> = {
   "language": { keys: LANGUAGE_KEYS },
   "target": { keys: TARGET_TRIPLE_KEYS },
   "workspace": { keys: WORKSPACE_KEYS },
+  "pack": { keys: PACK_KEYS },
+  "pack.bundle-project": { keys: PACK_BUNDLE_PROJECT_KEYS },
   "build.cxx_runtime": { keys: BUILD_CXX_RUNTIME_KEYS },
   "resources.version-info": { keys: RESOURCES_VERSION_INFO_KEYS },
   "runtime.capability": { keys: RUNTIME_PROVIDER_KEYS },
@@ -434,6 +452,8 @@ const SECTIONS: readonly SectionSpec[] = [
   { group: "dev-dependencies", header: "[dev-dependencies]", detail: "开发/测试依赖" },
   { group: "workspace", header: "[workspace]", detail: "工作空间成员声明" },
   { group: "workspace.dependencies", header: "[workspace.dependencies]", detail: "集中声明依赖版本，成员用 workspace = true 继承" },
+  { group: "pack", header: "[pack]", detail: "mcpp pack 打包配置" },
+  { group: "pack.bundle-project", header: "[pack.bundle-project]", detail: "vendored 过滤策略微调" },
   { group: "features", header: "[features]", detail: "feature 定义" },
   { group: "feature-deps", label: "[feature-deps.<name>]", header: "[feature-deps.${1:name}]", detail: "由 feature 拉取的可选依赖" },
   { group: "capabilities", label: "[capabilities]", header: "[capabilities]", detail: "capability 绑定（provider 选择）" },

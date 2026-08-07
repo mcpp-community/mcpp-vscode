@@ -241,6 +241,17 @@ test("covers fields from 03-toolchains.md and 06-workspace.md", () => {
   assert.deepEqual(linkageValues, ["static", "dynamic"]);
 });
 
+test("covers [pack] fields from 02-pack-and-release.md", () => {
+  const packKeys = labels(computeMcppTomlCompletions(["[pack]", ""], 1, 0));
+  assert.deepEqual(packKeys, ["default_mode", "include", "exclude"]);
+
+  const modes = labels(computeMcppTomlCompletions(["[pack]", "default_mode = "], 1, 14));
+  assert.deepEqual(modes, ["static", "bundle-project", "bundle-all"]);
+
+  const bundleKeys = labels(computeMcppTomlCompletions(["[pack.bundle-project]", ""], 1, 0));
+  assert.deepEqual(bundleKeys, ["also_skip", "force_bundle"]);
+});
+
 test("suggests per-glob keys inside [build].flags entries", () => {
   const suggestions = computeMcppTomlCompletions(["[build]", "flags = [ { "], 1, 12);
   assert.deepEqual(labels(suggestions), ["glob", "cflags", "cxxflags", "asmflags", "defines"]);
