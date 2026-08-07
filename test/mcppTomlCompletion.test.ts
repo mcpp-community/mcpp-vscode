@@ -188,6 +188,11 @@ test("suggests profile alias key in [build]", () => {
   assert.deepEqual(labels(values), ["dev", "release", "debug", "dist"]);
 });
 
+test("suggests per-glob keys inside [build].flags entries", () => {
+  const suggestions = computeMcppTomlCompletions(["[build]", "flags = [ { "], 1, 12);
+  assert.deepEqual(labels(suggestions), ["glob", "cflags", "cxxflags", "asmflags", "defines"]);
+});
+
 test("ignores out-of-range positions", () => {
   assert.deepEqual(computeMcppTomlCompletions(["[package]"], 5, 0), []);
 });

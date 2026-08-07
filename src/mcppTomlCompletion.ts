@@ -245,6 +245,15 @@ const FEATURE_SPEC_KEYS: readonly KeySpec[] = [
   },
 ];
 
+/** [build].flags / feature flags 的 per-glob 条目键（§2.3 / §2.8）。 */
+const PER_GLOB_FLAG_KEYS: readonly KeySpec[] = [
+  stringKey("glob", "相对包根的 glob（必填）"),
+  arrayKey("cflags", "命中源的额外 C 旗标"),
+  arrayKey("cxxflags", "命中源的额外 C++ 旗标"),
+  arrayKey("asmflags", "命中汇编单元的旗标"),
+  arrayKey("defines", "命中源的预处理宏"),
+];
+
 interface SectionSpec {
   /** 规范化后的组名，如 targets / profile / target build。 */
   group: string;
@@ -252,11 +261,6 @@ interface SectionSpec {
   label?: string;
   header: string;
   detail: string;
-  keys: readonly KeySpec[];
-  /** 键位置补全内联表子键（dependencies / features）。 */
-  inlineKeys?: readonly KeySpec[];
-  /** 键名为自由词汇（包名、feature 名），不提供键补全。 */
-  freeKeys?: boolean;
 }
 
 /** 开放词汇段（键是包名、feature 名等）在空行提供的写法模板。 */
@@ -394,26 +398,26 @@ const SECTION_GROUPS: Record<string, SectionGroupSpec> = {
 };
 
 const SECTIONS: readonly SectionSpec[] = [
-  { group: "package", header: "[package]", detail: "包元数据", keys: PACKAGE_KEYS },
-  { group: "lib", header: "[lib]", detail: "库根模块约定", keys: LIB_KEYS },
-  { group: "build", header: "[build]", detail: "构建配置", keys: BUILD_KEYS },
-  { group: "generated_files", header: "[generated_files]", detail: "生成文件（路径 → 内容）", keys: [] },
-  { group: "dependencies", header: "[dependencies]", detail: "运行时依赖", keys: [] },
-  { group: "dev-dependencies", header: "[dev-dependencies]", detail: "开发/测试依赖", keys: [] },
-  { group: "features", header: "[features]", detail: "feature 定义", keys: [] },
-  { group: "feature-deps", label: "[feature-deps.<name>]", header: "[feature-deps.${1:name}]", detail: "由 feature 拉取的可选依赖", keys: [] },
-  { group: "capabilities", label: "[capabilities]", header: "[capabilities]", detail: "capability 绑定（provider 选择）", keys: [] },
-  { group: "targets", label: "[targets.<name>]", header: "[targets.${1:name}]", detail: "构建目标", keys: TARGET_KEYS },
-  { group: "profile", label: "[profile.<name>]", header: "[profile.${1:name}]", detail: "构建档案", keys: PROFILE_KEYS },
-  { group: "runtime", header: "[runtime]", detail: "主机运行时能力", keys: RUNTIME_KEYS },
-  { group: "resources", header: "[resources]", detail: "编译进产物的元数据与资产（仅 PE 目标）", keys: RESOURCES_KEYS },
-  { group: "toolchain", header: "[toolchain]", detail: "编译器工具链简写", keys: TOOLCHAIN_KEYS },
-  { group: "xlings", header: "[xlings]", detail: "构建环境（xlings 供给）", keys: XLINGS_KEYS },
-  { group: "xlings.workspace", header: "[xlings.workspace]", detail: "固定工具版本", keys: [] },
-  { group: "xlings.envs", header: "[xlings.envs]", detail: "工具环境的环境变量", keys: [] },
-  { group: "target", label: "[target.<triple>]", header: "[target.${1:x86_64-linux-gnu}]", detail: "按目标三元组的配置", keys: TARGET_TRIPLE_KEYS },
-  { group: "tools.overrides", header: "[tools.overrides]", detail: "host 工具二进制覆盖", keys: [] },
-  { group: "language", header: "[language]", detail: "旧版兼容字段；新项目请用 [package].standard", keys: LANGUAGE_KEYS },
+  { group: "package", header: "[package]", detail: "包元数据" },
+  { group: "lib", header: "[lib]", detail: "库根模块约定" },
+  { group: "build", header: "[build]", detail: "构建配置" },
+  { group: "generated_files", header: "[generated_files]", detail: "生成文件（路径 → 内容）" },
+  { group: "dependencies", header: "[dependencies]", detail: "运行时依赖" },
+  { group: "dev-dependencies", header: "[dev-dependencies]", detail: "开发/测试依赖" },
+  { group: "features", header: "[features]", detail: "feature 定义" },
+  { group: "feature-deps", label: "[feature-deps.<name>]", header: "[feature-deps.${1:name}]", detail: "由 feature 拉取的可选依赖" },
+  { group: "capabilities", label: "[capabilities]", header: "[capabilities]", detail: "capability 绑定（provider 选择）" },
+  { group: "targets", label: "[targets.<name>]", header: "[targets.${1:name}]", detail: "构建目标" },
+  { group: "profile", label: "[profile.<name>]", header: "[profile.${1:name}]", detail: "构建档案" },
+  { group: "runtime", header: "[runtime]", detail: "主机运行时能力" },
+  { group: "resources", header: "[resources]", detail: "编译进产物的元数据与资产（仅 PE 目标）" },
+  { group: "toolchain", header: "[toolchain]", detail: "编译器工具链简写" },
+  { group: "xlings", header: "[xlings]", detail: "构建环境（xlings 供给）" },
+  { group: "xlings.workspace", header: "[xlings.workspace]", detail: "固定工具版本" },
+  { group: "xlings.envs", header: "[xlings.envs]", detail: "工具环境的环境变量" },
+  { group: "target", label: "[target.<triple>]", header: "[target.${1:x86_64-linux-gnu}]", detail: "按目标三元组的配置" },
+  { group: "tools.overrides", header: "[tools.overrides]", detail: "host 工具二进制覆盖" },
+  { group: "language", header: "[language]", detail: "旧版兼容字段；新项目请用 [package].standard" },
 ];
 
 const HEADER_PATTERN = /^\s*\[\[?\s*([^\]]*?)\s*\]\]?\s*(?:#.*)?$/;
@@ -546,6 +550,11 @@ export function computeMcppTomlCompletions(
         return keySuggestions(inlineKeys);
       }
       return [];
+    }
+
+    // flags 是有序内联表数组：[ { glob = ... } ] 条目内补全 per-glob 键。
+    if (keyName === "flags" && valuePrefix.includes("{")) {
+      return keySuggestions(PER_GLOB_FLAG_KEYS);
     }
 
     if (group === undefined) {
