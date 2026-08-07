@@ -147,6 +147,12 @@
           "default": true,
           "scope": "resource",
           "description": "配置 clangd 时，是否询问关闭 Microsoft C/C++ IntelliSense。"
+        },
+        "mcpp.tomlCompletion": {
+          "type": "boolean",
+          "default": false,
+          "scope": "resource",
+          "description": "为 mcpp.toml 提供代码补全：段头、各段字段、枚举/布尔取值，以及依赖与 feature 的写法模板。默认关闭。注意：该功能尚不完善，字段表可能与最新 mcpp 不同步或存在缺陷，仅供参考。"
         }
       }
     },

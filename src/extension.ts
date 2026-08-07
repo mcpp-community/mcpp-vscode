@@ -863,6 +863,10 @@ const mcppTomlCompletionKinds = {
 
 const mcppTomlCompletionProvider: vscode.CompletionItemProvider = {
   provideCompletionItems(document, position) {
+    // mcpp.toml 补全默认关闭（mcpp.tomlCompletion），按文档作用域读取。
+    if (!vscode.workspace.getConfiguration("mcpp", document.uri).get<boolean>("tomlCompletion", false)) {
+      return undefined;
+    }
     const lines: string[] = [];
     for (let line = 0; line <= position.line; line += 1) {
       lines.push(document.lineAt(line).text);
