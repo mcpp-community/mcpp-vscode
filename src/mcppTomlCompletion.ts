@@ -1,4 +1,6 @@
-// mcpp.toml 的代码补全：字段表取自 docs/zh/05-mcpp-toml.md（mcpp 主仓库）。
+// mcpp.toml 的代码补全：字段表取自 mcpp 主仓库文档（docs/zh/05-mcpp-toml.md，
+// 另含 03-toolchains.md 的 [toolchain]/[build].target 与 06-workspace.md 的
+// [workspace]、[package].namespace、依赖 spec 的 workspace 继承键）。
 // 本模块不依赖 vscode API，便于在 node --test 下直接测试；extension.ts 负责
 // 把建议映射为 CompletionItem。
 
@@ -69,6 +71,7 @@ const CXX_RUNTIME_VALUES: readonly ValueSpec[] = [
 
 const PACKAGE_KEYS: readonly KeySpec[] = [
   stringKey("name", "包名（必填）"),
+  stringKey("namespace", "包命名空间（与 name 构成包身份；工作空间成员常用）"),
   stringKey("version", "语义化版本（必填）"),
   stringKey("standard", "C++ 标准（默认 c++23）", "模块图全局有效；切换标准不会共用缓存。", STANDARD_VALUES),
   stringKey("description", "包简介"),
@@ -97,6 +100,17 @@ const TARGET_KEYS: readonly KeySpec[] = [
   arrayKey("required_features", "列出的 feature 全部激活时才构建该目标"),
 ];
 
+// 文档（03-toolchains.md / 05-mcpp-toml.md）中出现的 target 词汇；自定义 triple
+// 可经 [target.<triple>] 节放行，此处只补全已知值。
+const TARGET_TRIPLE_VALUES: readonly ValueSpec[] = [
+  { value: "x86_64-linux-gnu", detail: "Linux/glibc（Linux x86_64 宿主）", quoted: true },
+  { value: "x86_64-linux-musl", detail: "全静态 Linux ELF", quoted: true },
+  { value: "aarch64-linux-musl", detail: "全静态 Linux ELF（ARM64）", quoted: true },
+  { value: "x86_64-windows-gnu", detail: "Windows PE（MinGW-w64，默认 static）", quoted: true },
+  { value: "x86_64-windows-msvc", detail: "Windows PE（MSVC ABI）", quoted: true },
+  { value: "aarch64-macos", detail: "macOS（Apple Silicon）", quoted: true },
+];
+
 const BUILD_KEYS: readonly KeySpec[] = [
   arrayKey("sources", "源文件 glob（默认 src/**/*.{cppm,cpp,cc,c,S,s,asm}；! 前缀排除）"),
   arrayKey("include_dirs", "头文件搜索路径（-I）"),
@@ -112,6 +126,7 @@ const BUILD_KEYS: readonly KeySpec[] = [
   stringKey("cxx_runtime", "C++ 运行时契约（分发属性）", undefined, CXX_RUNTIME_VALUES),
   boolKey("static_stdlib", "cxx_runtime 的旧拼写：true = self-contained，false = host-coupled"),
   stringKey("macos_deployment_target", "macOS 产物的最低支持系统版本（仅 macOS 生效）"),
+  stringKey("target", "项目默认构建 target（≙ cargo 的 build.target）", undefined, TARGET_TRIPLE_VALUES),
   stringKey("cache", "依赖的全局构建缓存（默认 global）", undefined, [
     { value: "global", detail: "默认：跨工程共享依赖构建缓存", quoted: true },
     { value: "local", detail: "依赖编在本工程 target/ 内", quoted: true },
@@ -175,6 +190,9 @@ const RESOURCES_KEYS: readonly KeySpec[] = [
 
 const TOOLCHAIN_KEYS: readonly KeySpec[] = [
   stringKey("default", "默认工具链（如 gcc@16.1.0）"),
+  stringKey("linux", "Linux 宿主的工具链 pin（项目级版本锁定）"),
+  stringKey("macos", "macOS 宿主的工具链 pin（如 llvm@20.1.7）"),
+  stringKey("windows", "Windows 宿主的工具链 pin（如 gcc@16 / msvc@system）"),
 ];
 
 const XLINGS_KEYS: readonly KeySpec[] = [
@@ -186,10 +204,16 @@ const LIB_KEYS: readonly KeySpec[] = [
   stringKey("path", "覆盖默认 lib-root 位置（默认 src/<包名最后一段>.cppm）"),
 ];
 
+const WORKSPACE_KEYS: readonly KeySpec[] = [
+  arrayKey("members", "成员包相对路径（每个路径下须含独立 mcpp.toml）"),
+  arrayKey("exclude", "从 members glob 中排除的路径"),
+];
+
 const TARGET_TRIPLE_KEYS: readonly KeySpec[] = [
   stringKey("toolchain", "该目标三元组使用的工具链"),
   stringKey("linkage", "链接方式", undefined, [
-    { value: "static", detail: "完全静态链接（如 musl 目标）", quoted: true },
+    { value: "static", detail: "完全静态链接（musl / windows-gnu 的默认）", quoted: true },
+    { value: "dynamic", detail: "动态链接", quoted: true },
   ]),
   stringKey("cxx_runtime", "该目标三元组的 C++ 运行时契约", undefined, CXX_RUNTIME_VALUES),
 ];
@@ -229,6 +253,7 @@ const DEP_SPEC_KEYS: readonly KeySpec[] = [
   arrayKey("tools", "依赖产出的 host 工具（须为该包的 bin target）"),
   boolKey("host-module", "以包分发可复用构建规则，供 build.mcpp import"),
   boolKey("reexport", "把边上的构建期提供物交给本包的消费者"),
+  boolKey("workspace", "继承 [workspace.dependencies] 中声明的版本"),
 ];
 
 /** feature 表形式（{ defines = [...], ... }）的键。 */
@@ -383,11 +408,14 @@ const SECTION_GROUPS: Record<string, SectionGroupSpec> = {
   "xlings": { keys: XLINGS_KEYS },
   "language": { keys: LANGUAGE_KEYS },
   "target": { keys: TARGET_TRIPLE_KEYS },
+  "workspace": { keys: WORKSPACE_KEYS },
   "build.cxx_runtime": { keys: BUILD_CXX_RUNTIME_KEYS },
   "resources.version-info": { keys: RESOURCES_VERSION_INFO_KEYS },
   "runtime.capability": { keys: RUNTIME_PROVIDER_KEYS },
   "dependencies": { keys: [], inlineKeys: DEP_SPEC_KEYS, freeKeys: true, templates: DEPENDENCY_TEMPLATES },
   "dev-dependencies": { keys: [], inlineKeys: DEP_SPEC_KEYS, freeKeys: true, templates: DEPENDENCY_TEMPLATES },
+  "build-dependencies": { keys: [], inlineKeys: DEP_SPEC_KEYS, freeKeys: true, templates: DEPENDENCY_TEMPLATES },
+  "workspace.dependencies": { keys: [], inlineKeys: DEP_SPEC_KEYS, freeKeys: true, templates: DEPENDENCY_TEMPLATES },
   "feature-deps": { keys: [], inlineKeys: DEP_SPEC_KEYS, freeKeys: true, templates: DEPENDENCY_TEMPLATES },
   "features": { keys: [], inlineKeys: FEATURE_SPEC_KEYS, freeKeys: true, templates: FEATURE_TEMPLATES },
   "generated_files": { keys: [], freeKeys: true, templates: GENERATED_FILE_TEMPLATES },
@@ -404,6 +432,8 @@ const SECTIONS: readonly SectionSpec[] = [
   { group: "generated_files", header: "[generated_files]", detail: "生成文件（路径 → 内容）" },
   { group: "dependencies", header: "[dependencies]", detail: "运行时依赖" },
   { group: "dev-dependencies", header: "[dev-dependencies]", detail: "开发/测试依赖" },
+  { group: "workspace", header: "[workspace]", detail: "工作空间成员声明" },
+  { group: "workspace.dependencies", header: "[workspace.dependencies]", detail: "集中声明依赖版本，成员用 workspace = true 继承" },
   { group: "features", header: "[features]", detail: "feature 定义" },
   { group: "feature-deps", label: "[feature-deps.<name>]", header: "[feature-deps.${1:name}]", detail: "由 feature 拉取的可选依赖" },
   { group: "capabilities", label: "[capabilities]", header: "[capabilities]", detail: "capability 绑定（provider 选择）" },
@@ -448,6 +478,10 @@ export function normalizeSectionGroup(rawHeader: string): string | undefined {
 
   if (rest in SECTION_GROUPS) {
     return rest;
+  }
+  if (rest.startsWith("workspace.dependencies.")) {
+    // [workspace.dependencies.<namespace>] 命名空间子表。
+    return "workspace.dependencies";
   }
   const dot = rest.indexOf(".");
   if (dot > 0) {

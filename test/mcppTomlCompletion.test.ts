@@ -206,6 +206,41 @@ test("suggests profile alias key in [build]", () => {
   assert.deepEqual(labels(values), ["dev", "release", "debug", "dist"]);
 });
 
+test("covers fields from 03-toolchains.md and 06-workspace.md", () => {
+  // [package].namespace（06 §2.3）
+  const packageKeys = labels(computeMcppTomlCompletions(["[package]", ""], 1, 0));
+  assert.ok(packageKeys.includes("namespace"));
+
+  // [workspace] members / exclude（06 §2.1）
+  const workspaceKeys = labels(computeMcppTomlCompletions(["[workspace]", ""], 1, 0));
+  assert.deepEqual(workspaceKeys, ["members", "exclude"]);
+
+  // [workspace.dependencies] 与其命名空间子表（06 §3）
+  const workspaceDeps = computeMcppTomlCompletions(["[workspace.dependencies]", ""], 1, 0);
+  assert.ok(workspaceDeps.every((suggestion) => suggestion.kind === "template"));
+  const workspaceDepsNs = computeMcppTomlCompletions(["[workspace.dependencies.compat]", ""], 1, 0);
+  assert.ok(workspaceDepsNs.every((suggestion) => suggestion.kind === "template"));
+
+  // 依赖 spec 的 workspace 继承键（06 §3）
+  const spec = computeMcppTomlCompletions(["[dependencies]", "mbedtls = { "], 1, 12);
+  assert.ok(labels(spec).includes("workspace"));
+
+  // [toolchain] 平台 pin（03 项目级版本锁定）
+  const toolchainKeys = labels(computeMcppTomlCompletions(["[toolchain]", ""], 1, 0));
+  assert.deepEqual(toolchainKeys, ["default", "linux", "macos", "windows"]);
+
+  // [build].target（03 Target 与交叉构建）
+  const buildKeys = labels(computeMcppTomlCompletions(["[build]", ""], 1, 0));
+  assert.ok(buildKeys.includes("target"));
+  const targetValues = labels(computeMcppTomlCompletions(["[build]", "target = "], 1, 9));
+  assert.ok(targetValues.includes("x86_64-linux-musl"));
+  assert.ok(targetValues.includes("x86_64-windows-gnu"));
+
+  // linkage 的 dynamic 取值（03 MinGW 一节）
+  const linkageValues = labels(computeMcppTomlCompletions(["[target.x86_64-windows-gnu]", "linkage = "], 1, 10));
+  assert.deepEqual(linkageValues, ["static", "dynamic"]);
+});
+
 test("suggests per-glob keys inside [build].flags entries", () => {
   const suggestions = computeMcppTomlCompletions(["[build]", "flags = [ { "], 1, 12);
   assert.deepEqual(labels(suggestions), ["glob", "cflags", "cxxflags", "asmflags", "defines"]);
