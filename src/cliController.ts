@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
 
@@ -24,8 +25,7 @@ import {
   type TaskCompletion,
 } from "./tasks";
 import { CLI_COMMANDS, quickMenuItems, quickMenuStatusText } from "./commands";
-
-export const PENDING_NEW_PROJECT_KEY = "mcpp.pendingNewProject";
+import { validateNewProjectName } from "./newProject";
 
 export interface McppCliControllerOptions {
   output: vscode.OutputChannel;
@@ -36,7 +36,6 @@ export interface McppCliControllerOptions {
     completion: TaskCompletion,
   ) => Promise<void>;
   isTrusted: () => boolean;
-  globalState: vscode.Memento;
 }
 
 interface ToolchainPickItem extends vscode.QuickPickItem {
@@ -507,16 +506,7 @@ export class McppCliController {
       title: "新建 mcpp 工程（1/2）",
       prompt: "输入项目名，将在所选位置创建同名项目文件夹",
       placeHolder: "hello-mcpp",
-      validateInput: (value) => {
-        const trimmed = value.trim();
-        if (trimmed.length === 0) {
-          return "项目名不能为空";
-        }
-        if (/[\\/]/.test(trimmed)) {
-          return "项目名不能包含路径分隔符";
-        }
-        return undefined;
-      },
+      validateInput: validateNewProjectName,
     });
     if (input === undefined) {
       return;
@@ -536,6 +526,10 @@ export class McppCliController {
     }
 
     const projectRoot = join(location.fsPath, projectName);
+    if (existsSync(projectRoot)) {
+      await vscode.window.showErrorMessage(`目标路径已存在：${projectRoot}。请更换项目名或位置。`);
+      return;
+    }
     const confirmCreate = "创建并打开";
     const choice = await vscode.window.showWarningMessage(
       `将在 ${location.fsPath} 执行 “mcpp new ${projectName}”，创建项目文件夹 ${projectRoot} 并打开它。`,
@@ -557,9 +551,8 @@ export class McppCliController {
       return;
     }
 
-    // vscode.openFolder 会重载窗口；通过 globalState 把刷新请求带到新窗口，
-    // 由 activate() 在新窗口中执行 mcpp.refreshCompilationDatabase 并激活 clangd。
-    await this.options.globalState.update(PENDING_NEW_PROJECT_KEY, projectRoot);
+    // 契约：创建并打开工程。打开后的构建交给用户手动触发（或后续 #5 的
+    // IDE configure 流程），避免与缺少 CDB 时的 configure 重复执行。
     await vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(projectRoot));
   }
 

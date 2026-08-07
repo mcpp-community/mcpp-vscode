@@ -24,7 +24,7 @@ import {
   xlingsInstallArgs,
 } from "./llvmTools";
 import { CLI_COMMANDS } from "./commands";
-import { McppCliController, PENDING_NEW_PROJECT_KEY } from "./cliController";
+import { McppCliController } from "./cliController";
 import { runClangdCheck, runToolVersion, type ToolVersionResult } from "./process";
 import {
   configurationReadyAfterRestart,
@@ -1022,7 +1022,6 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
     currentProject: findCurrentProject,
     afterProjectTask,
     isTrusted: () => vscode.workspace.isTrusted,
-    globalState: extensionContext.globalState,
   });
 
   extensionContext.subscriptions.push(
@@ -1218,20 +1217,6 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     appendOutputLine(output, `[自动配置] ${message}`);
-  }
-
-  // 新建工程流程在打开文件夹前排入了刷新请求；窗口重载后在这里兑现。
-  // 刷新会跑完整 mcpp build，不能 await：activate 未完成时按钮等命令会排队，
-  // 表现为编辑器标题按钮点击无反应。
-  const pendingNewProject = extensionContext.globalState.get<string>(PENDING_NEW_PROJECT_KEY);
-  if (pendingNewProject !== undefined) {
-    await extensionContext.globalState.update(PENDING_NEW_PROJECT_KEY, undefined);
-    if (findCurrentProject()?.root === pendingNewProject) {
-      void vscode.commands.executeCommand(COMMAND_REFRESH).then(undefined, (error: unknown) => {
-        const message = error instanceof Error ? error.message : String(error);
-        appendOutputLine(output, `[新建工程] ${message}`);
-      });
-    }
   }
 }
 
