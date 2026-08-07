@@ -24,6 +24,7 @@
     "workspaceContains:mcpp.toml",
     "onLanguage:cpp",
     "onLanguage:mcpp-build",
+    "onLanguage:mcpp-toml",
     "onCommand:mcpp.configureClangd",
     "onCommand:mcpp.refreshCompilationDatabase",
     "onCommand:mcpp.checkModuleSupport",
