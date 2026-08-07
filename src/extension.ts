@@ -855,9 +855,10 @@ async function autoConfigureModulesWizard(
 
 // mcpp.toml 的补全建议由纯函数 computeMcppTomlCompletions 计算，这里只做 vscode 类型映射。
 const mcppTomlCompletionKinds = {
-  section: vscode.CompletionItemKind.Module,
+  section: vscode.CompletionItemKind.Folder,
   key: vscode.CompletionItemKind.Field,
-  value: vscode.CompletionItemKind.Value,
+  value: vscode.CompletionItemKind.EnumMember,
+  template: vscode.CompletionItemKind.Snippet,
 } as const;
 
 const mcppTomlCompletionProvider: vscode.CompletionItemProvider = {

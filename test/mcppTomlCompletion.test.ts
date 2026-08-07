@@ -121,11 +121,27 @@ test("suggests feature spec keys inside a feature inline table", () => {
   }
 });
 
-test("offers no key completions in free-key sections", () => {
-  // [dependencies] 的键是包名，属于开放词汇，不做键补全。
-  assert.deepEqual(computeMcppTomlCompletions(["[dependencies]", ""], 1, 0), []);
-  assert.deepEqual(computeMcppTomlCompletions(["[features]", ""], 1, 0), []);
-  assert.deepEqual(computeMcppTomlCompletions(["[generated_files]", ""], 1, 0), []);
+test("suggests writing templates in free-key sections", () => {
+  // [dependencies] 的键是包名，属于开放词汇，改为提供常用写法模板。
+  const dependencies = computeMcppTomlCompletions(["[dependencies]", ""], 1, 0);
+  assert.ok(dependencies.length > 0);
+  assert.ok(dependencies.every((suggestion) => suggestion.kind === "template"));
+  const dependencyLabels = labels(dependencies);
+  assert.ok(dependencyLabels.includes('name = "version"'));
+  assert.ok(dependencyLabels.includes("name = { path = ... }"));
+  assert.ok(dependencyLabels.includes("name = { git = ..., tag = ... }"));
+  const version = dependencies.find((suggestion) => suggestion.label === 'name = "version"');
+  assert.equal(version?.insertSnippet, '${1:name} = "${2:1.0.0}"');
+
+  const features = computeMcppTomlCompletions(["[features]", ""], 1, 0);
+  assert.ok(features.every((suggestion) => suggestion.kind === "template"));
+  assert.ok(labels(features).includes("name = { defines = [...] }"));
+
+  const generated = computeMcppTomlCompletions(["[generated_files]", ""], 1, 0);
+  assert.ok(generated.every((suggestion) => suggestion.kind === "template"));
+
+  const capabilities = computeMcppTomlCompletions(["[capabilities]", ""], 1, 0);
+  assert.ok(labels(capabilities).includes('capability = "provider"'));
 });
 
 test("offers no value completions for free-form values", () => {

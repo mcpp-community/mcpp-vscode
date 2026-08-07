@@ -4,7 +4,7 @@
 
 export interface McppTomlSuggestion {
   label: string;
-  kind: "section" | "key" | "value";
+  kind: "section" | "key" | "value" | "template";
   detail: string;
   documentation?: string;
   /** 插入文本；含 $1 等 snippet 占位符。缺省时插入 label。 */
@@ -235,7 +235,115 @@ interface SectionSpec {
   freeKeys?: boolean;
 }
 
-const SECTION_GROUPS: Record<string, { keys: readonly KeySpec[]; inlineKeys?: readonly KeySpec[]; freeKeys?: boolean }> = {
+/** 开放词汇段（键是包名、feature 名等）在空行提供的写法模板。 */
+interface TemplateSpec {
+  label: string;
+  detail: string;
+  documentation?: string;
+  insertSnippet: string;
+}
+
+const DEPENDENCY_TEMPLATES: readonly TemplateSpec[] = [
+  {
+    label: 'name = "version"',
+    detail: "SemVer 版本依赖",
+    documentation: "默认 caret 约束（^）；也支持 ~、= 与 \">=1.0, <2.0\" 范围组合。",
+    insertSnippet: '${1:name} = "${2:1.0.0}"',
+  },
+  {
+    label: "name = { path = ... }",
+    detail: "路径依赖（本地开发）",
+    insertSnippet: '${1:name} = { path = "${2:../mylib}" }',
+  },
+  {
+    label: "name = { git = ..., tag = ... }",
+    detail: "Git 依赖（tag / branch / rev 三选一）",
+    insertSnippet: '${1:name} = { git = "${2:https://github.com/user/repo.git}", tag = "${3:v1.0.0}" }',
+  },
+  {
+    label: "name = { version = ..., features = [...] }",
+    detail: "长式 dep spec：请求该依赖的 feature",
+    insertSnippet: '${1:name} = { version = "${2:1.0}", features = ["${3:feature}"] }',
+  },
+  {
+    label: "name = { version = ..., tools = [...] }",
+    detail: "依赖产出的 host 工具（须为该包的 bin target）",
+    insertSnippet: '${1:name} = { version = "${2:1.0}", tools = ["${3:protoc}"] }',
+  },
+];
+
+const FEATURE_TEMPLATES: readonly TemplateSpec[] = [
+  {
+    label: "name = [...]",
+    detail: "数组简写：仅隐含 feature",
+    insertSnippet: "${1:name} = [${2}]",
+  },
+  {
+    label: "name = { defines = [...] }",
+    detail: "表形式：激活时贡献包自有宏",
+    insertSnippet: '${1:name} = { defines = ["${2:MACRO}"] }',
+  },
+  {
+    label: "name = { requires = [...] }",
+    detail: "表形式：需要 capability",
+    insertSnippet: '${1:name} = { requires = ["${2:blas}"] }',
+  },
+  {
+    label: "name = { sources = [...] }",
+    detail: "表形式：feature 门控的源 glob",
+    insertSnippet: '${1:name} = { sources = ["${2:src/simd/**}"] }',
+  },
+];
+
+const GENERATED_FILE_TEMPLATES: readonly TemplateSpec[] = [
+  {
+    label: '"path" = "content"',
+    detail: "生成文件（相对路径 → 内容，进指纹）",
+    insertSnippet: '"${1:src/gen/wrap.cppm}" = """\n${2:}\n"""',
+  },
+];
+
+const CAPABILITY_TEMPLATES: readonly TemplateSpec[] = [
+  {
+    label: 'capability = "provider"',
+    detail: "capability 绑定（等价于 --cap）",
+    insertSnippet: '${1:blas} = "${2:compat.openblas}"',
+  },
+];
+
+const XLINGS_WORKSPACE_TEMPLATES: readonly TemplateSpec[] = [
+  {
+    label: 'tool = "version"',
+    detail: "固定工具版本",
+    insertSnippet: '${1:clang} = "${2:20.1.7}"',
+  },
+];
+
+const XLINGS_ENVS_TEMPLATES: readonly TemplateSpec[] = [
+  {
+    label: 'NAME = "value"',
+    detail: "应用到工具环境的环境变量",
+    insertSnippet: '${1:NAME} = "${2:value}"',
+  },
+];
+
+const TOOLS_OVERRIDES_TEMPLATES: readonly TemplateSpec[] = [
+  {
+    label: '"pkg:tool" = "path"',
+    detail: "用已有二进制覆盖 host 工具（跳过构建）",
+    insertSnippet: '"${1:compat.protobuf:protoc}" = "${2:/usr/bin/protoc}"',
+  },
+];
+
+interface SectionGroupSpec {
+  keys: readonly KeySpec[];
+  inlineKeys?: readonly KeySpec[];
+  /** 键名为自由词汇（包名、feature 名），不提供键补全，改为提供写法模板。 */
+  freeKeys?: boolean;
+  templates?: readonly TemplateSpec[];
+}
+
+const SECTION_GROUPS: Record<string, SectionGroupSpec> = {
   "package": { keys: PACKAGE_KEYS },
   "lib": { keys: LIB_KEYS },
   "build": { keys: BUILD_KEYS },
@@ -247,15 +355,15 @@ const SECTION_GROUPS: Record<string, { keys: readonly KeySpec[]; inlineKeys?: re
   "xlings": { keys: XLINGS_KEYS },
   "language": { keys: LANGUAGE_KEYS },
   "target": { keys: TARGET_TRIPLE_KEYS },
-  "dependencies": { keys: [], inlineKeys: DEP_SPEC_KEYS, freeKeys: true },
-  "dev-dependencies": { keys: [], inlineKeys: DEP_SPEC_KEYS, freeKeys: true },
-  "feature-deps": { keys: [], inlineKeys: DEP_SPEC_KEYS, freeKeys: true },
-  "features": { keys: [], inlineKeys: FEATURE_SPEC_KEYS, freeKeys: true },
-  "generated_files": { keys: [], freeKeys: true },
-  "capabilities": { keys: [], freeKeys: true },
-  "xlings.workspace": { keys: [], freeKeys: true },
-  "xlings.envs": { keys: [], freeKeys: true },
-  "tools.overrides": { keys: [], freeKeys: true },
+  "dependencies": { keys: [], inlineKeys: DEP_SPEC_KEYS, freeKeys: true, templates: DEPENDENCY_TEMPLATES },
+  "dev-dependencies": { keys: [], inlineKeys: DEP_SPEC_KEYS, freeKeys: true, templates: DEPENDENCY_TEMPLATES },
+  "feature-deps": { keys: [], inlineKeys: DEP_SPEC_KEYS, freeKeys: true, templates: DEPENDENCY_TEMPLATES },
+  "features": { keys: [], inlineKeys: FEATURE_SPEC_KEYS, freeKeys: true, templates: FEATURE_TEMPLATES },
+  "generated_files": { keys: [], freeKeys: true, templates: GENERATED_FILE_TEMPLATES },
+  "capabilities": { keys: [], freeKeys: true, templates: CAPABILITY_TEMPLATES },
+  "xlings.workspace": { keys: [], freeKeys: true, templates: XLINGS_WORKSPACE_TEMPLATES },
+  "xlings.envs": { keys: [], freeKeys: true, templates: XLINGS_ENVS_TEMPLATES },
+  "tools.overrides": { keys: [], freeKeys: true, templates: TOOLS_OVERRIDES_TEMPLATES },
 };
 
 const SECTIONS: readonly SectionSpec[] = [
@@ -426,8 +534,18 @@ export function computeMcppTomlCompletions(
     return sectionSuggestions();
   }
   const spec = SECTION_GROUPS[group];
-  if (spec === undefined || spec.freeKeys === true) {
+  if (spec === undefined) {
     return [];
+  }
+  if (spec.freeKeys === true) {
+    // 开放词汇段没有可枚举的键，提供该段的常用写法模板。
+    return (spec.templates ?? []).map((template) => ({
+      label: template.label,
+      kind: "template",
+      detail: template.detail,
+      documentation: template.documentation,
+      insertSnippet: template.insertSnippet,
+    }));
   }
   return keySuggestions(spec.keys);
 }
