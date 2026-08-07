@@ -149,6 +149,24 @@ test("offers no value completions for free-form values", () => {
   assert.deepEqual(computeMcppTomlCompletions(["[dependencies]", 'gtest = "'], 1, 8), []);
 });
 
+test("recognizes dotted dependency keys in value position", () => {
+  // 点式选择器裸键的值位置不弹模板（docs/zh/05-mcpp-toml.md §2.5）。
+  assert.deepEqual(computeMcppTomlCompletions(["[dependencies]", 'capi.lua = "'], 1, 11), []);
+  assert.deepEqual(computeMcppTomlCompletions(["[dependencies]", 'imgui.backend.glfw_opengl3 = "'], 1, 29), []);
+  assert.deepEqual(computeMcppTomlCompletions(["[dependencies]", '"chriskohlhoff.asio" = "'], 1, 23), []);
+  // 点式键的长式 spec 仍然补全内联表键。
+  const spec = computeMcppTomlCompletions(["[dependencies]", "imgui.core = { "], 1, 15);
+  assert.ok(labels(spec).includes("version"));
+});
+
+test("ignores unknown and dot-prefixed custom sections", () => {
+  // 附录 A：不支持包自定义 toml 键；未知段不提供任何建议。
+  assert.deepEqual(computeMcppTomlCompletions(["[mytool]", ""], 1, 0), []);
+  assert.deepEqual(computeMcppTomlCompletions(["[mytool]", "key = "], 1, 6), []);
+  assert.deepEqual(normalizeSectionGroup(".foo"), undefined);
+  assert.deepEqual(normalizeSectionGroup("mytool.settings"), undefined);
+});
+
 test("resolves the section from earlier lines", () => {
   const lines = ["[package]", 'name = "demo"', "", "[build]", ""];
   const suggestions = computeMcppTomlCompletions(lines, 4, 0);

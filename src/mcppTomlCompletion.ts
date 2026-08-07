@@ -421,7 +421,9 @@ const SECTIONS: readonly SectionSpec[] = [
 ];
 
 const HEADER_PATTERN = /^\s*\[\[?\s*([^\]]*?)\s*\]\]?\s*(?:#.*)?$/;
-const KEY_VALUE_PATTERN = /^\s*([A-Za-z0-9_-]+|"[^"]*")\s*=\s*(.*)$/;
+// 键名允许点号：dependencies 的点式选择器（capi.lua、imgui.backend.glfw_opengl3）
+// 是合法的裸键写法（docs/zh/05-mcpp-toml.md §2.5）。
+const KEY_VALUE_PATTERN = /^\s*([A-Za-z0-9_.-]+|"[^"]*")\s*=\s*(.*)$/;
 const PARTIAL_HEADER_PATTERN = /^\s*\[[^\]]*$/;
 
 /** 把段头规范化为组名：去掉引号，剥离 target.<sel>. 前缀与 .<name> 后缀。 */
@@ -463,14 +465,21 @@ export function normalizeSectionGroup(rawHeader: string): string | undefined {
   return undefined;
 }
 
-function findCurrentSection(lines: readonly string[], line: number): string | undefined {
+/** 当前段上下文：none = 文档顶部（尚无段头）；unknown = 未识别的自定义段；group = 已知段组。 */
+type SectionContext =
+  | { kind: "none" }
+  | { kind: "unknown" }
+  | { kind: "group"; group: string };
+
+function findCurrentSection(lines: readonly string[], line: number): SectionContext {
   for (let index = Math.min(line, lines.length - 1); index >= 0; index -= 1) {
     const match = HEADER_PATTERN.exec(lines[index]);
     if (match !== null) {
-      return normalizeSectionGroup(match[1]);
+      const group = normalizeSectionGroup(match[1]);
+      return group === undefined ? { kind: "unknown" } : { kind: "group", group };
     }
   }
-  return undefined;
+  return { kind: "none" };
 }
 
 function sectionSuggestions(): McppTomlSuggestion[] {
@@ -536,7 +545,8 @@ export function computeMcppTomlCompletions(
     return sectionSuggestions();
   }
 
-  const group = findCurrentSection(lines, line);
+  const context = findCurrentSection(lines, line);
+  const group = context.kind === "group" ? context.group : undefined;
 
   const keyValue = KEY_VALUE_PATTERN.exec(textBefore);
   if (keyValue !== null) {
@@ -569,11 +579,15 @@ export function computeMcppTomlCompletions(
     return valueSuggestions(keySpec.values, insideString);
   }
 
-  // 键位置：文档顶部（还没有任何段）时提示段头。
-  if (group === undefined) {
+  // 键位置：文档顶部（还没有任何段）时提示段头；未识别的自定义段不提供建议
+  // （附录 A：不支持包自定义 toml 键）。
+  if (context.kind === "none") {
     return sectionSuggestions();
   }
-  const spec = SECTION_GROUPS[group];
+  if (context.kind === "unknown") {
+    return [];
+  }
+  const spec = SECTION_GROUPS[context.group];
   if (spec === undefined) {
     return [];
   }
