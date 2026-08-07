@@ -164,6 +164,30 @@ test("handles conditional target build sections", () => {
   assert.ok(labels(suggestions).includes("defines"));
 });
 
+test("suggests keys in documented subtables", () => {
+  const cxxRuntime = computeMcppTomlCompletions(["[build.cxx_runtime]", ""], 1, 0);
+  assert.deepEqual(labels(cxxRuntime), ["default", "tests"]);
+  const tests = computeMcppTomlCompletions(["[build.cxx_runtime]", "tests = "], 1, 8);
+  assert.deepEqual(labels(tests), ["self-contained", "toolchain-coupled", "host-coupled"]);
+
+  const versionInfo = computeMcppTomlCompletions(["[resources.version-info]", ""], 1, 0);
+  const versionInfoKeys = labels(versionInfo);
+  for (const expected of ["company", "product", "description", "copyright", "original-filename", "internal-name"]) {
+    assert.ok(versionInfoKeys.includes(expected), `missing ${expected}`);
+  }
+
+  const provider = computeMcppTomlCompletions(['[runtime."opengl.glx.driver"]', ""], 1, 0);
+  assert.deepEqual(labels(provider), ["provider"]);
+});
+
+test("suggests profile alias key in [build]", () => {
+  const suggestions = computeMcppTomlCompletions(["[build]", ""], 1, 0);
+  assert.ok(labels(suggestions).includes("default-profile"));
+  assert.ok(labels(suggestions).includes("profile"));
+  const values = computeMcppTomlCompletions(["[build]", "profile = "], 1, 10);
+  assert.deepEqual(labels(values), ["dev", "release", "debug", "dist"]);
+});
+
 test("ignores out-of-range positions", () => {
   assert.deepEqual(computeMcppTomlCompletions(["[package]"], 5, 0), []);
 });

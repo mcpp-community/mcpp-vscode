@@ -123,6 +123,12 @@ const BUILD_KEYS: readonly KeySpec[] = [
     { value: "debug", detail: "-O0 -g", quoted: true },
     { value: "dist", detail: "-O3 + strip", quoted: true },
   ]),
+  stringKey("profile", "default-profile 的别名", undefined, [
+    { value: "dev", detail: "默认：-O0 -g", quoted: true },
+    { value: "release", detail: "-O2", quoted: true },
+    { value: "debug", detail: "-O0 -g", quoted: true },
+    { value: "dist", detail: "-O3 + strip", quoted: true },
+  ]),
   {
     name: "flags",
     detail: "per-glob 编译旗标（有序内联表数组）",
@@ -186,6 +192,24 @@ const TARGET_TRIPLE_KEYS: readonly KeySpec[] = [
     { value: "static", detail: "完全静态链接（如 musl 目标）", quoted: true },
   ]),
   stringKey("cxx_runtime", "该目标三元组的 C++ 运行时契约", undefined, CXX_RUNTIME_VALUES),
+];
+
+const BUILD_CXX_RUNTIME_KEYS: readonly KeySpec[] = [
+  stringKey("default", "可执行文件与共享库的 C++ 运行时契约", undefined, CXX_RUNTIME_VALUES),
+  stringKey("tests", "测试二进制的 C++ 运行时契约", undefined, CXX_RUNTIME_VALUES),
+];
+
+const RESOURCES_VERSION_INFO_KEYS: readonly KeySpec[] = [
+  stringKey("company", "CompanyName（默认取 [package]）"),
+  stringKey("product", "ProductName（默认取 [package]）"),
+  stringKey("description", "FileDescription（默认取 [package]）"),
+  stringKey("copyright", "LegalCopyright（默认取 [package]）"),
+  stringKey("original-filename", "OriginalFilename"),
+  stringKey("internal-name", "InternalName"),
+];
+
+const RUNTIME_PROVIDER_KEYS: readonly KeySpec[] = [
+  stringKey("provider", "该 capability 的显式 provider（覆盖强弱档）"),
 ];
 
 const LANGUAGE_KEYS: readonly KeySpec[] = [
@@ -355,6 +379,9 @@ const SECTION_GROUPS: Record<string, SectionGroupSpec> = {
   "xlings": { keys: XLINGS_KEYS },
   "language": { keys: LANGUAGE_KEYS },
   "target": { keys: TARGET_TRIPLE_KEYS },
+  "build.cxx_runtime": { keys: BUILD_CXX_RUNTIME_KEYS },
+  "resources.version-info": { keys: RESOURCES_VERSION_INFO_KEYS },
+  "runtime.capability": { keys: RUNTIME_PROVIDER_KEYS },
   "dependencies": { keys: [], inlineKeys: DEP_SPEC_KEYS, freeKeys: true, templates: DEPENDENCY_TEMPLATES },
   "dev-dependencies": { keys: [], inlineKeys: DEP_SPEC_KEYS, freeKeys: true, templates: DEPENDENCY_TEMPLATES },
   "feature-deps": { keys: [], inlineKeys: DEP_SPEC_KEYS, freeKeys: true, templates: DEPENDENCY_TEMPLATES },
@@ -423,6 +450,10 @@ export function normalizeSectionGroup(rawHeader: string): string | undefined {
       // targets.<name> / profile.<name> / feature-deps.<name> /
       // dependencies.<namespace> 都归入各自组。
       return head;
+    }
+    if (head === "runtime") {
+      // [runtime."<capability>"] 显式 provider 覆盖子表。
+      return "runtime.capability";
     }
   }
   return undefined;
