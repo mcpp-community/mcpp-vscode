@@ -45,6 +45,7 @@ import {
 } from "./workflow";
 import { classifyTaskExit, type TaskCompletion } from "./tasks";
 import { MCPP_MANIFEST_GLOB, registerInProjectContext } from "./inProject";
+import { computeMcppTomlCompletions } from "./mcppTomlCompletion";
 import {
   buildModuleSetupPlan,
   executeModuleSetup,
@@ -825,6 +826,47 @@ async function autoConfigureModulesWizard(
   }
 }
 
+// mcpp.toml 结构补全：建议由纯函数 computeMcppTomlCompletions 计算，这里只做
+// vscode 类型映射。范围：段头 snippet + 开放词汇段的写法模板；不含字段键/枚举
+// 与依赖数据（分别等上游版本化 schema 与批量 catalog 接口）。
+const mcppTomlCompletionKinds = {
+  section: vscode.CompletionItemKind.Folder,
+  template: vscode.CompletionItemKind.Snippet,
+} as const;
+
+const mcppTomlCompletionProvider: vscode.CompletionItemProvider = {
+  provideCompletionItems(document, position) {
+    // mcpp.toml 结构补全由 mcpp.tomlCompletion 控制，按文档作用域读取。
+    if (!vscode.workspace.getConfiguration("mcpp", document.uri).get<boolean>("tomlCompletion", true)) {
+      return undefined;
+    }
+    const lines: string[] = [];
+    for (let line = 0; line <= position.line; line += 1) {
+      lines.push(document.lineAt(line).text);
+    }
+    return computeMcppTomlCompletions(lines, position.line, position.character).map((suggestion) => {
+      const item = new vscode.CompletionItem(
+        suggestion.label,
+        mcppTomlCompletionKinds[suggestion.kind],
+      );
+      item.detail = suggestion.detail;
+      if (suggestion.documentation !== undefined) {
+        item.documentation = new vscode.MarkdownString(suggestion.documentation);
+      }
+      if (suggestion.insertSnippet !== undefined) {
+        item.insertText = new vscode.SnippetString(suggestion.insertSnippet);
+      }
+      item.range = new vscode.Range(
+        position.line,
+        suggestion.range.startCharacter,
+        position.line,
+        suggestion.range.endCharacter,
+      );
+      return item;
+    });
+  },
+};
+
 export async function activate(extensionContext: vscode.ExtensionContext): Promise<void> {
   moduleStatusByProject.clear();
   moduleCheckOperations.clear();
@@ -1001,6 +1043,11 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
     output,
     status,
     ...cliController.register(),
+    vscode.languages.registerCompletionItemProvider(
+      { language: "mcpp-toml" },
+      mcppTomlCompletionProvider,
+      "[",
+    ),
     vscode.commands.registerCommand(COMMAND_CONFIGURE, runGuarded(async () => {
       const project = findCurrentProject();
       if (project === undefined) {

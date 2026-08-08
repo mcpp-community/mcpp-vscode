@@ -24,6 +24,7 @@
     "workspaceContains:mcpp.toml",
     "onLanguage:cpp",
     "onLanguage:mcpp-build",
+    "onLanguage:mcpp-toml",
     "onCommand:mcpp.configureClangd",
     "onCommand:mcpp.refreshCompilationDatabase",
     "onCommand:mcpp.checkModuleSupport",
@@ -45,7 +46,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "description": "未受信任工作区仅启用模块语法高亮，不执行 CDB、mcpp 或 clangd 指定的任何程序，也不接管 clangd 配置。"
+      "description": "未受信任工作区仅启用模块语法高亮与 mcpp.toml 结构补全（纯文本分析），不执行 CDB、mcpp 或 clangd 指定的任何程序，也不接管 clangd 配置。"
     }
   },
   "main": "./dist/src/extension.js",
@@ -151,6 +152,12 @@
           "default": true,
           "scope": "resource",
           "description": "配置 clangd 时，是否询问关闭 Microsoft C/C++ IntelliSense。"
+        },
+        "mcpp.tomlCompletion": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "为 mcpp.toml 提供结构补全：段头与写法模板（snippet）。所有建议带显式替换范围，并经真实 mcpp 契约测试验证。"
         }
       }
     },
