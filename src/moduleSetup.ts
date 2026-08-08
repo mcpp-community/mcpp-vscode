@@ -64,7 +64,7 @@ export function mcppModuleSetupCommands(plan: ModuleSetupPlan): ModuleSetupComma
   if (plan.installLlvm) {
     commands.push({
       stage: "install",
-      mode: "process",
+      mode: "task",
       args: ["toolchain", "install", "llvm"],
     });
   }

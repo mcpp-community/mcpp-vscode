@@ -63,6 +63,19 @@ test("declares the official clangd dependency and mcpp commands", () => {
   });
 });
 
+test("自动模块配置使用非交互复合操作和单一全局锁", () => {
+  const source = readFileSync(path.join(root, "src/cliController.ts"), "utf8");
+  assert.match(source, /public async readToolchainInventory\s*\(/);
+  const start = source.indexOf("public async runAutomaticModuleSetup");
+  assert.notEqual(start, -1);
+  const end = source.indexOf("public async ", start + 10);
+  const method = source.slice(start, end === -1 ? source.length : end);
+  assert.match(method, /mcppModuleSetupCommands\(plan\)/);
+  assert.match(method, /beginGlobal\(token\)/);
+  assert.match(method, /finally\s*\{[\s\S]*finishGlobal\(token\)/);
+  assert.doesNotMatch(method, /pickInstallSpec|selectDefaultToolchainFromInventory|showQuickPick|showWarningMessage/);
+});
+
 test("shows editor title buttons only inside mcpp projects", () => {
   const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
   assert.deepEqual(manifest.contributes?.menus?.["editor/title"], [

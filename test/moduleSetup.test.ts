@@ -214,7 +214,7 @@ test("模块设置命令使用固定 argv 数组且始终构建", () => {
   assert.deepEqual(
     mcppModuleSetupCommands({ kind: "ready", installLlvm: true, switchDefault: true }),
     [
-      { stage: "install", mode: "process", args: ["toolchain", "install", "llvm"] },
+      { stage: "install", mode: "task", args: ["toolchain", "install", "llvm"] },
       { stage: "default", mode: "process", args: ["toolchain", "default", "llvm"] },
       { stage: "build", mode: "task", args: ["build"] },
     ],
