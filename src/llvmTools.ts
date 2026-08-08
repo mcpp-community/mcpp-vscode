@@ -60,8 +60,16 @@ export function xlingsInstallArgs(version?: string): string[] {
   return ["update", "llvm-tools"];
 }
 
-export function findXlingsExecutable(): string | undefined {
-  const home = os.homedir();
+export interface FindXlingsOptions {
+  /** Override for tests: base home directory instead of os.homedir(). */
+  home?: string;
+  /** Override for tests: environment instead of process.env. */
+  env?: NodeJS.ProcessEnv;
+}
+
+export function findXlingsExecutable(options?: FindXlingsOptions): string | undefined {
+  const home = options?.home ?? os.homedir();
+  const env = options?.env ?? process.env;
   const knownPaths = [
     path.join(home, ".xlings", "subos", "current", "bin", "xlings"),
     path.join(home, ".xlings", "bin", "xlings"),
@@ -71,6 +79,26 @@ export function findXlingsExecutable(): string | undefined {
       path.join(home, ".xlings", "subos", "current", "bin", "xlings.exe"),
     );
   }
+
+  // mcpp (install.sh / AUR / mcpp-m) bundles xlings inside its own registry
+  // sandbox instead of installing to ~/.xlings. The AUR launcher pins the
+  // path via MCPP_VENDORED_XLINGS; otherwise it lives at
+  // $MCPP_HOME/registry/bin/xlings. Without probing both, the one-click
+  // module setup can never auto-install llvm-tools after a standard install.
+  const vendored = env.MCPP_VENDORED_XLINGS?.trim();
+  if (vendored !== undefined && vendored.length > 0) {
+    knownPaths.push(vendored);
+  }
+  const mcppHome = env.MCPP_HOME?.trim();
+  const extension = process.platform === "win32" ? ".exe" : "";
+  knownPaths.push(
+    path.join(
+      mcppHome !== undefined && mcppHome.length > 0 ? mcppHome : path.join(home, ".mcpp"),
+      "registry",
+      "bin",
+      `xlings${extension}`,
+    ),
+  );
 
   // Check known install paths first
   for (const candidate of knownPaths) {
@@ -82,15 +110,15 @@ export function findXlingsExecutable(): string | undefined {
   // Fall back to PATH, but only when "xlings" actually resolves there. Always
   // returning "xlings" hid the not-installed case, so callers could never show
   // the "xlings 未安装" guidance.
-  return xlingsResolvableOnPath() ? "xlings" : undefined;
+  return xlingsResolvableOnPath(env.PATH) ? "xlings" : undefined;
 }
 
-function xlingsResolvableOnPath(): boolean {
+function xlingsResolvableOnPath(pathValue?: string): boolean {
   const names = process.platform === "win32"
     ? ["xlings.exe", "xlings.cmd", "xlings.bat"]
     : ["xlings"];
-  const pathValue = process.env.PATH ?? "";
-  for (const dir of pathValue.split(path.delimiter)) {
+  const pathEnv = pathValue ?? "";
+  for (const dir of pathEnv.split(path.delimiter)) {
     if (dir.length === 0) {
       continue;
     }

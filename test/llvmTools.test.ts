@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import {
@@ -67,4 +70,51 @@ test("findXlingsExecutable returns a string or undefined", () => {
   const result = findXlingsExecutable();
   // Returns string (PATH fallback or known path) or undefined if xlings not found
   assert.ok(result === undefined || typeof result === "string");
+});
+
+test("findXlingsExecutable finds the xlings bundled in $MCPP_HOME/registry/bin", () => {
+  const home = mkdtempSync(path.join(os.tmpdir(), "mcpp-vscode-mcpp-home-"));
+  const registryBin = path.join(home, "registry", "bin");
+  const xlingsPath = path.join(registryBin, "xlings");
+  mkdirSync(registryBin, { recursive: true });
+  writeFileSync(xlingsPath, "#!/bin/sh\n");
+  try {
+    assert.equal(
+      findXlingsExecutable({ home, env: { MCPP_HOME: home } }),
+      xlingsPath,
+    );
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("findXlingsExecutable falls back to $HOME/.mcpp/registry/bin when MCPP_HOME is unset", () => {
+  const home = mkdtempSync(path.join(os.tmpdir(), "mcpp-vscode-home-"));
+  const registryBin = path.join(home, ".mcpp", "registry", "bin");
+  const xlingsPath = path.join(registryBin, "xlings");
+  mkdirSync(registryBin, { recursive: true });
+  writeFileSync(xlingsPath, "#!/bin/sh\n");
+  try {
+    assert.equal(
+      findXlingsExecutable({ home, env: {} }),
+      xlingsPath,
+    );
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("findXlingsExecutable honors MCPP_VENDORED_XLINGS", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "mcpp-vscode-vendored-"));
+  const vendored = path.join(root, "opt-mcpp", "registry", "bin", "xlings");
+  mkdirSync(path.dirname(vendored), { recursive: true });
+  writeFileSync(vendored, "#!/bin/sh\n");
+  try {
+    assert.equal(
+      findXlingsExecutable({ home: root, env: { MCPP_VENDORED_XLINGS: vendored } }),
+      vendored,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
