@@ -49,7 +49,7 @@ export function buildModuleSetupPlan(
   return {
     kind: "ready",
     installLlvm: !installedHostLlvm,
-    switchDefault: !effectiveIsLlvm,
+    switchDefault: inventory.effective !== undefined && !effectiveIsLlvm,
   };
 }
 

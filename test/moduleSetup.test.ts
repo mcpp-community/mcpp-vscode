@@ -97,6 +97,21 @@ test("LLVM 已生效时不重复安装或切换", () => {
   });
 });
 
+test("没有 effective 工具链时不推断需要切换全局默认", () => {
+  const plan = buildModuleSetupPlan(
+    inventory(),
+    "unavailable",
+    true,
+    false,
+  );
+
+  assert.deepEqual(plan, {
+    kind: "ready",
+    installLlvm: true,
+    switchDefault: false,
+  });
+});
+
 test("available LLVM 不算已安装的 host 工具链", () => {
   const gcc = toolchain("gcc", true);
   const availableLlvm = toolchain("llvm");
@@ -227,6 +242,26 @@ test("确认文案按能力解释现状并完整说明副作用边界", () => {
     assert.match(confirmation.detail, /全局默认/);
     assert.match(confirmation.detail, /不会编辑项目.*mcpp\.toml/);
   }
+});
+
+test("确认文案说明将复用已安装的 LLVM", () => {
+  const confirmation = moduleSetupConfirmation(
+    "syntax-only",
+    { kind: "ready", installLlvm: false, switchDefault: true },
+  );
+
+  assert.match(confirmation.detail, /将复用已安装的 LLVM/);
+  assert.match(confirmation.detail, /补齐配套组件时仍可能下载 LLVM\/llvm-tools/);
+});
+
+test("确认文案在无需切换时明确不修改全局默认值", () => {
+  const confirmation = moduleSetupConfirmation(
+    "unavailable",
+    { kind: "ready", installLlvm: true, switchDefault: false },
+  );
+
+  assert.match(confirmation.detail, /不修改全局默认工具链/);
+  assert.doesNotMatch(confirmation.detail, /设为全局默认工具链/);
 });
 
 interface OperationFixture {
