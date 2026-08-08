@@ -239,14 +239,16 @@ test("新建工程先校验目标路径再确认创建，成功后只打开不�
   assert.notEqual(start, -1);
   assert.notEqual(end, -1);
 
+  // 控制流本身由 test/newProject.test.ts 对 runNewProjectFlow 的行为级测试覆盖；
+  // 这里只验证控制器把 UI/进程依赖注入流程函数。
   const method = source.slice(start, end);
-  const locationPick = method.indexOf("showOpenDialog");
-  const exists = method.indexOf("existsSync(projectRoot)");
-  const confirm = method.indexOf("showWarningMessage");
-  const create = method.indexOf("runProcess");
-  const open = method.indexOf('executeCommand("vscode.openFolder"');
   assert.match(method, /validateNewProjectName/);
-  assert.ok(locationPick >= 0 && locationPick < exists);
+  assert.match(method, /runNewProjectFlow/);
+  const flow = method.indexOf("runNewProjectFlow");
+  const exists = method.indexOf("existsSync", flow);
+  const confirm = method.indexOf("showWarningMessage", flow);
+  const create = method.indexOf("runProcess", flow);
+  const open = method.indexOf('executeCommand("vscode.openFolder"', flow);
   assert.ok(exists >= 0 && exists < confirm);
   assert.ok(confirm >= 0 && confirm < create);
   assert.ok(create >= 0 && create < open);

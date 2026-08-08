@@ -51,3 +51,89 @@ test("接受常规项目名，前后空白忽略", () => {
     assert.equal(validateNewProjectName(name), undefined, `should accept: ${name}`);
   }
 });
+import { runNewProjectFlow, type NewProjectActions } from "../src/newProject";
+
+function recordingActions(overrides: Partial<NewProjectActions>, calls: string[]): NewProjectActions {
+  return {
+    exists: (path) => {
+      calls.push(`exists:${path}`);
+      return overrides.exists?.(path) ?? false;
+    },
+    confirm: async (message) => {
+      calls.push(`confirm:${message}`);
+      return overrides.confirm?.(message) ?? true;
+    },
+    run: async (name, cwd) => {
+      calls.push(`run:${name}@${cwd}`);
+      return overrides.run?.(name, cwd) ?? 0;
+    },
+    openFolder: async (path) => {
+      calls.push(`openFolder:${path}`);
+      await overrides.openFolder?.(path);
+    },
+    showError: (message) => {
+      calls.push(`showError:${message}`);
+    },
+  };
+}
+
+test("目标路径已存在时报错且不确认、不创建、不打开", async () => {
+  const calls: string[] = [];
+  const outcome = await runNewProjectFlow(
+    "demo",
+    "/parent",
+    "/parent/demo",
+    recordingActions({ exists: () => true }, calls),
+  );
+  assert.equal(outcome, "exists");
+  assert.deepEqual(calls, [
+    "exists:/parent/demo",
+    "showError:目标路径已存在：/parent/demo。请更换项目名或位置。",
+  ]);
+});
+
+test("用户取消确认时不创建、不打开", async () => {
+  const calls: string[] = [];
+  const outcome = await runNewProjectFlow(
+    "demo",
+    "/parent",
+    "/parent/demo",
+    recordingActions({ confirm: async () => false }, calls),
+  );
+  assert.equal(outcome, "declined");
+  assert.deepEqual(calls.map((call) => call.split(":", 1)[0]), ["exists", "confirm"]);
+});
+
+test("mcpp new 失败时报错且不打开", async () => {
+  const calls: string[] = [];
+  const outcome = await runNewProjectFlow(
+    "demo",
+    "/parent",
+    "/parent/demo",
+    recordingActions({ run: async () => 2 }, calls),
+  );
+  assert.equal(outcome, "failed");
+  assert.deepEqual(calls, [
+    "exists:/parent/demo",
+    "confirm:将在 /parent 执行 “mcpp new demo”，创建项目文件夹 /parent/demo 并打开它。",
+    "run:demo@/parent",
+    "showError:mcpp new demo 失败（退出码 2）。请查看 mcpp 输出频道。",
+  ]);
+});
+
+test("创建成功后只打开项目文件夹，不自动构建", async () => {
+  const calls: string[] = [];
+  const outcome = await runNewProjectFlow(
+    "demo",
+    "/parent",
+    "/parent/demo",
+    recordingActions({}, calls),
+  );
+  assert.equal(outcome, "opened");
+  assert.deepEqual(calls, [
+    "exists:/parent/demo",
+    "confirm:将在 /parent 执行 “mcpp new demo”，创建项目文件夹 /parent/demo 并打开它。",
+    "run:demo@/parent",
+    "openFolder:/parent/demo",
+  ]);
+});
