@@ -630,7 +630,7 @@ export class McppCliController {
     return false;
   }
 
-  private mcppExecutable(project: McppProjectDiscovery | undefined): string {
+  public mcppExecutable(project: McppProjectDiscovery | undefined): string {
     const uri = project === undefined
       ? vscode.workspace.workspaceFolders?.[0]?.uri
       : vscode.Uri.file(project.root);

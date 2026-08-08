@@ -4,7 +4,11 @@ import path from "node:path";
 import process from "node:process";
 
 import type { ToolIdentity } from "./analysis";
-import { runProcess, type ProcessResult } from "./process";
+import {
+  runProcess,
+  type ProcessResult,
+  type ProcessRunner,
+} from "./process";
 
 export function llvmToolsVersionSpec(identity: ToolIdentity): string {
   return `${identity.major}.${identity.minor}.${identity.patch}`;
@@ -129,6 +133,26 @@ function xlingsResolvableOnPath(pathValue?: string): boolean {
     }
   }
   return false;
+}
+
+const XLINGS_BINARY_LINE = /^\s*xlings binary\s*=\s*(.+?)\s*$/im;
+
+// Source of truth is mcpp itself, not the filesystem or PATH: `mcpp self env`
+// reports the exact xlings bundled with THIS mcpp (mcpp is a project-level
+// environment; it owns its tool paths). Works for install.sh, AUR and any
+// custom MCPP_PREFIX layout. Falls back to the historical path heuristics for
+// standalone ~/.xlings installs and for mcpp versions without the line.
+export async function resolveXlingsExecutable(
+  mcppExecutable: string,
+  runner: ProcessRunner = runProcess,
+): Promise<string | undefined> {
+  const result = await runner(mcppExecutable, ["self", "env"]);
+  const match = `${result.stdout}\n${result.stderr}`.match(XLINGS_BINARY_LINE);
+  const reported = match?.[1]?.trim();
+  if (reported !== undefined && reported.length > 0 && existsSync(reported)) {
+    return reported;
+  }
+  return findXlingsExecutable();
 }
 
 export async function runXlingsCommand(

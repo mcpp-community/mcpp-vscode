@@ -10,6 +10,7 @@ import {
   xlingsInstallArgs,
   deriveInstalledClangdPath,
   findXlingsExecutable,
+  resolveXlingsExecutable,
 } from "../src/llvmTools";
 
 test("extracts version string from ToolIdentity", () => {
@@ -117,4 +118,42 @@ test("findXlingsExecutable honors MCPP_VENDORED_XLINGS", () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("resolveXlingsExecutable reads the xlings binary from `mcpp self env`", async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "mcpp-vscode-selfenv-"));
+  const xlingsPath = path.join(root, "registry", "bin", "xlings");
+  mkdirSync(path.dirname(xlingsPath), { recursive: true });
+  writeFileSync(xlingsPath, "#!/bin/sh\n");
+  const runner = async () => ({
+    exitCode: 0,
+    stdout: `MCPP_HOME = ${root}\nxlings binary = ${xlingsPath}\nxlings pinned = 2026.8.8.1\n`,
+    stderr: "",
+  });
+  try {
+    assert.equal(
+      await resolveXlingsExecutable("/tools/mcpp", runner),
+      xlingsPath,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("resolveXlingsExecutable falls back when the reported path does not exist", async () => {
+  const runner = async () => ({
+    exitCode: 0,
+    stdout: "xlings binary = /no/such/xlings\n",
+    stderr: "",
+  });
+  const result = await resolveXlingsExecutable("/tools/mcpp", runner);
+  // Fallback heuristics find nothing in this environment, so the result is
+  // undefined unless a standalone ~/.xlings or PATH xlings happens to exist.
+  assert.ok(result === undefined || typeof result === "string");
+});
+
+test("resolveXlingsExecutable falls back when `mcpp self env` fails", async () => {
+  const runner = async () => ({ exitCode: 1, stdout: "", stderr: "boom\n" });
+  const result = await resolveXlingsExecutable("/tools/mcpp", runner);
+  assert.ok(result === undefined || typeof result === "string");
 });

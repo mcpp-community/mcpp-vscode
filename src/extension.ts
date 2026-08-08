@@ -19,7 +19,7 @@ import {
   type McppProjectDiscovery,
 } from "./discovery";
 import {
-  findXlingsExecutable,
+  resolveXlingsExecutable,
   llvmToolsVersionSpec,
   xlingsInstallArgs,
 } from "./llvmTools";
@@ -763,7 +763,9 @@ async function autoConfigureModulesWizard(
           : { stage: "clangd", state: "failed", detail: "clangd 配置未完成。" };
       }
 
-      const xlingsPath = findXlingsExecutable();
+      const xlingsPath = await resolveXlingsExecutable(
+        cliController.mcppExecutable(currentContext.project),
+      );
       const compilerPath = currentContext.analysis.compilerPath;
       if (xlingsPath === undefined || compilerPath === undefined) {
         return {
