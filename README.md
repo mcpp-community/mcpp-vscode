@@ -6,7 +6,7 @@
 
 把 mcpp 工程、C++ 模块语法和官方 clangd 扩展接入 VS Code。
 
-当前版本为 `0.2.5`。扩展负责工程发现、clangd 配置、模块状态检查以及常用
+当前版本为 `0.2.7`。扩展负责工程发现、clangd 配置、模块状态检查以及常用
 mcpp CLI 操作；它不实现新的 C++ 语言服务器，也不替代 mcpp 的构建逻辑。
 
 > 当前完整的模块语义能力只支持 LLVM/Clang 工具链。GCC 和 MSVC 工程仍可使用
@@ -33,11 +33,11 @@ mcpp CLI 操作；它不实现新的 C++ 语言服务器，也不替代 mcpp 的
 
 ## 安装
 
-从 [GitHub Releases](https://github.com/wellwei/mcpp-vscode/releases) 下载对应版本的
+从 [GitHub Releases](https://github.com/mcpp-community/mcpp-vscode/releases) 下载对应版本的
 VSIX，然后在 VS Code 中执行 **Extensions: Install from VSIX...**，或者运行：
 
 ```sh
-code --install-extension /path/to/mcpp-vscode-0.2.5.vsix
+code --install-extension /path/to/mcpp-vscode-0.2.7.vsix
 ```
 
 安装后确认当前 VS Code profile 中同时存在 `mcpp-community.mcpp-vscode` 和
@@ -364,6 +364,8 @@ macOS 从图形界面启动 VS Code 时可能没有继承终端 `PATH`。将 `mc
 
 - 执行 **mcpp: 一键配置模块代码提示**，扩展会自动通过 xlings 安装与当前编译器
   版本匹配的 llvm-tools（含 clangd）。
+- xlings 可执行文件的定位以 `mcpp self env` 报告为准（覆盖 install.sh、AUR 等
+  mcpp 内置安装布局），找不到时再回退到独立 `~/.xlings` 与 `PATH`。
 - `mcpp.clangd.path` 可以指向任意安装来源的真实 clangd，不要求与 mcpp 同目录。
 - 自动发现会尝试编译器同目录、匹配的 xlings `xim-x-llvm-tools/<version>/bin` 和
   `PATH`。
@@ -400,13 +402,13 @@ API、状态栏、任务和 clangd 集成。
 版本完全一致的 tag：
 
 ```sh
-git tag -a v0.2.5 -m "mcpp-vscode 0.2.5"
-git push origin v0.2.5
+git tag -a v0.2.7 -m "mcpp-vscode 0.2.7"
+git push origin v0.2.7
 ```
 
 `.github/workflows/release.yml` 会校验 tag，执行测试和打包，生成 VSIX 与 SHA-256 文件，
 并创建或更新对应的 GitHub Release。工作流当前不会发布到 VS Marketplace。
 
-项目地址：[wellwei/mcpp-vscode](https://github.com/wellwei/mcpp-vscode)
+项目地址：[mcpp-community/mcpp-vscode](https://github.com/mcpp-community/mcpp-vscode)
 
-问题反馈：[GitHub Issues](https://github.com/wellwei/mcpp-vscode/issues)
+问题反馈：[GitHub Issues](https://github.com/mcpp-community/mcpp-vscode/issues)
