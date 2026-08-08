@@ -33,7 +33,7 @@ test("declares the official clangd dependency and mcpp commands", () => {
   assert.equal(manifest.capabilities?.untrustedWorkspaces?.supported, "limited");
   assert.equal(
     manifest.capabilities?.untrustedWorkspaces?.description,
-    "未受信任工作区仅启用模块语法高亮，不执行 CDB、mcpp 或 clangd 指定的任何程序，也不接管 clangd 配置。",
+    "未受信任工作区仅启用模块语法高亮与 mcpp.toml 结构补全（纯文本分析），不执行 CDB、mcpp 或 clangd 指定的任何程序，也不接管 clangd 配置。",
   );
   assert.deepEqual(
     manifest.contributes?.commands?.map((command) => command.command),
