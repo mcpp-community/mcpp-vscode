@@ -37,11 +37,24 @@ test("拒绝双引号和控制字符，避免破坏 mcpp 生成的 TOML 和 C++ 
   }
 });
 
+test("拒绝会触发 mcpp 内置模板无限替换的项目名", () => {
+  // mcpp 当前会循环替换字面量 PROJECT；插入值仍包含该标记时不会终止。
+  for (const name of ["PROJECT", "myPROJECTname", "demo-PROJECT-app"]) {
+    assert.ok(validateNewProjectName(name) !== undefined, `should reject: ${name}`);
+  }
+});
+
 test("按跨平台策略拒绝 Windows 保留字符、设备名和尾随点", () => {
   for (const name of ["a<b", "a>b", "a:b", "a|b", "a?b", "a*b", "name."]) {
     assert.ok(validateNewProjectName(name) !== undefined, `should reject: ${name}`);
   }
   for (const name of ["CON", "con", "PRN", "AUX", "NUL", "COM1", "com9", "LPT1"]) {
+    assert.ok(validateNewProjectName(name) !== undefined, `should reject: ${name}`);
+  }
+});
+
+test("Windows 保留设备名添加扩展后仍然拒绝", () => {
+  for (const name of ["CON.txt", "con.json", "AUX.md", "LPT1.log", "COM9.tar.gz"]) {
     assert.ok(validateNewProjectName(name) !== undefined, `should reject: ${name}`);
   }
 });

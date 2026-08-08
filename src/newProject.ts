@@ -42,7 +42,8 @@ export async function runNewProjectFlow(
 
 const CONTROL_CHARS = /[\u0000-\u001F\u007F]/;
 const WINDOWS_RESERVED_CHARS = /[<>:"|?*]/;
-const WINDOWS_DEVICE_NAMES = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+const WINDOWS_DEVICE_NAMES = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i;
+const MCPP_BUILTIN_TEMPLATE_MARKER = "PROJECT";
 
 /**
  * 新建工程的项目名校验。返回错误提示；undefined 表示合法。
@@ -68,6 +69,10 @@ export function validateNewProjectName(input: string): string | undefined {
   }
   if (name === "." || name === "..") {
     return "项目名不能是 . 或 ..";
+  }
+  // mcpp#380：当前内置模板会重复扫描替换结果，名称包含该标记时不会终止。
+  if (name.includes(MCPP_BUILTIN_TEMPLATE_MARKER)) {
+    return "项目名不能包含 PROJECT，否则会触发当前 mcpp 模板替换缺陷";
   }
   if (CONTROL_CHARS.test(name)) {
     return "项目名不能包含控制字符";
