@@ -29,8 +29,25 @@ test("拒绝相对路径名 . 和 ..", () => {
   }
 });
 
+test("拒绝双引号和控制字符，避免破坏 mcpp 生成的 TOML 和 C++ 源码", () => {
+  // mcpp 模板把项目名直接写进 mcpp.toml 的 name = "{}" 和 main.cpp，
+  // 不做 TOML/C++ 转义，这些输入会生成坏工程。
+  for (const name of ['bad"name', "bad\tname", "bad\nname", "bad\rname", "bad\u001Fname", "bad\u007Fname"]) {
+    assert.ok(validateNewProjectName(name) !== undefined, `should reject: ${JSON.stringify(name)}`);
+  }
+});
+
+test("按跨平台策略拒绝 Windows 保留字符、设备名和尾随点", () => {
+  for (const name of ["a<b", "a>b", "a:b", "a|b", "a?b", "a*b", "name."]) {
+    assert.ok(validateNewProjectName(name) !== undefined, `should reject: ${name}`);
+  }
+  for (const name of ["CON", "con", "PRN", "AUX", "NUL", "COM1", "com9", "LPT1"]) {
+    assert.ok(validateNewProjectName(name) !== undefined, `should reject: ${name}`);
+  }
+});
+
 test("接受常规项目名，前后空白忽略", () => {
-  for (const name of ["hello", "hello-mcpp", "my_project", "a.b.c", "项目", "  padded  "]) {
+  for (const name of ["hello", "hello-mcpp", "my_project", "a.b.c", "项目", "console", "com10", "  padded  "]) {
     assert.equal(validateNewProjectName(name), undefined, `should accept: ${name}`);
   }
 });
