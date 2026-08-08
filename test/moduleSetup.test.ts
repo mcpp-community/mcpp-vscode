@@ -255,13 +255,15 @@ test("确认文案说明将复用已安装的 LLVM", () => {
 });
 
 test("确认文案在无需切换时明确不修改全局默认值", () => {
+  const plan = ready(buildModuleSetupPlan(inventory(), "unavailable", true, false));
   const confirmation = moduleSetupConfirmation(
     "unavailable",
-    { kind: "ready", installLlvm: true, switchDefault: false },
+    plan,
   );
 
-  assert.match(confirmation.detail, /不修改全局默认工具链/);
+  assert.match(confirmation.detail, /不会修改全局默认工具链/);
   assert.doesNotMatch(confirmation.detail, /设为全局默认工具链/);
+  assert.doesNotMatch(confirmation.detail, /当前 LLVM 已生效/);
 });
 
 interface OperationFixture {

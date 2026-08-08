@@ -98,7 +98,7 @@ export function moduleSetupConfirmation(
     : "将复用已安装的 LLVM；补齐配套组件时仍可能下载 LLVM/llvm-tools";
   const defaultDetail = plan.switchDefault
     ? "并把 LLVM 设为全局默认工具链"
-    : "当前 LLVM 已生效，不修改全局默认工具链";
+    : "不会修改全局默认工具链";
   return {
     message,
     detail: `${installDetail}，${defaultDetail}；不会编辑项目清单 mcpp.toml。`,
