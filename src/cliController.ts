@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import process from "node:process";
 
 import * as vscode from "vscode";
@@ -23,6 +25,7 @@ import {
   type TaskCompletion,
 } from "./tasks";
 import { CLI_COMMANDS, quickMenuItems, quickMenuStatusText } from "./commands";
+import { runNewProjectFlow, validateNewProjectName } from "./newProject";
 
 export interface McppCliControllerOptions {
   output: vscode.OutputChannel;
@@ -82,6 +85,7 @@ export class McppCliController {
     const disposables: vscode.Disposable[] = [
       this.status,
       vscode.commands.registerCommand(CLI_COMMANDS.showMenu, this.guarded(() => this.showMenu())),
+      vscode.commands.registerCommand(CLI_COMMANDS.newProject, this.guarded(() => this.newProject())),
       vscode.commands.registerCommand(CLI_COMMANDS.build, this.guarded(() => this.runProjectTask("build"))),
       vscode.commands.registerCommand(CLI_COMMANDS.run, this.guarded(() => this.runProjectTask("run"))),
       vscode.commands.registerCommand(CLI_COMMANDS.test, this.guarded(() => this.runProjectTask("test"))),
@@ -491,6 +495,57 @@ export class McppCliController {
     if (picked !== undefined) {
       await vscode.commands.executeCommand(picked.command);
     }
+  }
+
+  public async newProject(): Promise<void> {
+    if (!this.requireTrusted()) {
+      return;
+    }
+
+    const input = await vscode.window.showInputBox({
+      title: "新建 mcpp 工程（1/2）",
+      prompt: "输入项目名，将在所选位置创建同名项目文件夹",
+      placeHolder: "hello-mcpp",
+      validateInput: validateNewProjectName,
+    });
+    if (input === undefined) {
+      return;
+    }
+    const projectName = input.trim();
+
+    const picked = await vscode.window.showOpenDialog({
+      title: "选择项目位置（2/2）",
+      canSelectFiles: false,
+      canSelectFolders: true,
+      canSelectMany: false,
+      openLabel: "在此创建项目",
+    });
+    const location = picked?.[0];
+    if (location === undefined) {
+      return;
+    }
+
+    const projectRoot = join(location.fsPath, projectName);
+    const confirmCreate = "创建并打开";
+    await runNewProjectFlow(projectName, location.fsPath, projectRoot, {
+      exists: existsSync,
+      confirm: async (message) =>
+        (await vscode.window.showWarningMessage(message, { modal: true }, confirmCreate))
+        === confirmCreate,
+      run: async (name, cwd) => {
+        const executable = this.mcppExecutable(undefined);
+        const args = mcppCommandArguments("new", name);
+        const result = await runProcess(executable, args, cwd);
+        this.appendShortCommand("新建工程", executable, args, result);
+        return result.exitCode;
+      },
+      openFolder: async (path) => {
+        await vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(path));
+      },
+      showError: async (message) => {
+        await vscode.window.showErrorMessage(message);
+      },
+    });
   }
 
   private guarded(operation: () => Promise<void>): () => Promise<void> {

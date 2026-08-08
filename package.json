@@ -28,6 +28,7 @@
     "onCommand:mcpp.refreshCompilationDatabase",
     "onCommand:mcpp.checkModuleSupport",
     "onCommand:mcpp.showMenu",
+    "onCommand:mcpp.newProject",
     "onCommand:mcpp.build",
     "onCommand:mcpp.run",
     "onCommand:mcpp.test",
@@ -67,6 +68,10 @@
       {
         "command": "mcpp.showMenu",
         "title": "mcpp: 打开快捷菜单"
+      },
+      {
+        "command": "mcpp.newProject",
+        "title": "mcpp: 新建工程"
       },
       {
         "command": "mcpp.build",
