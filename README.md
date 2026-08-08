@@ -18,6 +18,7 @@ mcpp CLI 操作；它不实现新的 C++ 语言服务器，也不替代 mcpp 的
 | --- | --- | --- | --- |
 | 识别 mcpp 工程 | 支持 | 支持 | 支持 |
 | `mcpp.toml` TOML 语法高亮 | 支持 | 支持 | 支持 |
+| `mcpp.toml` 结构补全（段头 + 写法模板） | 支持 | 支持 | 支持 |
 | `build.mcpp`、`.cppm`、`.ixx`、`.mpp`、`.ccm` 文件关联 | 支持 | 支持 | 支持 |
 | `module`、`export module`、`import` 语法高亮 | 支持 | 支持 | 支持 |
 | 构建、运行、测试、清理命令 | 支持 | 支持 | 支持 |
@@ -97,6 +98,19 @@ TextMate 语法规则提供。
 `import mcpp;` 不会再被误报为缺少 C++ 模块。真正的 mcpp API 补全需要 mcpp 核心
 未来生成宿主 helper 的 CDB 和 PCM 映射。
 
+### mcpp.toml 结构补全
+
+- 段头补全：26 个段（`[package]`、`[targets.<name>]`、`[dependencies]`、`[build-dependencies]`、
+  `[features]`、`[indices]`、`[pack]` 等），参数化段带可跳转占位符。
+- 写法模板：依赖段的依赖写法（版本 / 路径 / git / features / tools）、`[features]` 表形式、
+  capabilities / xlings / tools.overrides / generated_files 等开放段的条目形态。
+- 每条建议携带显式替换范围，部分输入（`[dep`、`na`）不会残留无效文本；所有语义规则有真实
+  mcpp 契约测试（44 例，无 mcpp 环境自动跳过）。
+- 范围边界：不提供静态字段键/枚举（等上游版本化 manifest schema），不提供依赖包名/版本候选
+  （等上游批量 catalog 接口）；未知自定义段与 `[[...]]` 数组表不提供建议。
+- 由 `mcpp.tomlCompletion` 设置控制（默认开启）；未受信任工作区仅做纯文本分析，不执行任何
+  外部程序。
+
 ### LLVM 与 clangd 集成
 
 扩展读取 mcpp 生成的 `compile_commands.json`，然后：
@@ -172,7 +186,8 @@ xlings 补齐匹配版本的 llvm-tools（含 clangd），最后重新读取 CDB
   "mcpp.path": "/path/to/mcpp",
   "mcpp.clangd.path": "/path/to/matching/clangd",
   "mcpp.modulesSupport": "auto",
-  "mcpp.configureCppTools": true
+  "mcpp.configureCppTools": true,
+  "mcpp.tomlCompletion": true
 }
 ```
 
@@ -182,6 +197,7 @@ xlings 补齐匹配版本的 llvm-tools（含 clangd），最后重新读取 CDB
 | `mcpp.clangd.path` | 空 | 与 CDB 中 LLVM 编译器匹配的 clangd；空值表示自动发现 |
 | `mcpp.modulesSupport` | `auto` | `auto`、`on` 或 `off`，控制 clangd 实验模块参数 |
 | `mcpp.configureCppTools` | `true` | 手动配置 clangd 时，是否询问关闭当前工作区的 cpptools IntelliSense |
+| `mcpp.tomlCompletion` | `true` | 为 `mcpp.toml` 提供结构补全：段头与写法模板（snippet）；所有建议带显式替换范围，并经真实 mcpp 契约测试验证 |
 
 `mcpp.path` 只影响插件执行 mcpp CLI 命令。工程实际编译器来自
 `compile_commands.json`，`mcpp.clangd.path` 只指定语言服务器，三者相互独立。

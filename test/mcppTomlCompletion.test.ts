@@ -15,6 +15,7 @@ test("suggests section headers on a partial bracket line", () => {
   assert.ok(suggestions.length > 0);
   assert.ok(suggestions.every((suggestion) => suggestion.kind === "section"));
   assert.ok(labels(suggestions).includes("[dependencies]"));
+  assert.ok(labels(suggestions).includes("[build-dependencies]"));
   assert.ok(labels(suggestions).includes("[workspace]"));
   assert.ok(labels(suggestions).includes("[indices]"));
   // 每条建议都带显式替换范围（覆盖已输入的 "[dep"）。
@@ -24,6 +25,13 @@ test("suggests section headers on a partial bracket line", () => {
   // 参数化段插入 snippet。
   const targets = suggestions.find((suggestion) => suggestion.label === "[targets.<name>]");
   assert.equal(targets?.insertSnippet, "[targets.${1:name}]");
+});
+
+test("offers nothing inside [[...]] array-table headers", () => {
+  // mcpp manifest 不使用 TOML 数组表（[[...]]）：[[ 内不出建议，
+  // 避免把用户意图的数组表悄悄替换成普通段 [x]。
+  assert.deepEqual(computeMcppTomlCompletions(["[[dep"], 0, 5), []);
+  assert.deepEqual(computeMcppTomlCompletions(["[[dependencies]"], 0, 3), []);
 });
 
 test("suggests section headers at the top of the document", () => {
@@ -59,6 +67,12 @@ test("suggests dependency writing templates", () => {
 test("suggests dependency templates in conditional dependency sections", () => {
   const suggestions = computeMcppTomlCompletions(["[target.'cfg(windows)'.dependencies]", ""], 1, 0);
   assert.ok(labels(suggestions).includes('name = "version"'));
+});
+
+test("suggests dependency templates in build-dependencies", () => {
+  const suggestions = computeMcppTomlCompletions(["[build-dependencies]", ""], 1, 0);
+  assert.ok(labels(suggestions).includes('name = "version"'));
+  assert.ok(suggestions.every((suggestion) => suggestion.kind === "template"));
 });
 
 test("suggests templates in free-key sections", () => {

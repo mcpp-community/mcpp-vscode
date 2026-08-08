@@ -121,7 +121,7 @@ function fixtureFor(entry: SectionHeaderSpec): { manifest: string; files: Record
 test("段头注册表形态：数量与关键段齐全（防止测试与实现脱节）", { skip: skipReason }, () => {
   assert.ok(SECTION_HEADERS.length >= 20, `段头注册表只有 ${SECTION_HEADERS.length} 条（期望 ≥ 20）`);
   const groups = new Set(SECTION_HEADERS.map((entry) => entry.group));
-  for (const key of ["package", "dependencies", "workspace", "pack"]) {
+  for (const key of ["package", "dependencies", "build-dependencies", "workspace", "pack"]) {
     assert.ok(groups.has(key), `段头注册表缺少关键段 ${key}`);
   }
   const labels = SECTION_HEADERS.map((entry) => entry.label);

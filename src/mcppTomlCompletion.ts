@@ -43,6 +43,7 @@ export const SECTION_HEADERS: readonly SectionHeaderSpec[] = [
   { group: "generated_files", label: "[generated_files]", header: "[generated_files]", detail: "生成文件（路径 → 内容）" },
   { group: "dependencies", label: "[dependencies]", header: "[dependencies]", detail: "运行时依赖" },
   { group: "dev-dependencies", label: "[dev-dependencies]", header: "[dev-dependencies]", detail: "开发/测试依赖" },
+  { group: "build-dependencies", label: "[build-dependencies]", header: "[build-dependencies]", detail: "构建期依赖（仅构建期拉取，运行时不可见）" },
   { group: "workspace", label: "[workspace]", header: "[workspace]", detail: "工作空间成员声明" },
   { group: "workspace.dependencies", label: "[workspace.dependencies]", header: "[workspace.dependencies]", detail: "集中声明依赖版本，成员用 workspace = true 继承" },
   { group: "features", label: "[features]", header: "[features]", detail: "feature 定义" },
@@ -189,6 +190,11 @@ export function computeMcppTomlCompletions(
   const context = contextAt(lines, line, character);
 
   if (context.kind === "section-header") {
+    // mcpp manifest 不使用 TOML 数组表（[[...]]）；[[ 内不提供建议，
+    // 避免把用户意图的数组表悄悄替换成普通段 [x]（未知段会被 mcpp 静默忽略）。
+    if (context.isArray) {
+      return [];
+    }
     // parser 的替换范围从段名 token 开始；段头建议插入的是完整 "[xxx]"，
     // 需要把范围扩展到本行的 "["，避免留下 "[["。仅当 "[" 是行内首个
     // 非空白字符时才扩展（section-header 上下文正常都满足，防御奇怪输入）。
