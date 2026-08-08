@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import process from "node:process";
 
 import * as vscode from "vscode";
@@ -23,6 +25,13 @@ import {
   type TaskCompletion,
 } from "./tasks";
 import { CLI_COMMANDS, quickMenuItems, quickMenuStatusText } from "./commands";
+import { runNewProjectFlow, validateNewProjectName } from "./newProject";
+import {
+  mcppModuleSetupCommands,
+  type ModuleSetupCommand,
+  type ModuleSetupDecision,
+  type ModuleSetupStepResult,
+} from "./moduleSetup";
 
 export interface McppCliControllerOptions {
   output: vscode.OutputChannel;
@@ -82,6 +91,7 @@ export class McppCliController {
     const disposables: vscode.Disposable[] = [
       this.status,
       vscode.commands.registerCommand(CLI_COMMANDS.showMenu, this.guarded(() => this.showMenu())),
+      vscode.commands.registerCommand(CLI_COMMANDS.newProject, this.guarded(() => this.newProject())),
       vscode.commands.registerCommand(CLI_COMMANDS.build, this.guarded(() => this.runProjectTask("build"))),
       vscode.commands.registerCommand(CLI_COMMANDS.run, this.guarded(() => this.runProjectTask("run"))),
       vscode.commands.registerCommand(CLI_COMMANDS.test, this.guarded(() => this.runProjectTask("test"))),
@@ -106,6 +116,48 @@ export class McppCliController {
 
   public isBusy(): boolean {
     return this.operations.hasActive();
+  }
+
+  public async runAutomaticModuleSetup(
+    plan: Extract<ModuleSetupDecision, { kind: "ready" }>,
+  ): Promise<ModuleSetupStepResult> {
+    const project = this.requireProject();
+    const commands = mcppModuleSetupCommands(plan);
+    const firstCommand = commands[0];
+    if (project === undefined || !this.requireTrusted() || firstCommand === undefined) {
+      return {
+        stage: firstCommand?.stage ?? "build",
+        state: "failed",
+        detail: "当前工作区无法执行自动模块配置。",
+      };
+    }
+
+    const token: OperationToken = {};
+    if (this.operations.beginGlobal(token) !== undefined) {
+      return {
+        stage: firstCommand.stage,
+        state: "failed",
+        detail: "已有 mcpp 操作正在运行。",
+      };
+    }
+
+    const executable = this.mcppExecutable(project);
+    try {
+      for (const command of commands) {
+        const result = await this.executeAutomaticModuleSetupCommand(
+          project,
+          executable,
+          command,
+        );
+        if (result.state !== "succeeded") {
+          return result;
+        }
+      }
+      return { stage: "build", state: "succeeded" };
+    } finally {
+      // 整个 install/default/build 事务共用一个 token，异常时也必须释放。
+      this.operations.finishGlobal(token);
+    }
   }
 
   public async runProjectTask(kind: ProjectTaskKind): Promise<void> {
@@ -493,6 +545,57 @@ export class McppCliController {
     }
   }
 
+  public async newProject(): Promise<void> {
+    if (!this.requireTrusted()) {
+      return;
+    }
+
+    const input = await vscode.window.showInputBox({
+      title: "新建 mcpp 工程（1/2）",
+      prompt: "输入项目名，将在所选位置创建同名项目文件夹",
+      placeHolder: "hello-mcpp",
+      validateInput: validateNewProjectName,
+    });
+    if (input === undefined) {
+      return;
+    }
+    const projectName = input.trim();
+
+    const picked = await vscode.window.showOpenDialog({
+      title: "选择项目位置（2/2）",
+      canSelectFiles: false,
+      canSelectFolders: true,
+      canSelectMany: false,
+      openLabel: "在此创建项目",
+    });
+    const location = picked?.[0];
+    if (location === undefined) {
+      return;
+    }
+
+    const projectRoot = join(location.fsPath, projectName);
+    const confirmCreate = "创建并打开";
+    await runNewProjectFlow(projectName, location.fsPath, projectRoot, {
+      exists: existsSync,
+      confirm: async (message) =>
+        (await vscode.window.showWarningMessage(message, { modal: true }, confirmCreate))
+        === confirmCreate,
+      run: async (name, cwd) => {
+        const executable = this.mcppExecutable(undefined);
+        const args = mcppCommandArguments("new", name);
+        const result = await runProcess(executable, args, cwd);
+        this.appendShortCommand("新建工程", executable, args, result);
+        return result.exitCode;
+      },
+      openFolder: async (path) => {
+        await vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(path));
+      },
+      showError: async (message) => {
+        await vscode.window.showErrorMessage(message);
+      },
+    });
+  }
+
   private guarded(operation: () => Promise<void>): () => Promise<void> {
     return async () => {
       try {
@@ -543,8 +646,8 @@ export class McppCliController {
     return folder !== undefined && folder.uri.fsPath !== project.root;
   }
 
-  private async readToolchainInventory(
-    project: McppProjectDiscovery | undefined,
+  public async readToolchainInventory(
+    project: McppProjectDiscovery | undefined = this.options.currentProject(),
   ): Promise<ToolchainInventory | undefined> {
     const executable = this.mcppExecutable(project);
     const args = mcppCommandArguments("toolchain", "list");
@@ -565,6 +668,50 @@ export class McppCliController {
       return undefined;
     }
     return inventory;
+  }
+
+  private async executeAutomaticModuleSetupCommand(
+    project: McppProjectDiscovery,
+    executable: string,
+    command: ModuleSetupCommand,
+  ): Promise<ModuleSetupStepResult> {
+    if (command.mode === "process") {
+      const result = await runProcess(executable, command.args, project.root);
+      this.appendShortCommand(`自动模块配置：${command.stage}`, executable, command.args, result);
+      return {
+        stage: command.stage,
+        state: result.exitCode === 0 ? "succeeded" : "failed",
+        exitCode: result.exitCode,
+      };
+    }
+
+    // build 直接复用任务执行器，避免在 global token 内再次申请 project token。
+    let completion: TaskCompletion;
+    try {
+      completion = await this.executeTask(
+        project.root,
+        executable,
+        "mcpp: 自动模块配置构建",
+        command.args,
+      );
+    } catch (error) {
+      return {
+        stage: command.stage,
+        state: "failed",
+        detail: error instanceof Error ? error.message : String(error),
+      };
+    }
+    this.appendTaskCompletion(
+      project.root,
+      "mcpp: 自动模块配置构建",
+      command.args,
+      completion,
+    );
+    return {
+      stage: command.stage,
+      state: completion.state,
+      exitCode: completion.exitCode,
+    };
   }
 
   private async executeTask(

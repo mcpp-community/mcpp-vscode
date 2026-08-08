@@ -29,6 +29,7 @@
     "onCommand:mcpp.refreshCompilationDatabase",
     "onCommand:mcpp.checkModuleSupport",
     "onCommand:mcpp.showMenu",
+    "onCommand:mcpp.newProject",
     "onCommand:mcpp.build",
     "onCommand:mcpp.run",
     "onCommand:mcpp.test",
@@ -68,6 +69,10 @@
       {
         "command": "mcpp.showMenu",
         "title": "mcpp: 打开快捷菜单"
+      },
+      {
+        "command": "mcpp.newProject",
+        "title": "mcpp: 新建工程"
       },
       {
         "command": "mcpp.build",
@@ -212,12 +217,17 @@
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "compile": "tsc -p tsconfig.json",
     "test": "npm run clean && npm run compile && node --test dist/test/*.test.js",
-    "package": "npm run clean && npm run compile && vsce package"
+    "package": "npm run clean && npm run compile && vsce package",
+    "test:e2e": "npm run compile && node dist/test/e2e/runTest.js",
+    "test:all": "npm test && npm run test:e2e"
   },
   "devDependencies": {
+    "@types/mocha": "^10.0.10",
     "@types/node": "^24.0.0",
     "@types/vscode": "^1.90.0",
+    "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^3.9.2",
+    "mocha": "^11.8.0",
     "typescript": "^5.9.0"
   }
 }

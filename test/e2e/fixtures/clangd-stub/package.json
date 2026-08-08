@@ -1,0 +1,9 @@
+{
+  "name": "vscode-clangd",
+  "displayName": "clangd stub",
+  "version": "0.0.0",
+  "publisher": "llvm-vs-code-extensions",
+  "engines": { "vscode": "^1.90.0" },
+  "main": "./extension.js",
+  "activationEvents": ["onCommand:clangd.restart"]
+}

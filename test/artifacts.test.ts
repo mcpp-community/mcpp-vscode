@@ -39,6 +39,7 @@ test("declares the official clangd dependency and mcpp commands", () => {
     manifest.contributes?.commands?.map((command) => command.command),
     [
       "mcpp.showMenu",
+      "mcpp.newProject",
       "mcpp.build",
       "mcpp.run",
       "mcpp.test",
@@ -60,6 +61,43 @@ test("declares the official clangd dependency and mcpp commands", () => {
     "*.ixx": "cpp",
     "*.mpp": "cpp",
   });
+});
+
+test("自动模块配置使用非交互复合操作和单一全局锁", () => {
+  const source = readFileSync(path.join(root, "src/cliController.ts"), "utf8");
+  assert.match(source, /public async readToolchainInventory\s*\(/);
+  const start = source.indexOf("public async runAutomaticModuleSetup");
+  assert.notEqual(start, -1);
+  const end = source.indexOf("public async ", start + 10);
+  const method = source.slice(start, end === -1 ? source.length : end);
+  assert.match(method, /mcppModuleSetupCommands\(plan\)/);
+  assert.match(method, /beginGlobal\(token\)/);
+  assert.match(method, /finally\s*\{[\s\S]*finishGlobal\(token\)/);
+  assert.doesNotMatch(method, /pickInstallSpec|selectDefaultToolchainFromInventory|showQuickPick|showWarningMessage/);
+});
+
+test("一键向导只有一次确认并在构建后重载上下文", () => {
+  const source = readFileSync(path.join(root, "src/extension.ts"), "utf8");
+  const start = source.indexOf("async function autoConfigureModulesWizard");
+  const end = source.indexOf("export async function activate", start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  const wizard = source.slice(start, end);
+  for (const expected of [
+    "readToolchainInventory",
+    "buildModuleSetupPlan",
+    "moduleSetupConfirmation",
+    "runAutomaticModuleSetup",
+    "executeModuleSetup",
+    "loadProjectContext",
+  ]) {
+    assert.match(wizard, new RegExp(expected));
+  }
+  assert.match(wizard, /modal:\s*true/);
+  assert.match(wizard, /let currentContext/);
+  assert.doesNotMatch(wizard, /CLI_COMMANDS\.(installToolchain|selectDefaultToolchain)/);
+  assert.doesNotMatch(wizard, /刷新编译数据库|showQuickPick|showInputBox|maybeDisableCppTools/);
+  assert.doesNotMatch(wizard, /configureClangd\([^\n]*"interactive"/);
 });
 
 test("shows editor title buttons only inside mcpp projects", () => {
@@ -231,6 +269,35 @@ test("泛化 triple 工具链由 mcpp 最终校验", () => {
   assert.match(method, /可能携带 target 语义.*最终由 mcpp 校验/s);
 });
 
+test("新建工程先校验目标路径再确认创建，成功后只打开不构建", () => {
+  const source = readFileSync(path.join(root, "src/cliController.ts"), "utf8");
+  const start = source.indexOf("public async newProject");
+  const end = source.indexOf("private guarded", start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+
+  // 控制流本身由 test/newProject.test.ts 对 runNewProjectFlow 的行为级测试覆盖；
+  // 这里只验证控制器把 UI/进程依赖注入流程函数。
+  const method = source.slice(start, end);
+  assert.match(method, /validateNewProjectName/);
+  assert.match(method, /runNewProjectFlow/);
+  const flow = method.indexOf("runNewProjectFlow");
+  const exists = method.indexOf("existsSync", flow);
+  const confirm = method.indexOf("showWarningMessage", flow);
+  const create = method.indexOf("runProcess", flow);
+  const open = method.indexOf('executeCommand("vscode.openFolder"', flow);
+  assert.ok(exists >= 0 && exists < confirm);
+  assert.ok(confirm >= 0 && confirm < create);
+  assert.ok(create >= 0 && create < open);
+});
+
+test("新建工程契约是创建并打开，不自动构建", () => {
+  const controller = readFileSync(path.join(root, "src/cliController.ts"), "utf8");
+  const extension = readFileSync(path.join(root, "src/extension.ts"), "utf8");
+  assert.doesNotMatch(controller, /globalState|PENDING_NEW_PROJECT/);
+  assert.doesNotMatch(extension, /PENDING_NEW_PROJECT/);
+});
+
 test("声明 GitHub 仓库和扩展图标", () => {
   const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
   assert.equal(manifest.icon, "images/logo.png");
@@ -266,4 +333,20 @@ test("tag release 工作流校验版本并发布 VSIX", () => {
   assert.match(workflow, /sha256sum/);
   assert.match(workflow, /gh release create/);
   assert.match(workflow, /gh release upload.*--clobber/s);
+});
+
+test("PR CI 分离单元打包和 Extension Host E2E", () => {
+  const workflow = readFileSync(path.join(root, ".github/workflows/ci.yml"), "utf8");
+  assert.match(workflow, /pull_request:/);
+  assert.match(workflow, /push:\s*\n\s+branches:\s*\n\s+- main/);
+  assert.match(workflow, /permissions:\s*\n\s+contents: read/);
+  assert.match(workflow, /concurrency:[\s\S]*cancel-in-progress: true/);
+  assert.match(workflow, /node-version: 22/);
+  assert.match(workflow, /unit-and-package:/);
+  assert.match(workflow, /extension-host-e2e:/);
+  assert.match(workflow, /npm ci/);
+  assert.match(workflow, /npm test/);
+  assert.match(workflow, /npm run package/);
+  assert.match(workflow, /unzip -t/);
+  assert.match(workflow, /xvfb-run -a npm run test:e2e/);
 });
