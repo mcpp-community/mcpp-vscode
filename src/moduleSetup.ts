@@ -113,7 +113,8 @@ export interface ModuleSetupStepResult {
 }
 
 export interface ModuleSetupOperations {
-  prepare(command: ModuleSetupCommand): Promise<ModuleSetupStepResult>;
+  prepare?: (command: ModuleSetupCommand) => Promise<ModuleSetupStepResult>;
+  preparePlan?: () => Promise<ModuleSetupStepResult>;
   reload(): Promise<ModuleSetupStepResult>;
   ensureClangd(): Promise<ModuleSetupStepResult>;
   checkModules(): Promise<ModuleSetupStepResult>;
@@ -151,17 +152,37 @@ export async function executeModuleSetup(
   const steps: ModuleSetupStepResult[] = [];
   let buildFailed = false;
 
-  for (const command of mcppModuleSetupCommands(plan)) {
-    const result = await operations.prepare(command);
+  const commands = mcppModuleSetupCommands(plan);
+  if (operations.preparePlan !== undefined) {
+    const result = await operations.preparePlan();
     steps.push(result);
-    if (result.state === "succeeded") {
-      continue;
+    if (result.state !== "succeeded") {
+      if (result.stage === "build" && result.state === "failed") {
+        buildFailed = true;
+      } else {
+        return stoppedOutcome(result, steps);
+      }
     }
-    if (command.stage === "build" && result.state === "failed") {
-      buildFailed = true;
-      break;
+  } else {
+    if (operations.prepare === undefined) {
+      const firstCommand = commands[0];
+      if (firstCommand === undefined) {
+        return stoppedOutcome({ stage: "build", state: "failed" }, steps);
+      }
+      return stoppedOutcome({ stage: firstCommand.stage, state: "failed" }, steps);
     }
-    return stoppedOutcome(result, steps);
+    for (const command of commands) {
+      const result = await operations.prepare(command);
+      steps.push(result);
+      if (result.state === "succeeded") {
+        continue;
+      }
+      if (command.stage === "build" && result.state === "failed") {
+        buildFailed = true;
+        break;
+      }
+      return stoppedOutcome(result, steps);
+    }
   }
 
   // 构建失败后仍尝试恢复现有 CDB；只有完整恢复链成功才算降级成功。

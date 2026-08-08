@@ -76,6 +76,30 @@ test("自动模块配置使用非交互复合操作和单一全局锁", () => {
   assert.doesNotMatch(method, /pickInstallSpec|selectDefaultToolchainFromInventory|showQuickPick|showWarningMessage/);
 });
 
+test("一键向导只有一次确认并在构建后重载上下文", () => {
+  const source = readFileSync(path.join(root, "src/extension.ts"), "utf8");
+  const start = source.indexOf("async function autoConfigureModulesWizard");
+  const end = source.indexOf("export async function activate", start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  const wizard = source.slice(start, end);
+  for (const expected of [
+    "readToolchainInventory",
+    "buildModuleSetupPlan",
+    "moduleSetupConfirmation",
+    "runAutomaticModuleSetup",
+    "executeModuleSetup",
+    "loadProjectContext",
+  ]) {
+    assert.match(wizard, new RegExp(expected));
+  }
+  assert.match(wizard, /modal:\s*true/);
+  assert.match(wizard, /let currentContext/);
+  assert.doesNotMatch(wizard, /CLI_COMMANDS\.(installToolchain|selectDefaultToolchain)/);
+  assert.doesNotMatch(wizard, /刷新编译数据库|showQuickPick|showInputBox|maybeDisableCppTools/);
+  assert.doesNotMatch(wizard, /configureClangd\([^\n]*"interactive"/);
+});
+
 test("shows editor title buttons only inside mcpp projects", () => {
   const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
   assert.deepEqual(manifest.contributes?.menus?.["editor/title"], [

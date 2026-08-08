@@ -311,6 +311,25 @@ test("成功流程严格按安装、默认、构建、重载、clangd、检查�
   );
 });
 
+test("批量准备操作只执行一次并继续恢复链", async () => {
+  const fixture = operationsWith();
+  let preparePlanCalls = 0;
+  const outcome = await executeModuleSetup(
+    { kind: "ready", installLlvm: true, switchDefault: true },
+    {
+      ...fixture.operations,
+      preparePlan: async () => {
+        preparePlanCalls += 1;
+        return result("build", "succeeded");
+      },
+    },
+  );
+
+  assert.equal(preparePlanCalls, 1);
+  assert.deepEqual(fixture.calls, ["reload", "clangd", "check"]);
+  assert.equal(outcome.state, "succeeded");
+});
+
 test("安装或默认步骤取消、失败后立即停止", async () => {
   const cases: Array<{
     stage: "install" | "default";
