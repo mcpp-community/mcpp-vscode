@@ -142,17 +142,26 @@ const XLINGS_BINARY_LINE = /^\s*xlings binary\s*=\s*(.+?)\s*$/im;
 // environment; it owns its tool paths). Works for install.sh, AUR and any
 // custom MCPP_PREFIX layout. Falls back to the historical path heuristics for
 // standalone ~/.xlings installs and for mcpp versions without the line.
+//
+// The subprocess is bounded by MCPP_SELF_ENV_TIMEOUT_MS: the wizard reaches
+// this step only after mcpp is initialized (toolchain list / build already
+// ran), so 60s is generous while still guarding against an extreme hang.
+const MCPP_SELF_ENV_TIMEOUT_MS = 60_000;
+
 export async function resolveXlingsExecutable(
   mcppExecutable: string,
   runner: ProcessRunner = runProcess,
+  options?: FindXlingsOptions,
 ): Promise<string | undefined> {
-  const result = await runner(mcppExecutable, ["self", "env"]);
+  const result = await runner(mcppExecutable, ["self", "env"], undefined, {
+    timeoutMs: MCPP_SELF_ENV_TIMEOUT_MS,
+  });
   const match = `${result.stdout}\n${result.stderr}`.match(XLINGS_BINARY_LINE);
   const reported = match?.[1]?.trim();
   if (reported !== undefined && reported.length > 0 && existsSync(reported)) {
     return reported;
   }
-  return findXlingsExecutable();
+  return findXlingsExecutable(options);
 }
 
 export async function runXlingsCommand(
