@@ -97,7 +97,7 @@ test("LLVM 已生效时不重复安装或切换", () => {
   });
 });
 
-test("没有 effective 工具链时不推断需要切换全局默认", () => {
+test("没有 effective 工具链时安装 LLVM 后设置全局默认", () => {
   const plan = buildModuleSetupPlan(
     inventory(),
     "unavailable",
@@ -108,7 +108,7 @@ test("没有 effective 工具链时不推断需要切换全局默认", () => {
   assert.deepEqual(plan, {
     kind: "ready",
     installLlvm: true,
-    switchDefault: false,
+    switchDefault: true,
   });
 });
 
@@ -216,12 +216,12 @@ test("模块设置命令使用固定 argv 数组且始终构建", () => {
     [
       { stage: "install", mode: "task", args: ["toolchain", "install", "llvm"] },
       { stage: "default", mode: "process", args: ["toolchain", "default", "llvm"] },
-      { stage: "build", mode: "task", args: ["build"] },
+      { stage: "build", mode: "task", args: ["build", "--no-cache"] },
     ],
   );
   assert.deepEqual(
     mcppModuleSetupCommands({ kind: "ready", installLlvm: false, switchDefault: false }),
-    [{ stage: "build", mode: "task", args: ["build"] }],
+    [{ stage: "build", mode: "task", args: ["build", "--no-cache"] }],
   );
 });
 
@@ -255,7 +255,13 @@ test("确认文案说明将复用已安装的 LLVM", () => {
 });
 
 test("确认文案在无需切换时明确不修改全局默认值", () => {
-  const plan = ready(buildModuleSetupPlan(inventory(), "unavailable", true, false));
+  const llvm = toolchain("llvm", true);
+  const plan = ready(buildModuleSetupPlan(
+    inventory({ installed: [llvm], effective: llvm }),
+    "full",
+    true,
+    false,
+  ));
   const confirmation = moduleSetupConfirmation(
     "unavailable",
     plan,

@@ -49,7 +49,7 @@ export function buildModuleSetupPlan(
   return {
     kind: "ready",
     installLlvm: !installedHostLlvm,
-    switchDefault: inventory.effective !== undefined && !effectiveIsLlvm,
+    switchDefault: !effectiveIsLlvm,
   };
 }
 
@@ -75,7 +75,7 @@ export function mcppModuleSetupCommands(plan: ModuleSetupPlan): ModuleSetupComma
       args: ["toolchain", "default", "llvm"],
     });
   }
-  commands.push({ stage: "build", mode: "task", args: ["build"] });
+  commands.push({ stage: "build", mode: "task", args: ["build", "--no-cache"] });
   return commands;
 }
 

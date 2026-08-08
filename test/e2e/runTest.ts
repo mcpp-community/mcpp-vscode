@@ -28,6 +28,7 @@ async function main(): Promise<void> {
 
   try {
     await runTests({
+      version: "1.90.2",
       extensionDevelopmentPath: repositoryRoot,
       extensionTestsPath: join(repositoryRoot, "dist/test/e2e/suite/index.js"),
       launchArgs: [
