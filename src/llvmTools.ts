@@ -4,7 +4,11 @@ import path from "node:path";
 import process from "node:process";
 
 import type { ToolIdentity } from "./analysis";
-import { runProcess, type ProcessResult } from "./process";
+import {
+  runProcess,
+  type ProcessResult,
+  type ProcessRunner,
+} from "./process";
 
 export function llvmToolsVersionSpec(identity: ToolIdentity): string {
   return `${identity.major}.${identity.minor}.${identity.patch}`;
@@ -60,8 +64,16 @@ export function xlingsInstallArgs(version?: string): string[] {
   return ["update", "llvm-tools"];
 }
 
-export function findXlingsExecutable(): string | undefined {
-  const home = os.homedir();
+export interface FindXlingsOptions {
+  /** Override for tests: base home directory instead of os.homedir(). */
+  home?: string;
+  /** Override for tests: environment instead of process.env. */
+  env?: NodeJS.ProcessEnv;
+}
+
+export function findXlingsExecutable(options?: FindXlingsOptions): string | undefined {
+  const home = options?.home ?? os.homedir();
+  const env = options?.env ?? process.env;
   const knownPaths = [
     path.join(home, ".xlings", "subos", "current", "bin", "xlings"),
     path.join(home, ".xlings", "bin", "xlings"),
@@ -71,6 +83,26 @@ export function findXlingsExecutable(): string | undefined {
       path.join(home, ".xlings", "subos", "current", "bin", "xlings.exe"),
     );
   }
+
+  // mcpp (install.sh / AUR / mcpp-m) bundles xlings inside its own registry
+  // sandbox instead of installing to ~/.xlings. The AUR launcher pins the
+  // path via MCPP_VENDORED_XLINGS; otherwise it lives at
+  // $MCPP_HOME/registry/bin/xlings. Without probing both, the one-click
+  // module setup can never auto-install llvm-tools after a standard install.
+  const vendored = env.MCPP_VENDORED_XLINGS?.trim();
+  if (vendored !== undefined && vendored.length > 0) {
+    knownPaths.push(vendored);
+  }
+  const mcppHome = env.MCPP_HOME?.trim();
+  const extension = process.platform === "win32" ? ".exe" : "";
+  knownPaths.push(
+    path.join(
+      mcppHome !== undefined && mcppHome.length > 0 ? mcppHome : path.join(home, ".mcpp"),
+      "registry",
+      "bin",
+      `xlings${extension}`,
+    ),
+  );
 
   // Check known install paths first
   for (const candidate of knownPaths) {
@@ -82,15 +114,15 @@ export function findXlingsExecutable(): string | undefined {
   // Fall back to PATH, but only when "xlings" actually resolves there. Always
   // returning "xlings" hid the not-installed case, so callers could never show
   // the "xlings 未安装" guidance.
-  return xlingsResolvableOnPath() ? "xlings" : undefined;
+  return xlingsResolvableOnPath(env.PATH) ? "xlings" : undefined;
 }
 
-function xlingsResolvableOnPath(): boolean {
+function xlingsResolvableOnPath(pathValue?: string): boolean {
   const names = process.platform === "win32"
     ? ["xlings.exe", "xlings.cmd", "xlings.bat"]
     : ["xlings"];
-  const pathValue = process.env.PATH ?? "";
-  for (const dir of pathValue.split(path.delimiter)) {
+  const pathEnv = pathValue ?? "";
+  for (const dir of pathEnv.split(path.delimiter)) {
     if (dir.length === 0) {
       continue;
     }
@@ -101,6 +133,35 @@ function xlingsResolvableOnPath(): boolean {
     }
   }
   return false;
+}
+
+const XLINGS_BINARY_LINE = /^\s*xlings binary\s*=\s*(.+?)\s*$/im;
+
+// Source of truth is mcpp itself, not the filesystem or PATH: `mcpp self env`
+// reports the exact xlings bundled with THIS mcpp (mcpp is a project-level
+// environment; it owns its tool paths). Works for install.sh, AUR and any
+// custom MCPP_PREFIX layout. Falls back to the historical path heuristics for
+// standalone ~/.xlings installs and for mcpp versions without the line.
+//
+// The subprocess is bounded by MCPP_SELF_ENV_TIMEOUT_MS: the wizard reaches
+// this step only after mcpp is initialized (toolchain list / build already
+// ran), so 60s is generous while still guarding against an extreme hang.
+const MCPP_SELF_ENV_TIMEOUT_MS = 60_000;
+
+export async function resolveXlingsExecutable(
+  mcppExecutable: string,
+  runner: ProcessRunner = runProcess,
+  options?: FindXlingsOptions,
+): Promise<string | undefined> {
+  const result = await runner(mcppExecutable, ["self", "env"], undefined, {
+    timeoutMs: MCPP_SELF_ENV_TIMEOUT_MS,
+  });
+  const match = `${result.stdout}\n${result.stderr}`.match(XLINGS_BINARY_LINE);
+  const reported = match?.[1]?.trim();
+  if (reported !== undefined && reported.length > 0 && existsSync(reported)) {
+    return reported;
+  }
+  return findXlingsExecutable(options);
 }
 
 export async function runXlingsCommand(

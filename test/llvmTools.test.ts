@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import {
@@ -7,7 +10,11 @@ import {
   xlingsInstallArgs,
   deriveInstalledClangdPath,
   findXlingsExecutable,
+  resolveXlingsExecutable,
 } from "../src/llvmTools";
+
+// `xlings` on POSIX, `xlings.exe` on Windows — mirrors mcpp's exe_suffix.
+const xlingsBinaryName = process.platform === "win32" ? "xlings.exe" : "xlings";
 
 test("extracts version string from ToolIdentity", () => {
   assert.equal(
@@ -67,4 +74,116 @@ test("findXlingsExecutable returns a string or undefined", () => {
   const result = findXlingsExecutable();
   // Returns string (PATH fallback or known path) or undefined if xlings not found
   assert.ok(result === undefined || typeof result === "string");
+});
+
+test("findXlingsExecutable finds the xlings bundled in $MCPP_HOME/registry/bin", () => {
+  const home = mkdtempSync(path.join(os.tmpdir(), "mcpp-vscode-mcpp-home-"));
+  const registryBin = path.join(home, "registry", "bin");
+  const xlingsPath = path.join(registryBin, xlingsBinaryName);
+  mkdirSync(registryBin, { recursive: true });
+  writeFileSync(xlingsPath, "#!/bin/sh\n");
+  try {
+    assert.equal(
+      findXlingsExecutable({ home, env: { MCPP_HOME: home } }),
+      xlingsPath,
+    );
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("findXlingsExecutable falls back to $HOME/.mcpp/registry/bin when MCPP_HOME is unset", () => {
+  const home = mkdtempSync(path.join(os.tmpdir(), "mcpp-vscode-home-"));
+  const registryBin = path.join(home, ".mcpp", "registry", "bin");
+  const xlingsPath = path.join(registryBin, xlingsBinaryName);
+  mkdirSync(registryBin, { recursive: true });
+  writeFileSync(xlingsPath, "#!/bin/sh\n");
+  try {
+    assert.equal(
+      findXlingsExecutable({ home, env: {} }),
+      xlingsPath,
+    );
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("findXlingsExecutable honors MCPP_VENDORED_XLINGS", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "mcpp-vscode-vendored-"));
+  const vendored = path.join(root, "opt-mcpp", "registry", "bin", xlingsBinaryName);
+  mkdirSync(path.dirname(vendored), { recursive: true });
+  writeFileSync(vendored, "#!/bin/sh\n");
+  try {
+    assert.equal(
+      findXlingsExecutable({ home: root, env: { MCPP_VENDORED_XLINGS: vendored } }),
+      vendored,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("resolveXlingsExecutable reads the xlings binary from `mcpp self env`", async () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "mcpp-vscode-selfenv-"));
+  const xlingsPath = path.join(root, "registry", "bin", xlingsBinaryName);
+  mkdirSync(path.dirname(xlingsPath), { recursive: true });
+  writeFileSync(xlingsPath, "#!/bin/sh\n");
+  const runner = async () => ({
+    exitCode: 0,
+    stdout: `MCPP_HOME = ${root}\nxlings binary = ${xlingsPath}\nxlings pinned = 2026.8.8.1\n`,
+    stderr: "",
+  });
+  try {
+    assert.equal(
+      await resolveXlingsExecutable("/tools/mcpp", runner),
+      xlingsPath,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("resolveXlingsExecutable passes a timeout to `mcpp self env`", async () => {
+  let captured: { timeoutMs?: number } | undefined;
+  const runner = async (
+    _executable: string,
+    _args: string[],
+    _cwd?: string,
+    options?: { timeoutMs?: number },
+  ) => {
+    captured = options;
+    return { exitCode: 0, stdout: "", stderr: "" };
+  };
+  await resolveXlingsExecutable("/tools/mcpp", runner);
+  assert.equal(captured?.timeoutMs, 60_000);
+});
+
+test("resolveXlingsExecutable falls back to path probing when the reported path does not exist", async () => {
+  const home = mkdtempSync(path.join(os.tmpdir(), "mcpp-vscode-fallback-missing-"));
+  const runner = async () => ({
+    exitCode: 0,
+    stdout: "xlings binary = /no/such/xlings\n",
+    stderr: "",
+  });
+  try {
+    assert.equal(
+      await resolveXlingsExecutable("/tools/mcpp", runner, { home, env: {} }),
+      undefined,
+    );
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("resolveXlingsExecutable falls back to path probing when `mcpp self env` fails", async () => {
+  const home = mkdtempSync(path.join(os.tmpdir(), "mcpp-vscode-fallback-fail-"));
+  const runner = async () => ({ exitCode: 1, stdout: "", stderr: "boom\n" });
+  try {
+    assert.equal(
+      await resolveXlingsExecutable("/tools/mcpp", runner, { home, env: {} }),
+      undefined,
+    );
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
 });
