@@ -58,6 +58,16 @@ test("describes configure-only results without treating an old CDB as newly gene
   });
 });
 
+test("releases an IDE operation queue when an external operation exceeds its deadline", async () => {
+  const stalled = new Promise<string>(() => {
+    // 模拟 clangd.restart 或 mcpp configure-only 永久等待。
+  });
+
+  const result = await workflow.withTimeout(stalled, 10, "timed-out");
+
+  assert.equal(result, "timed-out");
+});
+
 test("serializes reconciliation and merges pending restart requests", async () => {
   let releaseFirst: (() => void) | undefined;
   const firstGate = new Promise<void>((resolve) => {

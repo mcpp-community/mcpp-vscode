@@ -1,5 +1,10 @@
 # 更新日志
 
+## 未发布
+
+- 修复缺少 CDB 时 IDE 命令看似无响应的问题：配置 clangd、刷新编译数据库、检查模块支持和一键配置现在会立即显示进度并打开 `mcpp` 输出频道；clangd 重启与 `mcpp build --configure-only` 增加超时，避免异步操作永久占用 IDE 队列。
+- 增加删除 `compile_commands.json` 后刷新 CDB、配置 clangd、检查模块支持和一键配置的 Extension Host 回归测试。
+
 ## 0.3.0 - 2026-08-11
 
 - 将编译数据库刷新迁移到 `mcpp build --configure-only`：不解析 stdout 人类文本，以退出码

@@ -16,6 +16,26 @@ export interface CompilationDatabaseWatcher<T, E> {
   onDidDelete(listener: (event: E) => void): T;
 }
 
+export async function withTimeout<T>(
+  operation: PromiseLike<T>,
+  timeoutMs: number,
+  fallback: T,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Promise.resolve(operation),
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => resolve(fallback), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+  }
+}
+
 export function registerCompilationDatabaseReconciliation<T, E>(
   watcher: CompilationDatabaseWatcher<T, E>,
   requestReconciliation: (event: E, forceRestart: boolean) => void,
