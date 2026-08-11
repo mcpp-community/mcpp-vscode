@@ -6,7 +6,7 @@
 
 把 mcpp 工程、C++ 模块语法和官方 clangd 扩展接入 VS Code。
 
-当前版本为 `0.2.7`。扩展负责工程发现、clangd 配置、模块状态检查以及常用
+当前版本为 `0.3.0`。扩展负责工程发现、clangd 配置、模块状态检查以及常用
 mcpp CLI 操作；它不实现新的 C++ 语言服务器，也不替代 mcpp 的构建逻辑。
 
 > 当前完整的模块语义能力只支持 LLVM/Clang 工具链。GCC 和 MSVC 工程仍可使用
@@ -37,7 +37,7 @@ mcpp CLI 操作；它不实现新的 C++ 语言服务器，也不替代 mcpp 的
 VSIX，然后在 VS Code 中执行 **Extensions: Install from VSIX...**，或者运行：
 
 ```sh
-code --install-extension /path/to/mcpp-vscode-0.2.7.vsix
+code --install-extension /path/to/mcpp-vscode-0.3.0.vsix
 ```
 
 安装后确认当前 VS Code profile 中同时存在 `mcpp-community.mcpp-vscode` 和
@@ -419,8 +419,8 @@ API、状态栏、任务和 clangd 集成。
 版本完全一致的 tag：
 
 ```sh
-git tag -a v0.2.7 -m "mcpp-vscode 0.2.7"
-git push origin v0.2.7
+git tag -a v0.3.0 -m "mcpp-vscode 0.3.0"
+git push origin v0.3.0
 ```
 
 `.github/workflows/release.yml` 会校验 tag，执行测试和打包，生成 VSIX 与 SHA-256 文件，

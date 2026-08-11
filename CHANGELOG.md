@@ -1,6 +1,6 @@
 # 更新日志
 
-## 未发布
+## 0.3.0 - 2026-08-11
 
 - 将编译数据库刷新迁移到 `mcpp build --configure-only`：不解析 stdout 人类文本，以退出码
   和可解析 CDB 作为成功条件，失败时保留 last-known-good CDB。
