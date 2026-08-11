@@ -2,7 +2,7 @@
   "name": "mcpp-vscode",
   "displayName": "mcpp",
   "description": "mcpp 与 C++ 模块的 VS Code 集成",
-  "version": "0.2.7",
+  "version": "0.3.0",
   "publisher": "mcpp-community",
   "license": "Apache-2.0",
   "icon": "images/logo.png",

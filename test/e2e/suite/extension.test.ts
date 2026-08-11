@@ -4,7 +4,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 
 suite("mcpp extension smoke", () => {
-  test("activates, registers commands and executes a configured build", async () => {
+  test("configures a missing CDB once before executing a full build", async () => {
     const extension = vscode.extensions.getExtension("mcpp-community.mcpp-vscode");
     assert.ok(extension, "mcpp extension should be installed in development host");
     await extension.activate();
@@ -22,13 +22,30 @@ suite("mcpp extension smoke", () => {
     await vscode.workspace.getConfiguration("mcpp", workspaceFolder.uri)
       .update("path", fakeMcpp, vscode.ConfigurationTarget.Workspace);
 
-    void vscode.commands.executeCommand("mcpp.build");
-    const deadline = Date.now() + 15_000;
-    while (!existsSync(logPath) && Date.now() < deadline) {
+    const configureDeadline = Date.now() + 15_000;
+    let invocations: string[] = [];
+    while (Date.now() < configureDeadline) {
+      if (existsSync(logPath)) {
+        invocations = readFileSync(logPath, "utf8").trim().split("\n");
+        if (invocations.includes("build --configure-only")) {
+          break;
+        }
+      }
       await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
     }
     assert.ok(existsSync(logPath), "fake mcpp should have been invoked");
-    assert.equal(readFileSync(logPath, "utf8").trim(), "build");
+
+    void vscode.commands.executeCommand("mcpp.build");
+    const buildDeadline = Date.now() + 15_000;
+    while (Date.now() < buildDeadline) {
+      invocations = readFileSync(logPath, "utf8").trim().split("\n");
+      if (invocations.includes("build")) {
+        break;
+      }
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
+    }
+    assert.deepEqual(invocations, ["build --configure-only", "build"]);
+    assert.ok(existsSync(path.join(workspaceFolder.uri.fsPath, "compile_commands.json")));
     assert.equal(path.basename(workspaceFolder.uri.fsPath), "project");
   });
 });

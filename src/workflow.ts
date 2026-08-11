@@ -182,6 +182,12 @@ export function configurationAffectsModuleSupport(
   return ["mcpp.clangd.path", "mcpp.modulesSupport"].some(affectsConfiguration);
 }
 
+export function configurationAffectsMcppExecution(
+  affectsConfiguration: (section: string) => boolean,
+): boolean {
+  return affectsConfiguration("mcpp.path");
+}
+
 export function workspaceAllowsToolExecution(trusted: boolean): boolean {
   return trusted;
 }
@@ -227,6 +233,46 @@ export function describeRefreshOutcome(
     message: buildExitCode === 0
       ? "已检测到 compile_commands.json，但 clangd 配置未完成。请查看 mcpp 输出频道。"
       : "mcpp 构建失败；已检测到 compile_commands.json，但 clangd 配置未完成。请查看 mcpp 输出频道。",
+  };
+}
+
+export function describeConfigureOnlyOutcome(
+  exitCode: number,
+  databaseValid: boolean,
+  retainedExisting: boolean,
+  clangdConfigured: boolean,
+): RefreshOutcome {
+  if (exitCode === 0 && databaseValid) {
+    return clangdConfigured
+      ? {
+        level: "information",
+        message: "编译数据库已刷新，clangd 配置已重新加载。",
+      }
+      : {
+        level: "warning",
+        message: "编译数据库已刷新，但 clangd 配置未完成。请查看 mcpp 输出频道。",
+      };
+  }
+  if (exitCode === 0) {
+    return {
+      level: "error",
+      message: "mcpp configure-only 已完成，但没有生成可用的 compile_commands.json。",
+    };
+  }
+  if (databaseValid) {
+    return retainedExisting
+      ? {
+        level: "warning",
+        message: "mcpp configure-only 失败；继续使用原有编译数据库。请查看 mcpp 输出频道。",
+      }
+      : {
+        level: "warning",
+        message: "mcpp configure-only 失败，但检测到可用的编译数据库。请查看 mcpp 输出频道。",
+      };
+  }
+  return {
+    level: "error",
+    message: "mcpp configure-only 失败，且没有可用的编译数据库。请确认 mcpp 版本支持 build --configure-only。",
   };
 }
 

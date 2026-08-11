@@ -26,7 +26,7 @@ const root = path.resolve(process.cwd());
 
 test("declares the official clangd dependency and mcpp commands", () => {
   const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
-  assert.equal(manifest.version, "0.2.7");
+  assert.equal(manifest.version, "0.3.0");
   assert.ok(manifest.extensionDependencies?.includes("llvm-vs-code-extensions.vscode-clangd"));
   assert.ok(manifest.activationEvents?.includes("workspaceContains:mcpp.toml"));
   assert.ok(manifest.activationEvents?.includes("onCommand:mcpp.run"));
@@ -111,6 +111,37 @@ test("shows editor title buttons only inside mcpp projects", () => {
   assert.equal(commands.find((command) => command.command === "mcpp.run")?.icon, "$(play)");
   assert.equal(commands.find((command) => command.command === "mcpp.test")?.icon, "$(beaker)");
   assert.ok(!commands.some((command) => command.command === "mcpp.inProject"));
+});
+
+test("wires configure-only through the existing refresh command", () => {
+  const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
+  assert.ok(!manifest.activationEvents?.includes("onCommand:mcpp.configureIde"));
+  assert.ok(manifest.activationEvents?.includes("onCommand:mcpp.refreshCompilationDatabase"));
+
+  const source = readFileSync(path.join(root, "src/extension.ts"), "utf8");
+  assert.match(source, /ensureIdeConfigured/);
+  assert.match(source, /runConfigureOnly/);
+  assert.doesNotMatch(source, /runIdeConfigure|COMMAND_IDE_CONFIGURE|ide["'],\s*["']configure/);
+  assert.match(source, /findProjectForUri[\s\S]*findNearestMcppProject\(uri\.fsPath, workspaceFolder\.uri\.fsPath\)/);
+  assert.match(source, /requestManifestReconciliation\s*=\s*\(manifestUri:[^)]+\)[\s\S]*findProjectForUri\(manifestUri\)/);
+  assert.match(source, /requestManifestReconciliation[\s\S]*projectAffectedByManifest\([\s\S]*manifestUri\.fsPath/);
+  assert.match(source, /manifestWatcher\.onDidChange\(\(manifestUri\) => \{[\s\S]*requestManifestReconciliation\(manifestUri\)/);
+  assert.match(source, /manifestWatcher\.onDidDelete\(\(manifestUri\) => requestDeletedManifestReconciliation\(manifestUri\)\)/);
+  assert.match(source, /configurationAffectsMcppExecution[\s\S]*forceConfigureOnlyByProject\.add/);
+  assert.match(source, /reconcilePublishedCdbByRoot[\s\S]*reconcileProjectContext\(project, forceRestart, false, false\)/);
+  assert.match(source, /requestAutomaticReconciliation[\s\S]*reconcilePublishedCdbByRoot\(project\.root, forceRestart\)/);
+  assert.match(source, /forceConfigureOnlyByProject\.has\(projectRoot\)/);
+});
+
+test("configure-only shares the project operation lock", () => {
+  const source = readFileSync(path.join(root, "src/cliController.ts"), "utf8");
+  const start = source.indexOf("public async runConfigureOnly");
+  assert.notEqual(start, -1);
+  const end = source.indexOf("public async ", start + 10);
+  const method = source.slice(start, end === -1 ? source.length : end);
+  assert.match(method, /beginProject\(project\.root, token\)/);
+  assert.match(method, /runConfigureOnlyProcess/);
+  assert.match(method, /finally\s*\{[\s\S]*finishProject\(project\.root, token\)/);
 });
 
 test("ships syntax-only C++ highlighting for the exact build.mcpp filename", () => {

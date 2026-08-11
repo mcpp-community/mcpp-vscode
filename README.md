@@ -6,7 +6,7 @@
 
 把 mcpp 工程、C++ 模块语法和官方 clangd 扩展接入 VS Code。
 
-当前版本为 `0.2.7`。扩展负责工程发现、clangd 配置、模块状态检查以及常用
+当前版本为 `0.3.0`。扩展负责工程发现、clangd 配置、模块状态检查以及常用
 mcpp CLI 操作；它不实现新的 C++ 语言服务器，也不替代 mcpp 的构建逻辑。
 
 > 当前完整的模块语义能力只支持 LLVM/Clang 工具链。GCC 和 MSVC 工程仍可使用
@@ -37,7 +37,7 @@ mcpp CLI 操作；它不实现新的 C++ 语言服务器，也不替代 mcpp 的
 VSIX，然后在 VS Code 中执行 **Extensions: Install from VSIX...**，或者运行：
 
 ```sh
-code --install-extension /path/to/mcpp-vscode-0.2.7.vsix
+code --install-extension /path/to/mcpp-vscode-0.3.0.vsix
 ```
 
 安装后确认当前 VS Code profile 中同时存在 `mcpp-community.mcpp-vscode` 和
@@ -47,7 +47,9 @@ code --install-extension /path/to/mcpp-vscode-0.2.7.vsix
 
 - VS Code 1.90 或更高版本。
 - 包含 `mcpp.toml` 的 mcpp 工程。
-- 可执行的 mcpp。它可以由 xlings、官方独立安装脚本或其他受支持方式安装。
+- 包含 mcpp #387（合并提交 `3f237ed`）的可执行文件；在该能力进入正式版本前，
+  可使用对应主线构建。旧版 mcpp 不支持 configure-only 时，扩展会保留原有 CDB 并提示升级。
+  它可以由 xlings、官方独立安装脚本或其他受支持方式安装。
 - 官方 `llvm-vs-code-extensions.vscode-clangd` 扩展。它是本扩展的功能依赖。
 - 要启用模块语义，需要 LLVM mcpp 工具链、工程编译数据库，以及与该工具链来自
   同一 LLVM revision 的 clangd。
@@ -57,16 +59,21 @@ xlings 安装。
 
 ## 快速开始
 
-1. 使用 LLVM 工具链构建一次项目，使 mcpp 在工程根目录生成
-   `compile_commands.json` 和所需 PCM。
-2. 使用 VS Code 打开包含 `mcpp.toml` 的目录。
-3. 扩展会自动分析编译数据库、选择匹配的 clangd、写入工作区配置并检查模块支持。
+1. 使用 VS Code 打开包含 `mcpp.toml` 的目录，并按需信任工作区。
+2. 工程没有有效 `compile_commands.json` 时，扩展会运行
+   `mcpp build --configure-only` 生成配置阶段数据，不编译普通对象或链接产物。
+3. 扩展会分析编译数据库、选择匹配的 clangd、写入工作区配置并检查模块支持；缺少
+   项目 PCM 或需要验证正式产物时，仍应执行完整构建或使用一键配置向导。
 4. 查看状态栏中的 `mcpp: 模块可用`、`mcpp: 模块不可用` 或
    `mcpp: 缺少模块 CDB` 状态。
 
 工程还没有编译数据库时，可以点击“缺少模块 CDB”，或执行
-**mcpp: 刷新编译数据库**。这个命令当前实际执行一次 `mcpp build`，并在任务结束后
-重新协调 CDB 和 clangd。
+**mcpp: 刷新编译数据库**。这个命令执行 `mcpp build --configure-only`，只在退出码为
+0 且新 CDB 可解析时将其视为成功；失败时继续保留并使用原有可用 CDB。
+
+virtual workspace 根不对应单一 CDB：mcpp 会把数据库分别发布到各 member 根。扩展
+因此只接管当前活动 member；请先打开该 member 的源码或 `mcpp.toml`，不会把多个 member
+的 CDB 合并到虚拟根。
 
 ## 已实现功能
 
@@ -78,7 +85,8 @@ xlings 安装。
 - 打开已有有效 CDB 的 LLVM 工程后自动配置并检查，不需要先点击状态栏或 Reload
   Window。
 
-扩展激活本身不会静默运行 `mcpp build`，也不会自动下载、安装或切换工具链。
+扩展激活不会静默运行完整 `mcpp build`，也不会自动下载、安装或切换工具链；受信任
+工程缺少有效 CDB 时会自动运行配置阶段的 `mcpp build --configure-only`。
 
 ### 语法高亮
 
@@ -141,8 +149,9 @@ xlings 补齐匹配版本的 llvm-tools（含 clangd），最后重新读取 CDB
 - 只接受当前工程最新一次模块检查的结果，迟到结果不会覆盖新状态。
 - 多根工作区中只有活动 mcpp 工程接管窗口级 clangd 配置；后台工程只失效缓存，切换
   过去时再协调。
-- 修改 `mcpp.clangd.path` 或 `mcpp.modulesSupport` 后自动重新配置和检查。
-- 构建即使因普通源码错误退出，只要留下可用 CDB，扩展仍会尝试恢复 IDE 状态，并把
+- 修改资源域 `mcpp.path` 时按工程标记重新生成 CDB；修改 `mcpp.clangd.path` 或
+  `mcpp.modulesSupport` 时只重新配置和检查，不重复运行 mcpp。
+- 完整构建即使因普通源码错误退出，只要留下可用 CDB，扩展仍会尝试恢复 IDE 状态，并把
   “构建失败”和“IDE 数据可用”分别报告。
 
 ### mcpp CLI 与工具链管理
@@ -175,7 +184,7 @@ xlings 补齐匹配版本的 llvm-tools（含 clangd），最后重新读取 CDB
 | **mcpp: 安装工具链** | 确认后执行 `mcpp toolchain install <spec>` |
 | **mcpp: 选择全局默认工具链** | 确认后执行 `mcpp toolchain default <spec>` |
 | **mcpp: 配置 clangd** | 手动重新应用当前 LLVM 工程的 clangd 配置 |
-| **mcpp: 刷新编译数据库** | 执行 `mcpp build`，随后重新读取 CDB 并协调 clangd |
+| **mcpp: 刷新编译数据库** | 执行 `mcpp build --configure-only`，验证 CDB 后协调 clangd；失败时保留原有可用 CDB |
 | **mcpp: 检查模块支持** | 立即执行 clangd 直接检查并刷新模块状态 |
 | **mcpp: 一键配置模块代码提示** | 一次确认后自动安装/切换 host LLVM、执行 `mcpp build`，通过 xlings 补齐匹配 llvm-tools，重载 CDB 并配置 clangd；项目显式固定非 LLVM 工具链时停止 |
 
@@ -233,11 +242,12 @@ GCC `.gcm` 和 MSVC `.ifc` 是编译器专用产物。mcpp 可以正常构建它
 不能直接消费；当前版本没有 GCC 原生模块语言服务器、cpptools 模块后端或 LLVM 影子
 分析副本。因此 GCC/MSVC 工程只保证模块语法高亮和 mcpp 操作。
 
-### 首次语义配置仍需要构建数据
+### 首次语义配置仍需要 mcpp 生成的数据
 
 当前插件只读取 `compile_commands.json`，不解析 `mcpp.toml`，也不自行推导依赖和
-模块图。工程没有 CDB 和 PCM 时，必须先显式执行构建或“刷新编译数据库”。插件不会
-因为打开工程就自动构建，也不会自行生成、改写或修复 mcpp 没有输出的 CDB。
+模块图。受信任工程没有有效 CDB 时，插件会调用 `mcpp build --configure-only`，但不会
+自行生成或改写 mcpp 没有输出的 CDB。完整模块语义仍取决于 CDB 引用的兼容 PCM；正式
+构建、链接和测试仍由普通 `mcpp build`、`run` 或 `test` 负责。
 
 ### clangd 模块支持仍是实验能力
 
@@ -253,7 +263,9 @@ GCC `.gcm` 和 MSVC `.ifc` 是编译器专用产物。mcpp 可以正常构建它
 
 未受信任工作区只启用文件关联和语法高亮，不执行 CDB 中的编译器、mcpp、clangd 或
 工程指定程序，也不接管 clangd 配置。授予信任后，扩展会自动重新协调当前工程；仍不
-会在没有用户操作时下载工具链或发起构建。
+会在没有用户操作时下载或切换工具链，也不会发起完整构建；缺少有效 CDB 时可以执行
+配置阶段的 configure-only。该命令不是只读操作：mcpp 仍可能执行 `build.mcpp`、解析或
+安装缺失依赖和工具链，并写入 lock、构建目录与相关元数据。
 
 ## 当前版本能达到的效果
 
@@ -265,8 +277,9 @@ GCC `.gcm` 和 MSVC `.ifc` 是编译器专用产物。mcpp 可以正常构建它
 - 在重新构建或 CDB 变化后自动刷新，不要求 Reload Window；
 - 通过 VS Code 任务完成常用 mcpp 项目和工具链操作。
 
-这些能力受 clangd 实验模块实现和 PCM 兼容性约束。工程没有 CDB 时，当前版本只能
-提供语法高亮、mcpp 命令和引导操作，不能仅凭插件恢复完整模块语义。
+这些能力受 clangd 实验模块实现和 PCM 兼容性约束。工程没有 CDB 时，扩展可以请求
+mcpp 生成配置阶段 CDB；若 mcpp 版本不支持该命令、配置失败或仍缺少兼容 PCM，则只能
+提供语法高亮、mcpp 命令和引导操作。
 
 ## 理想最终效果
 
@@ -288,12 +301,13 @@ GCC `.gcm` 和 MSVC `.ifc` 是编译器专用产物。mcpp 可以正常构建它
 
 ## 达到理想效果所需支持
 
-下面按完成程度区分必要工作。接口名称只是设计示例，不是当前 mcpp 已提供的命令。
+下面按完成程度区分必要工作。`mcpp build --configure-only` 是当前扩展采用的已实现接口；
+其余机器可读工程模型和结构化诊断仍是后续协议工作。
 
 | 支持项 | 当前程度 | 理想完成标准 | 优先级 |
 | --- | --- | --- | --- |
 | 机器可读工程模型 | 插件只能读取 CDB，mcpp 主要输出面向人的文本 | mcpp 输出带版本 schema 的成员、目标、源码、模块、依赖、工具链、缓存与诊断 | 必需 |
-| IDE 配置阶段 | 必须通过正式构建间接生成 CDB | 提供类似 `mcpp resolve --message-format=json --emit-cdb` 或 `mcpp configure --ide` 的可取消命令 | 必需 |
+| IDE 配置阶段 | 已使用 `mcpp build --configure-only` 生成并验证 CDB | 增加结构化进度、取消和能力协商，不把人类 stdout 当协议解析 | 部分完成 |
 | IDE 专用模块产物 | PCM 是正式构建的副产物 | 只构建 `std`、依赖和项目模块 PCM，不编译普通对象或链接，并按工具链身份隔离缓存 | 必需 |
 | 完整 CDB 与模块图 | LLVM CDB 已有部分显式 PCM 参数 | producer 和 consumer 都使用确定的绝对 PCM 路径，覆盖分区、依赖包、成员和测试目标 | 必需 |
 | 结构化诊断 | 未知导入等信息主要来自构建或 clangd 文本 | mcpp 输出文件、行、列、严重级别和稳定错误码，插件可精确定位配置期错误 | 必需 |
@@ -311,21 +325,24 @@ GCC `.gcm` 和 MSVC `.ifc` 是编译器专用产物。mcpp 可以正常构建它
 
 ### 阶段 1：当前版本
 
-- 使用用户显式构建后产生的 LLVM CDB 和 PCM。
+- 缺少有效 CDB 时，在受信任工作区自动执行 `mcpp build --configure-only`；失败时保留
+  last-known-good CDB。
+- 使用 configure-only 或用户完整构建产生的 LLVM CDB 和已有 PCM。
 - 自动配置 clangd、检查模块、监听变化并提供 CLI/工具链菜单。
 - 一键自动安装匹配的 llvm-tools 并配置模块代码提示。
 - GCC/MSVC 保持语法高亮和 mcpp 构建操作，不增加语义后端。
 
-### 阶段 2：mcpp IDE 协议
+### 阶段 2：机器可读工程协议增强
 
-- 在 mcpp 核心增加带版本的机器可读工程模型和 IDE 配置命令。
-- 生成完整模块图、结构化诊断、IDE CDB 和专用 PCM。
+- 在 mcpp 核心增加带版本的机器可读工程模型，不改变 configure-only 的退出码 + CDB
+  客户端契约。
+- 补充完整模块图、结构化诊断、IDE 专用 PCM 和能力协商。
 - 明确定义工作区成员、配置身份、缓存路径、进度和取消协议。
 
-### 阶段 3：打开即用的 LLVM 体验
+### 阶段 3：完善打开即用的 LLVM 体验
 
-- 插件在工作区信任后自动调用 IDE 配置阶段，而不是完整构建。
-- 支持离线缓存、last-known-good、增量刷新、过期状态和多根隔离。
+- 在已有自动 configure-only 基础上增加可取消进度、离线缓存、增量刷新和过期状态。
+- 完善按工程隔离的 last-known-good 数据与多根集成验证。
 - 以真实 VS Code 端到端测试作为模块诊断和跳转能力的发布门槛。
 
 ### 未来重新评估 GCC/MSVC
@@ -355,10 +372,10 @@ macOS 从图形界面启动 VS Code 时可能没有继承终端 `PATH`。将 `mc
 
 ### 缺少模块 CDB
 
-当前版本不会在打开工程时静默构建。执行 **mcpp: 刷新编译数据库**，或在终端运行
-`mcpp build`。无论构建成功还是失败，只要工程根目录仍没有
-`compile_commands.json`，插件都会保持“缺少模块 CDB”状态；请查看 mcpp 输出和任务
-终端，确认当前构建是否实际生成了 CDB。
+受信任工程缺少有效 CDB 时会自动尝试 `mcpp build --configure-only`，也可以手动执行
+**mcpp: 刷新编译数据库**。若 mcpp 版本不支持该参数、命令失败或生成的 CDB 无法解析，
+插件会保持“缺少模块 CDB”状态，并保留原有可用 CDB；请查看 `mcpp` 输出频道。需要
+编译普通对象、生成完整项目产物或验证链接时，再在终端运行 `mcpp build`。
 
 ### clangd 未安装或无法匹配
 
@@ -402,8 +419,8 @@ API、状态栏、任务和 clangd 集成。
 版本完全一致的 tag：
 
 ```sh
-git tag -a v0.2.7 -m "mcpp-vscode 0.2.7"
-git push origin v0.2.7
+git tag -a v0.3.0 -m "mcpp-vscode 0.3.0"
+git push origin v0.3.0
 ```
 
 `.github/workflows/release.yml` 会校验 tag，执行测试和打包，生成 VSIX 与 SHA-256 文件，
