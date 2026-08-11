@@ -26,7 +26,7 @@ const root = path.resolve(process.cwd());
 
 test("declares the official clangd dependency and mcpp commands", () => {
   const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
-  assert.equal(manifest.version, "0.3.0");
+  assert.equal(manifest.version, "0.3.1");
   assert.ok(manifest.extensionDependencies?.includes("llvm-vs-code-extensions.vscode-clangd"));
   assert.ok(manifest.activationEvents?.includes("workspaceContains:mcpp.toml"));
   assert.ok(manifest.activationEvents?.includes("onCommand:mcpp.run"));
@@ -142,6 +142,16 @@ test("configure-only shares the project operation lock", () => {
   assert.match(method, /beginProject\(project\.root, token\)/);
   assert.match(method, /runConfigureOnlyProcess/);
   assert.match(method, /finally\s*\{[\s\S]*finishProject\(project\.root, token\)/);
+});
+
+test("IDE commands expose progress and bound clangd restart waits", () => {
+  const source = readFileSync(path.join(root, "src/extension.ts"), "utf8");
+  assert.match(source, /const CLANGD_RESTART_TIMEOUT_MS = 15_000/);
+  assert.match(source, /withTimeout\([\s\S]*CLANGD_RESTART_TIMEOUT_MS/);
+  for (const title of ["配置 clangd", "刷新编译数据库", "检查模块支持", "一键配置模块代码提示"]) {
+    assert.match(source, new RegExp(`showInteractiveIdeStart\\("${title}"\\)`));
+  }
+  assert.match(source, /output\.show\(true\)/);
 });
 
 test("ships syntax-only C++ highlighting for the exact build.mcpp filename", () => {

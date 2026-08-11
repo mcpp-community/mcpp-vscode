@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 
@@ -35,7 +35,7 @@ suite("mcpp extension smoke", () => {
     }
     assert.ok(existsSync(logPath), "fake mcpp should have been invoked");
 
-    void vscode.commands.executeCommand("mcpp.build");
+    await vscode.commands.executeCommand("mcpp.build");
     const buildDeadline = Date.now() + 15_000;
     while (Date.now() < buildDeadline) {
       invocations = readFileSync(logPath, "utf8").trim().split("\n");
@@ -47,5 +47,31 @@ suite("mcpp extension smoke", () => {
     assert.deepEqual(invocations, ["build --configure-only", "build"]);
     assert.ok(existsSync(path.join(workspaceFolder.uri.fsPath, "compile_commands.json")));
     assert.equal(path.basename(workspaceFolder.uri.fsPath), "project");
+
+    const compilationDatabase = path.join(workspaceFolder.uri.fsPath, "compile_commands.json");
+    const executeWithinDeadline = async (command: string): Promise<void> => {
+      let timer: NodeJS.Timeout | undefined;
+      try {
+        await Promise.race([
+          vscode.commands.executeCommand(command),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error(`${command} did not finish`)), 5_000);
+          }),
+        ]);
+      } finally {
+        if (timer !== undefined) {
+          clearTimeout(timer);
+        }
+      }
+    };
+
+    rmSync(compilationDatabase);
+    await executeWithinDeadline("mcpp.refreshCompilationDatabase");
+    assert.ok(existsSync(compilationDatabase), "refresh should recreate a missing CDB");
+
+    rmSync(compilationDatabase);
+    await executeWithinDeadline("mcpp.configureClangd");
+    await executeWithinDeadline("mcpp.checkModuleSupport");
+    await executeWithinDeadline("mcpp.autoConfigureModules");
   });
 });

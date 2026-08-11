@@ -47,6 +47,7 @@ import {
   shouldRenderProjectStatus,
   shouldUseWorkspaceClangd,
   statusCommandForCapability,
+  withTimeout,
   workspaceAllowsToolExecution,
   type ModuleSupportState,
 } from "./workflow";
@@ -306,12 +307,23 @@ async function maybeDisableCppTools(project: McppProjectDiscovery): Promise<void
   }
 }
 
-async function restartClangd(): Promise<boolean> {
+const CLANGD_RESTART_TIMEOUT_MS = 15_000;
+
+async function restartClangd(output: vscode.OutputChannel): Promise<boolean> {
   if (vscode.extensions.getExtension("llvm-vs-code-extensions.vscode-clangd") === undefined) {
     return false;
   }
   try {
-    await vscode.commands.executeCommand("clangd.restart");
+    const timedOut = {};
+    const result = await withTimeout(
+      vscode.commands.executeCommand("clangd.restart"),
+      CLANGD_RESTART_TIMEOUT_MS,
+      timedOut,
+    );
+    if (result === timedOut) {
+      appendOutputLine(output, `[clangd] 重启命令超过 ${CLANGD_RESTART_TIMEOUT_MS / 1000} 秒未完成，已释放 IDE 操作队列。`);
+      return false;
+    }
     return true;
   } catch {
     // clangd 扩展可能尚未激活，但配置仍然已经写入。
@@ -329,7 +341,7 @@ async function configureClangd(
   const interactive = mode === "interactive";
   if (context.analysis.capability === "syntax-only") {
     if (interactive) {
-      await vscode.window.showWarningMessage(
+      void vscode.window.showWarningMessage(
         `${context.analysis.kind.toUpperCase()} 模块产物无法由 clangd 读取。语法高亮仍然可用，但模块语义诊断需要 LLVM mcpp 工具链。`,
       );
     }
@@ -338,7 +350,7 @@ async function configureClangd(
   }
   if (context.analysis.capability !== "full" || context.analysis.compilerPath === undefined) {
     if (interactive) {
-      await vscode.window.showWarningMessage(
+      void vscode.window.showWarningMessage(
         `${context.analysis.reason} 请先运行“mcpp: 刷新编译数据库”。`,
       );
     }
@@ -347,7 +359,7 @@ async function configureClangd(
   if (!workspaceAllowsToolExecution(vscode.workspace.isTrusted)) {
     const message = "当前工作区未受信任，mcpp 不会执行 CDB 中的编译器或 clangd，也不会接管 clangd 配置。";
     if (interactive) {
-      await vscode.window.showWarningMessage(message);
+      void vscode.window.showWarningMessage(message);
     } else {
       appendOutputLine(output, `[自动配置] ${message}`);
     }
@@ -358,7 +370,7 @@ async function configureClangd(
   if (clangd === undefined) {
     const message = "没有找到可用的 clangd。请安装与 mcpp LLVM 编译器来自同一 revision 的 clangd，或设置 mcpp.clangd.path；clangd 可以来自 xlings llvm-tools，也可以独立安装。";
     if (interactive) {
-      await vscode.window.showErrorMessage(message);
+      void vscode.window.showErrorMessage(message);
     } else {
       appendOutputLine(output, `[自动配置] ${message}`);
     }
@@ -399,11 +411,11 @@ async function configureClangd(
     await maybeDisableCppTools(context.project);
   }
   const restartRequired = shouldRestartClangd(plan.changed, interactive, forceRestart);
-  const restartSucceeded = restartRequired ? await restartClangd() : false;
+  const restartSucceeded = restartRequired ? await restartClangd(output) : false;
   if (!configurationReadyAfterRestart(restartRequired, restartSucceeded)) {
     const message = "clangd 配置已写入，但无法重启语言服务器。请查看 mcpp 输出频道，或手动执行 clangd 重启命令。";
     if (interactive) {
-      await vscode.window.showErrorMessage(message);
+      void vscode.window.showErrorMessage(message);
     } else {
       appendOutputLine(output, `[自动配置] ${message}`);
     }
@@ -412,11 +424,11 @@ async function configureClangd(
   updateStatusBar(status, context);
 
   if (!clangd.comparison.compatible) {
-    await vscode.window.showWarningMessage(
+    void vscode.window.showWarningMessage(
       `clangd 已配置，但 LLVM 身份与 mcpp 编译器不匹配：${clangd.comparison.reason}。`,
     );
   } else if (interactive) {
-    await vscode.window.showInformationMessage("mcpp 已为当前工作区配置匹配的 clangd。");
+    void vscode.window.showInformationMessage("mcpp 已为当前工作区配置匹配的 clangd。");
   } else if (plan.changed) {
     appendOutputLine(output, `[自动配置] clangd.path = ${plan.path}`);
   }
@@ -546,7 +558,7 @@ async function runModuleSupportCheck(
       storeModuleStatus(status, context, { state: "unavailable", message });
     }
     if (interactive) {
-      await vscode.window.showWarningMessage(message);
+      void vscode.window.showWarningMessage(message);
     }
     return context.analysis.capability === "full"
       ? { state: "unavailable", message }
@@ -559,7 +571,7 @@ async function runModuleSupportCheck(
     const moduleStatus = { state: "unavailable", message } as const;
     storeModuleStatus(status, context, moduleStatus);
     if (interactive) {
-      await vscode.window.showWarningMessage(message);
+      void vscode.window.showWarningMessage(message);
     } else {
       appendOutputLine(output, `[自动检查] ${message}`);
     }
@@ -583,7 +595,7 @@ async function runModuleSupportCheck(
       return undefined;
     }
     if (interactive) {
-      await vscode.window.showErrorMessage(message);
+      void vscode.window.showErrorMessage(message);
     } else {
       appendOutputLine(output, `[自动检查] ${message}`);
     }
@@ -630,9 +642,9 @@ async function runModuleSupportCheck(
   }
   if (interactive) {
     if (moduleStatus.state === "available") {
-      await vscode.window.showInformationMessage(message);
+      void vscode.window.showInformationMessage(message);
     } else {
-      await vscode.window.showErrorMessage(message);
+      void vscode.window.showErrorMessage(message);
     }
   } else {
     appendOutputLine(output, `[自动检查] ${message}`);
@@ -751,7 +763,7 @@ async function autoConfigureModulesWizard(
   appendOutputLine(output, "[一键配置] 开始一键配置模块代码提示...");
 
   if (!vscode.workspace.isTrusted) {
-    await vscode.window.showWarningMessage(moduleSetupBlockedMessage("untrusted"));
+    void vscode.window.showWarningMessage(moduleSetupBlockedMessage("untrusted"));
     return;
   }
   const inventory = await cliController.readToolchainInventory(context.project);
@@ -765,7 +777,7 @@ async function autoConfigureModulesWizard(
     cliController.isBusy(),
   );
   if (decision.kind === "blocked") {
-    await vscode.window.showWarningMessage(moduleSetupBlockedMessage(decision.reason));
+    void vscode.window.showWarningMessage(moduleSetupBlockedMessage(decision.reason));
     return;
   }
 
@@ -861,14 +873,14 @@ async function autoConfigureModulesWizard(
 
   if (outcome.state === "succeeded") {
     if (outcome.degraded) {
-      await vscode.window.showWarningMessage("构建失败，语言服务已刷新。请查看任务终端获取构建错误。");
+      void vscode.window.showWarningMessage("构建失败，语言服务已刷新。请查看任务终端获取构建错误。");
     } else {
-      await vscode.window.showInformationMessage("mcpp 模块代码提示一键配置完成。");
+      void vscode.window.showInformationMessage("mcpp 模块代码提示一键配置完成。");
     }
   } else if (outcome.state === "cancelled") {
-    await vscode.window.showWarningMessage(`一键配置已取消（${outcome.stage}）。`);
+    void vscode.window.showWarningMessage(`一键配置已取消（${outcome.stage}）。`);
   } else {
-    await vscode.window.showErrorMessage(`一键配置失败（${outcome.stage}）。${outcome.steps.at(-1)?.detail ?? "请查看 mcpp 输出频道。"}`);
+    void vscode.window.showErrorMessage(`一键配置失败（${outcome.stage}）。${outcome.steps.at(-1)?.detail ?? "请查看 mcpp 输出频道。"}`);
   }
 }
 
@@ -931,6 +943,10 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
       void vscode.window.showErrorMessage(`mcpp：${message}`);
     }
   };
+  const showInteractiveIdeStart = (title: string): void => {
+    appendOutputLine(output, `\n[IDE] ${title}：已接收，正在等待 IDE 操作队列。`);
+    output.show(true);
+  };
   let cliController: McppCliController;
   const runConfigureOnlyForProject = async (
     project: McppProjectDiscovery,
@@ -939,7 +955,7 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
     if (!workspaceAllowsToolExecution(vscode.workspace.isTrusted)) {
       appendOutputLine(output, "[CDB 配置] 工作区未受信任，跳过 mcpp build --configure-only。");
       if (interactive) {
-        await vscode.window.showWarningMessage(
+        void vscode.window.showWarningMessage(
           "当前工作区未受信任，不会刷新编译数据库。请先信任工作区。",
         );
       }
@@ -949,7 +965,7 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
     if (result === undefined) {
       appendOutputLine(output, "[CDB 配置] 已有 mcpp 操作正在运行，本次刷新已跳过。");
       if (interactive) {
-        await vscode.window.showWarningMessage(
+        void vscode.window.showWarningMessage(
           "已有 mcpp 操作正在运行，暂不能刷新编译数据库。请等待当前操作完成后重试。",
         );
       }
@@ -1204,7 +1220,7 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
     if (kind === "build") {
       if (reconciled.context?.analysis.capability === "syntax-only") {
         const buildMessage = completion.state === "succeeded" ? "mcpp 构建完成" : "mcpp 构建失败";
-        await vscode.window.showWarningMessage(
+        void vscode.window.showWarningMessage(
           `${buildMessage}；${reconciled.context.analysis.reason}。模块语法高亮仍然可用。`,
         );
         return;
@@ -1215,18 +1231,18 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
         reconciled.configured,
       );
       if (outcome.level === "information") {
-        await vscode.window.showInformationMessage(outcome.message);
+        void vscode.window.showInformationMessage(outcome.message);
       } else if (outcome.level === "warning") {
-        await vscode.window.showWarningMessage(outcome.message);
+        void vscode.window.showWarningMessage(outcome.message);
       } else {
-        await vscode.window.showErrorMessage(outcome.message);
+        void vscode.window.showErrorMessage(outcome.message);
       }
       return;
     }
 
     if (completion.state === "succeeded") {
       const label = kind === "run" ? "运行" : kind === "test" ? "测试" : "清理";
-      await vscode.window.showInformationMessage(`mcpp ${label}完成；clangd/CDB 状态已重新检查。`);
+      void vscode.window.showInformationMessage(`mcpp ${label}完成；clangd/CDB 状态已重新检查。`);
     }
   };
   cliController = new McppCliController({
@@ -1251,6 +1267,7 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
         await vscode.window.showWarningMessage("当前工作区没有找到 mcpp.toml。");
         return;
       }
+      showInteractiveIdeStart("配置 clangd");
       await executeWithWorkspaceClangd(async () => {
         if (!shouldUseWorkspaceClangd(findCurrentProject()?.root, project.root)) {
           return;
@@ -1269,6 +1286,7 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
         await vscode.window.showWarningMessage("当前工作区没有找到 mcpp.toml。");
         return;
       }
+      showInteractiveIdeStart("刷新编译数据库");
       await executeWithWorkspaceClangd(async () => {
         const hadUsableDatabase = hasUsableCompilationDatabase(project);
         const result = await runConfigureOnlyForProject(project, true);
@@ -1284,11 +1302,11 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
           reconciled.configured,
         );
         if (outcome.level === "information") {
-          await vscode.window.showInformationMessage(outcome.message);
+          void vscode.window.showInformationMessage(outcome.message);
         } else if (outcome.level === "warning") {
-          await vscode.window.showWarningMessage(outcome.message);
+          void vscode.window.showWarningMessage(outcome.message);
         } else {
-          await vscode.window.showErrorMessage(outcome.message);
+          void vscode.window.showErrorMessage(outcome.message);
         }
       });
     })),
@@ -1298,6 +1316,7 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
         await vscode.window.showWarningMessage("当前工作区没有找到 mcpp.toml。");
         return;
       }
+      showInteractiveIdeStart("检查模块支持");
       await executeWithWorkspaceClangd(async () => {
         if (!shouldUseWorkspaceClangd(findCurrentProject()?.root, project.root)) {
           return;
@@ -1401,6 +1420,7 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
         await vscode.window.showWarningMessage("当前工作区没有找到 mcpp.toml。");
         return;
       }
+      showInteractiveIdeStart("一键配置模块代码提示");
       await executeWithWorkspaceClangd(async () => {
         if (!shouldUseWorkspaceClangd(findCurrentProject()?.root, project.root)) {
           return;

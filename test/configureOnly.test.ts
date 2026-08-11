@@ -4,12 +4,17 @@ import test from "node:test";
 import { configureOnlyArguments, runConfigureOnly } from "../src/configureOnly";
 
 test("runs mcpp build --configure-only with the configured executable and cwd", async () => {
-  const calls: Array<{ executable: string; args: string[]; cwd?: string }> = [];
+  const calls: Array<{
+    executable: string;
+    args: string[];
+    cwd?: string;
+    timeoutMs?: number;
+  }> = [];
   const result = await runConfigureOnly(
     "/work/app",
     "/tools/mcpp",
-    async (executable, args, cwd) => {
-      calls.push({ executable, args, cwd });
+    async (executable, args, cwd, options) => {
+      calls.push({ executable, args, cwd, timeoutMs: options?.timeoutMs });
       return { exitCode: 0, stdout: "Configured 2 compile commands", stderr: "" };
     },
   );
@@ -18,6 +23,7 @@ test("runs mcpp build --configure-only with the configured executable and cwd", 
     executable: "/tools/mcpp",
     args: [...configureOnlyArguments],
     cwd: "/work/app",
+    timeoutMs: 5 * 60_000,
   }]);
   assert.equal(result.exitCode, 0);
 });

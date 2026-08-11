@@ -632,7 +632,7 @@ export class McppCliController {
         } catch {
           // 输出频道可能已经在窗口重载时释放。
         }
-        await vscode.window.showErrorMessage(`mcpp：${message}`);
+        void vscode.window.showErrorMessage(`mcpp：${message}`);
       }
     };
   }
@@ -679,7 +679,7 @@ export class McppCliController {
     const result = await runProcess(executable, args, workingDirectory(project));
     this.appendShortCommand("查看工具链", executable, args, result);
     if (result.exitCode !== 0) {
-      await vscode.window.showErrorMessage(
+      void vscode.window.showErrorMessage(
         `mcpp toolchain list 失败（退出码 ${result.exitCode}）。请查看 mcpp 输出频道。`,
       );
       return undefined;
@@ -687,7 +687,7 @@ export class McppCliController {
 
     const inventory = parseToolchainList(`${result.stdout}${result.stderr.length > 0 ? `\n${result.stderr}` : ""}`);
     if (!inventory.recognized) {
-      await vscode.window.showErrorMessage(
+      void vscode.window.showErrorMessage(
         "无法识别当前 mcpp toolchain list 输出；原始输出已保留在 mcpp 输出频道，请检查 mcpp 版本。",
       );
       return undefined;
