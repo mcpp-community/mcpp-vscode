@@ -75,7 +75,10 @@ export function mcppModuleSetupCommands(plan: ModuleSetupPlan): ModuleSetupComma
       args: ["toolchain", "default", "llvm"],
     });
   }
-  commands.push({ stage: "build", mode: "task", args: ["build", "--no-cache"] });
+  const buildArgs = plan.installLlvm || plan.switchDefault
+    ? ["build", "--no-cache"]
+    : ["build"];
+  commands.push({ stage: "build", mode: "task", args: buildArgs });
   return commands;
 }
 
