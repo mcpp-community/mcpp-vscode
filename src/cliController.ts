@@ -15,7 +15,8 @@ import {
   type ToolchainItem,
 } from "./cli";
 import type { McppProjectDiscovery } from "./discovery";
-import { runProcess } from "./process";
+import { runConfigureOnly as runConfigureOnlyProcess } from "./configureOnly";
+import { runProcess, type ProcessResult } from "./process";
 import {
   McppOperationRegistry,
   classifyTaskExit,
@@ -116,6 +117,30 @@ export class McppCliController {
 
   public isBusy(): boolean {
     return this.operations.hasActive();
+  }
+
+  public async runConfigureOnly(
+    project: McppProjectDiscovery,
+  ): Promise<ProcessResult | undefined> {
+    if (!this.options.isTrusted()) {
+      return undefined;
+    }
+
+    const token: OperationToken = {};
+    if (this.operations.beginProject(project.root, token) !== undefined) {
+      return undefined;
+    }
+
+    const executable = this.mcppExecutable(project);
+    const args = ["build", "--configure-only"];
+    try {
+      const result = await runConfigureOnlyProcess(project.root, executable);
+      this.appendShortCommand("刷新编译数据库", executable, args, result);
+      return result;
+    } finally {
+      // configure-only 与 build/run/test 共用项目锁，异常时也必须释放。
+      this.operations.finishProject(project.root, token);
+    }
   }
 
   public async runAutomaticModuleSetup(

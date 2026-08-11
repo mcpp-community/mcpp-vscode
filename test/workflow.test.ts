@@ -5,6 +5,9 @@ import * as workflow from "../src/workflow";
 import {
   createSerialExecutor,
   createSingleFlightReconciler,
+  configurationAffectsMcppExecution,
+  configurationAffectsModuleSupport,
+  describeConfigureOnlyOutcome,
   describeRefreshOutcome,
   statusCommandForCapability,
 } from "../src/workflow";
@@ -26,6 +29,33 @@ test("keeps IDE configuration when a source build fails after producing a databa
   });
   assert.equal(describeRefreshOutcome(0, true, false).level, "error");
   assert.equal(describeRefreshOutcome(1, false, false).level, "error");
+});
+
+test("describes configure-only results without treating an old CDB as newly generated", () => {
+  assert.deepEqual(describeConfigureOnlyOutcome(0, true, false, true), {
+    level: "information",
+    message: "编译数据库已刷新，clangd 配置已重新加载。",
+  });
+  assert.deepEqual(describeConfigureOnlyOutcome(0, true, false, false), {
+    level: "warning",
+    message: "编译数据库已刷新，但 clangd 配置未完成。请查看 mcpp 输出频道。",
+  });
+  assert.deepEqual(describeConfigureOnlyOutcome(0, false, false, false), {
+    level: "error",
+    message: "mcpp configure-only 已完成，但没有生成可用的 compile_commands.json。",
+  });
+  assert.deepEqual(describeConfigureOnlyOutcome(2, true, true, false), {
+    level: "warning",
+    message: "mcpp configure-only 失败；继续使用原有编译数据库。请查看 mcpp 输出频道。",
+  });
+  assert.deepEqual(describeConfigureOnlyOutcome(2, true, false, false), {
+    level: "warning",
+    message: "mcpp configure-only 失败，但检测到可用的编译数据库。请查看 mcpp 输出频道。",
+  });
+  assert.deepEqual(describeConfigureOnlyOutcome(2, false, false, false), {
+    level: "error",
+    message: "mcpp configure-only 失败，且没有可用的编译数据库。请确认 mcpp 版本支持 build --configure-only。",
+  });
 });
 
 test("serializes reconciliation and merges pending restart requests", async () => {
@@ -369,30 +399,29 @@ test("accepts module status only from the latest check for the current project",
   assert.equal(shouldRender(undefined, "/work/a"), false);
 });
 
-test("reconciles when a module-related mcpp setting changes", () => {
-  const affectsModuleConfiguration = (
-    workflow as typeof workflow & {
-      configurationAffectsModuleSupport?: (
-        affectsConfiguration: (section: string) => boolean,
-      ) => boolean;
-    }
-  ).configurationAffectsModuleSupport;
-  assert.equal(typeof affectsModuleConfiguration, "function");
-  assert.ok(affectsModuleConfiguration);
-
+test("separates mcpp executable changes from clangd-only settings", () => {
   assert.equal(
-    affectsModuleConfiguration((section) => section === "mcpp.clangd.path"),
+    configurationAffectsModuleSupport((section) => section === "mcpp.clangd.path"),
     true,
   );
   assert.equal(
-    affectsModuleConfiguration((section) => section === "mcpp.modulesSupport"),
+    configurationAffectsModuleSupport((section) => section === "mcpp.modulesSupport"),
     true,
   );
   assert.equal(
-    affectsModuleConfiguration((section) => section === "mcpp.path"),
+    configurationAffectsModuleSupport((section) => section === "mcpp.path"),
     false,
   );
-  assert.equal(affectsModuleConfiguration(() => false), false);
+  assert.equal(
+    configurationAffectsMcppExecution((section) => section === "mcpp.path"),
+    true,
+  );
+  assert.equal(
+    configurationAffectsMcppExecution((section) => section === "mcpp.clangd.path"),
+    false,
+  );
+  assert.equal(configurationAffectsModuleSupport(() => false), false);
+  assert.equal(configurationAffectsMcppExecution(() => false), false);
 });
 
 test("only executes workspace-selected tools in trusted workspaces", () => {

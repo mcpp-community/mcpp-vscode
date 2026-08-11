@@ -3,35 +3,35 @@ import test from "node:test";
 
 import { ensureIdeConfigured } from "../src/ideWorkflow";
 
-test("configures a trusted project before build when the CDB is missing", async () => {
+const success = { exitCode: 0, stdout: "Configured 1 compile command", stderr: "" };
+
+test("configures a trusted project before clangd when the CDB is missing", async () => {
   let calls = 0;
   const outcome = await ensureIdeConfigured({
     projectRoot: "/work/app",
     compilationDatabasePath: "/work/app/compile_commands.json",
     trusted: true,
-    databaseExists: () => false,
+    databaseValid: () => calls > 0,
     configure: async () => {
       calls += 1;
-      return {
-        phase: "configured",
-        compileCommands: "/work/app/.mcpp/ide/replies/compile_commands-cfg.json",
-        compatibilityCompileCommands: "/work/app/compile_commands.json",
-      };
+      return success;
     },
   });
 
   assert.equal(calls, 1);
-  assert.equal(outcome.state, "configured");
-  assert.equal(outcome.compileCommands, "/work/app/compile_commands.json");
+  assert.deepEqual(outcome, {
+    state: "configured",
+    compileCommands: "/work/app/compile_commands.json",
+  });
 });
 
-test("keeps an existing CDB without invoking mcpp", async () => {
+test("keeps a valid existing CDB without invoking mcpp", async () => {
   let called = false;
   const outcome = await ensureIdeConfigured({
     projectRoot: "/work/app",
     compilationDatabasePath: "/work/app/compile_commands.json",
     trusted: true,
-    databaseExists: () => true,
+    databaseValid: () => true,
     configure: async () => {
       called = true;
       throw new Error("must not run");
@@ -39,7 +39,10 @@ test("keeps an existing CDB without invoking mcpp", async () => {
   });
 
   assert.equal(called, false);
-  assert.equal(outcome.state, "existing");
+  assert.deepEqual(outcome, {
+    state: "existing",
+    compileCommands: "/work/app/compile_commands.json",
+  });
 });
 
 test("does not execute mcpp in an untrusted workspace", async () => {
@@ -48,7 +51,7 @@ test("does not execute mcpp in an untrusted workspace", async () => {
     projectRoot: "/work/app",
     compilationDatabasePath: "/work/app/compile_commands.json",
     trusted: false,
-    databaseExists: () => false,
+    databaseValid: () => false,
     configure: async () => {
       called = true;
       throw new Error("must not run");
@@ -56,23 +59,60 @@ test("does not execute mcpp in an untrusted workspace", async () => {
   });
 
   assert.equal(called, false);
-  assert.equal(outcome.state, "untrusted");
+  assert.deepEqual(outcome, { state: "untrusted" });
 });
 
-test("force refresh invokes configure even when a CDB already exists", async () => {
+test("retains an existing CDB when forced configure-only fails", async () => {
+  let called = false;
+  const outcome = await ensureIdeConfigured({
+    projectRoot: "/work/app",
+    compilationDatabasePath: "/work/app/compile_commands.json",
+    trusted: true,
+    force: true,
+    databaseValid: () => true,
+    configure: async () => {
+      called = true;
+      return { exitCode: 1, stdout: "compile failed", stderr: "" };
+    },
+  });
+
+  assert.equal(called, true);
+  assert.deepEqual(outcome, {
+    state: "failed",
+    compileCommands: "/work/app/compile_commands.json",
+    exitCode: 1,
+  });
+});
+
+test("requires a valid CDB after configure-only succeeds", async () => {
+  const outcome = await ensureIdeConfigured({
+    projectRoot: "/work/app",
+    compilationDatabasePath: "/work/app/compile_commands.json",
+    trusted: true,
+    databaseValid: () => false,
+    configure: async () => success,
+  });
+
+  assert.deepEqual(outcome, { state: "failed", exitCode: 0 });
+});
+
+test("force refresh invokes configure-only when a CDB already exists", async () => {
   let calls = 0;
   const outcome = await ensureIdeConfigured({
     projectRoot: "/work/app",
     compilationDatabasePath: "/work/app/compile_commands.json",
     trusted: true,
     force: true,
-    databaseExists: () => true,
+    databaseValid: () => true,
     configure: async () => {
       calls += 1;
-      return { phase: "configured", compileCommands: "/work/app/compile_commands.json" };
+      return success;
     },
   });
 
   assert.equal(calls, 1);
-  assert.equal(outcome.state, "configured");
+  assert.deepEqual(outcome, {
+    state: "configured",
+    compileCommands: "/work/app/compile_commands.json",
+  });
 });

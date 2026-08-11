@@ -16,6 +16,10 @@ import {
 import {
   deriveClangdCandidates,
   findNearestMcppProject,
+  isPathWithinProject,
+  manifestProjectRoot,
+  projectAffectedByManifest,
+  shouldReconcileDeletedManifest,
   type McppProjectDiscovery,
 } from "./discovery";
 import {
@@ -25,15 +29,16 @@ import {
 } from "./llvmTools";
 import { CLI_COMMANDS } from "./commands";
 import { McppCliController } from "./cliController";
-import { runClangdCheck, runToolVersion, type ToolVersionResult } from "./process";
-import { runIdeConfigure, type IdeSnapshotPublished } from "./ideProtocol";
+import { runClangdCheck, runToolVersion, type ProcessResult, type ToolVersionResult } from "./process";
 import { ensureIdeConfigured } from "./ideWorkflow";
 import {
   configurationReadyAfterRestart,
+  configurationAffectsMcppExecution,
   configurationAffectsModuleSupport,
   createKeyedSingleFlightReconciler,
   createLatestOperationTracker,
   createSerialExecutor,
+  describeConfigureOnlyOutcome,
   describeRefreshOutcome,
   moduleSupportState,
   registerCompilationDatabaseReconciliation,
@@ -57,7 +62,6 @@ import {
 } from "./moduleSetup";
 
 const COMMAND_CONFIGURE = "mcpp.configureClangd";
-const COMMAND_IDE_CONFIGURE = "mcpp.configureIde";
 const COMMAND_REFRESH = "mcpp.refreshCompilationDatabase";
 const COMMAND_CHECK = "mcpp.checkModuleSupport";
 
@@ -89,45 +93,8 @@ const moduleStatusByProject = new Map<string, ModuleStatus>();
 const moduleCheckOperations = createLatestOperationTracker<string>();
 // 记录 manifest/settings 变化触发的 IDE 配置请求；CDB watcher 只重读
 // 已发布快照，避免写 CDB 后再次启动 mcpp 形成重入。
-const forceIdeConfigureByProject = new Set<string>();
+const forceConfigureOnlyByProject = new Set<string>();
 let lastReconciledProjectRoot: string | undefined;
-
-function mcppExecutable(project: McppProjectDiscovery): string {
-  const configured = projectConfiguration(project).get<string>("path", "").trim();
-  return configured.length === 0 ? "mcpp" : configured;
-}
-
-async function runIdeConfigureForProject(
-  project: McppProjectDiscovery,
-  output: vscode.OutputChannel,
-  interactive: boolean,
-): Promise<IdeSnapshotPublished | undefined> {
-  if (!workspaceAllowsToolExecution(vscode.workspace.isTrusted)) {
-    appendOutputLine(output, "[IDE 配置] 工作区未受信任，跳过 mcpp ide configure。");
-    if (interactive) {
-      await vscode.window.showWarningMessage(
-        "当前工作区未受信任，mcpp 不会执行 IDE 配置。请先信任工作区。",
-      );
-    }
-    return undefined;
-  }
-
-  const executable = mcppExecutable(project);
-  const args = ["ide", "configure", "--format", "ndjson"];
-  try {
-    const result = await runIdeConfigure(project.root, executable);
-    appendProcessOutput(output, "IDE 配置", executable, args, result);
-    appendOutputLine(output, `[IDE 配置] 已发布 CDB：${result.compileCommands}`);
-    return result;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    appendOutputLine(output, `[IDE 配置] ${message}`);
-    if (interactive) {
-      await vscode.window.showErrorMessage(`mcpp IDE 配置失败：${message}`);
-    }
-    return undefined;
-  }
-}
 
 function findCurrentProject(): McppProjectDiscovery | undefined {
   const activeEditor = vscode.window.activeTextEditor;
@@ -144,12 +111,42 @@ function findCurrentProject(): McppProjectDiscovery | undefined {
   }
 
   for (const workspaceFolder of vscode.workspace.workspaceFolders ?? []) {
-    const project = findNearestMcppProject(workspaceFolder.uri.fsPath);
+    const project = findNearestMcppProject(
+      workspaceFolder.uri.fsPath,
+      workspaceFolder.uri.fsPath,
+    );
     if (project !== undefined) {
       return project;
     }
   }
   return undefined;
+}
+
+function findProjectForUri(uri: vscode.Uri): McppProjectDiscovery | undefined {
+  const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
+  if (workspaceFolder === undefined) {
+    return undefined;
+  }
+  return findNearestMcppProject(uri.fsPath, workspaceFolder.uri.fsPath);
+}
+
+function findWorkspaceProjects(
+  currentProject: McppProjectDiscovery | undefined,
+): McppProjectDiscovery[] {
+  const projects = new Map<string, McppProjectDiscovery>();
+  if (currentProject !== undefined) {
+    projects.set(currentProject.root, currentProject);
+  }
+  for (const workspaceFolder of vscode.workspace.workspaceFolders ?? []) {
+    const project = findNearestMcppProject(
+      workspaceFolder.uri.fsPath,
+      workspaceFolder.uri.fsPath,
+    );
+    if (project !== undefined) {
+      projects.set(project.root, project);
+    }
+  }
+  return [...projects.values()];
 }
 
 function loadProjectContext(project: McppProjectDiscovery | undefined = findCurrentProject()): ProjectContext | undefined {
@@ -183,6 +180,10 @@ function loadProjectContext(project: McppProjectDiscovery | undefined = findCurr
       },
     };
   }
+}
+
+function hasUsableCompilationDatabase(project: McppProjectDiscovery): boolean {
+  return loadProjectContext(project)?.analysis.capability !== "unavailable";
 }
 
 function moduleSetupBlockedMessage(reason: ModuleSetupBlockedReason): string {
@@ -915,7 +916,8 @@ const mcppTomlCompletionProvider: vscode.CompletionItemProvider = {
 export async function activate(extensionContext: vscode.ExtensionContext): Promise<void> {
   moduleStatusByProject.clear();
   moduleCheckOperations.clear();
-  forceIdeConfigureByProject.clear();
+  forceConfigureOnlyByProject.clear();
+  lastReconciledProjectRoot = undefined;
   const output = vscode.window.createOutputChannel("mcpp");
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
 
@@ -928,6 +930,31 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
       appendOutputLine(output, `发生未预期错误：${message}`);
       void vscode.window.showErrorMessage(`mcpp：${message}`);
     }
+  };
+  let cliController: McppCliController;
+  const runConfigureOnlyForProject = async (
+    project: McppProjectDiscovery,
+    interactive: boolean,
+  ): Promise<ProcessResult | undefined> => {
+    if (!workspaceAllowsToolExecution(vscode.workspace.isTrusted)) {
+      appendOutputLine(output, "[CDB 配置] 工作区未受信任，跳过 mcpp build --configure-only。");
+      if (interactive) {
+        await vscode.window.showWarningMessage(
+          "当前工作区未受信任，不会刷新编译数据库。请先信任工作区。",
+        );
+      }
+      return undefined;
+    }
+    const result = await cliController.runConfigureOnly(project);
+    if (result === undefined) {
+      appendOutputLine(output, "[CDB 配置] 已有 mcpp 操作正在运行，本次刷新已跳过。");
+      if (interactive) {
+        await vscode.window.showWarningMessage(
+          "已有 mcpp 操作正在运行，暂不能刷新编译数据库。请等待当前操作完成后重试。",
+        );
+      }
+    }
+    return result;
   };
   const manifestWatcher = vscode.workspace.createFileSystemWatcher(MCPP_MANIFEST_GLOB);
   const compilationDatabaseWatcher = vscode.workspace.createFileSystemWatcher("**/compile_commands.json");
@@ -945,7 +972,8 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
   const reconcileProjectContext = async (
     project: McppProjectDiscovery | undefined,
     forceRestart: boolean,
-    forceIdeConfigure: boolean = false,
+    forceConfigureOnly: boolean = false,
+    allowConfigureOnly: boolean = true,
   ): Promise<ProjectReconciliation> => {
     let context = loadProjectContext(project);
     if (context === undefined) {
@@ -957,29 +985,35 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
       };
     }
 
-    // 首次打开工程时，先发布配置阶段 CDB，再让 clangd 读取它；普通源码
-    // 是否能编译成功不参与这个决定。已有 CDB 仍走兼容的旧流程。
-    try {
-      const outcome = await ensureIdeConfigured({
-        projectRoot: context.project.root,
-        compilationDatabasePath: context.project.compilationDatabasePath,
-        trusted: vscode.workspace.isTrusted,
-        force: forceIdeConfigure,
-        databaseExists: () => existsSync(context?.project.compilationDatabasePath ?? ""),
-        configure: async () => {
-          const published = await runIdeConfigureForProject(context!.project, output, false);
-          if (published === undefined) {
-            throw new Error("mcpp ide configure 未发布快照");
-          }
-          return published;
-        },
-      });
-      if (outcome.state === "configured") {
-        context = loadProjectContext(context.project) ?? context;
+    // 缺少可用 CDB 时只运行配置阶段；完整 build/test 后则只重读已有 CDB。
+    if (allowConfigureOnly) {
+      try {
+        const outcome = await ensureIdeConfigured({
+          projectRoot: context.project.root,
+          compilationDatabasePath: context.project.compilationDatabasePath,
+          trusted: vscode.workspace.isTrusted,
+          force: forceConfigureOnly,
+          databaseValid: () => hasUsableCompilationDatabase(context!.project),
+          configure: async () => {
+            const result = await runConfigureOnlyForProject(context!.project, false);
+            if (result === undefined) {
+              throw new Error("已有 mcpp 操作正在运行");
+            }
+            if (forceConfigureOnly) {
+              forceConfigureOnlyByProject.delete(context!.project.root);
+            }
+            return result;
+          },
+        });
+        if (outcome.state === "configured") {
+          context = loadProjectContext(context.project) ?? context;
+        } else if (outcome.state === "failed") {
+          appendOutputLine(output, `[自动配置] mcpp configure-only 失败（退出码 ${outcome.exitCode}）。`);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        appendOutputLine(output, `[自动配置] ${message}`);
       }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      appendOutputLine(output, `[自动配置] ${message}`);
     }
 
     updateStatusBar(status, context);
@@ -1014,8 +1048,23 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
         return reconcileProjectContext(
           project,
           forceRestart,
-          forceIdeConfigureByProject.delete(projectRoot),
+          forceConfigureOnlyByProject.has(projectRoot),
         );
+      },
+    ),
+  );
+  const reconcilePublishedCdbByRoot = createKeyedSingleFlightReconciler(
+    (projectRoot: string, forceRestart) => executeWithWorkspaceClangd(
+      async () => {
+        const project = findNearestMcppProject(projectRoot, projectRoot);
+        if (project === undefined) {
+          return {
+            context: undefined,
+            databaseFound: false,
+            configured: false,
+          };
+        }
+        return reconcileProjectContext(project, forceRestart, false, false);
       },
     ),
   );
@@ -1030,7 +1079,7 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
     compilationDatabase: vscode.Uri,
     forceRestart: boolean,
   ): void => {
-    const project = findNearestMcppProject(compilationDatabase.fsPath);
+    const project = findProjectForUri(compilationDatabase);
     if (project === undefined) {
       return;
     }
@@ -1038,7 +1087,8 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
     if (!shouldUseWorkspaceClangd(findCurrentProject()?.root, project.root)) {
       return;
     }
-    void reconcileProject(project, forceRestart).catch((error: unknown) => {
+    // CDB watcher 只重读已经发布的数据库，避免配置阶段写 CDB 后再次启动 mcpp。
+    void reconcilePublishedCdbByRoot(project.root, forceRestart).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
       appendOutputLine(output, `[自动配置] ${message}`);
     });
@@ -1046,30 +1096,88 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
   const requestCurrentProjectReconciliation = (forceRestart: boolean): void => {
     const project = findCurrentProject();
     if (project === undefined) {
+      lastReconciledProjectRoot = undefined;
       refreshStatus();
       return;
     }
+    lastReconciledProjectRoot = project.root;
     void reconcileProject(project, forceRestart).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
       appendOutputLine(output, `[自动配置] ${message}`);
     });
   };
-  const configurationWatcher = vscode.workspace.onDidChangeConfiguration((event) => {
-    const project = findCurrentProject();
+  const requestManifestReconciliation = (manifestUri: vscode.Uri): void => {
+    refreshStatus();
+    cliController.refreshStatus();
+    const currentProject = findCurrentProject();
+    const project = projectAffectedByManifest(
+      manifestUri.fsPath,
+      currentProject,
+      findProjectForUri(manifestUri),
+    );
     if (project === undefined) {
       return;
     }
-    const uri = vscode.Uri.file(project.root);
+    forceConfigureOnlyByProject.add(project.root);
+    if (!shouldUseWorkspaceClangd(findCurrentProject()?.root, project.root)) {
+      return;
+    }
+    lastReconciledProjectRoot = project.root;
+    void reconcileProject(project, true).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      appendOutputLine(output, `[自动配置] ${message}`);
+    });
+  };
+  const requestDeletedManifestReconciliation = (manifestUri: vscode.Uri): void => {
+    refreshStatus();
+    cliController.refreshStatus();
+    const deletedProjectRoot = manifestProjectRoot(manifestUri.fsPath);
+    forceConfigureOnlyByProject.delete(deletedProjectRoot);
+    invalidateModuleStatus(deletedProjectRoot);
+    if (!shouldReconcileDeletedManifest(lastReconciledProjectRoot, manifestUri.fsPath)) {
+      return;
+    }
+
+    lastReconciledProjectRoot = undefined;
+    const fallbackProject = findCurrentProject();
+    if (
+      fallbackProject !== undefined
+      && isPathWithinProject(manifestProjectRoot(manifestUri.fsPath), fallbackProject.root)
+    ) {
+      forceConfigureOnlyByProject.add(fallbackProject.root);
+    }
+    requestCurrentProjectReconciliation(true);
+  };
+  const configurationWatcher = vscode.workspace.onDidChangeConfiguration((event) => {
+    const currentProject = findCurrentProject();
+    let currentExecutionChanged = false;
+    for (const project of findWorkspaceProjects(currentProject)) {
+      const uri = vscode.Uri.file(project.root);
+      if (!configurationAffectsMcppExecution(
+        (section) => event.affectsConfiguration(section, uri),
+      )) {
+        continue;
+      }
+      forceConfigureOnlyByProject.add(project.root);
+      currentExecutionChanged ||= project.root === currentProject?.root;
+    }
+    if (currentExecutionChanged) {
+      requestCurrentProjectReconciliation(true);
+      return;
+    }
+    if (currentProject === undefined) {
+      return;
+    }
+    const uri = vscode.Uri.file(currentProject.root);
     if (configurationAffectsModuleSupport(
       (section) => event.affectsConfiguration(section, uri),
     )) {
-      forceIdeConfigureByProject.add(project.root);
       requestCurrentProjectReconciliation(true);
     }
   });
   const trustWatcher = vscode.workspace.onDidGrantWorkspaceTrust(() => {
     const project = findCurrentProject();
-    if (project !== undefined) forceIdeConfigureByProject.add(project.root);
+    if (project !== undefined) forceConfigureOnlyByProject.add(project.root);
     requestCurrentProjectReconciliation(true);
   });
 
@@ -1084,7 +1192,15 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
       return;
     }
 
-    const reconciled = await reconcileProject(project, true);
+    const configureOnlyPending = forceConfigureOnlyByProject.has(project.root);
+    const reconciled = await executeWithWorkspaceClangd(
+      () => reconcileProjectContext(
+        project,
+        true,
+        configureOnlyPending,
+        configureOnlyPending,
+      ),
+    );
     if (kind === "build") {
       if (reconciled.context?.analysis.capability === "syntax-only") {
         const buildMessage = completion.state === "succeeded" ? "mcpp 构建完成" : "mcpp 构建失败";
@@ -1113,7 +1229,7 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
       await vscode.window.showInformationMessage(`mcpp ${label}完成；clangd/CDB 状态已重新检查。`);
     }
   };
-  const cliController = new McppCliController({
+  cliController = new McppCliController({
     output,
     currentProject: findCurrentProject,
     afterProjectTask,
@@ -1147,43 +1263,34 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
         await updateModuleSupportForContext(context, configured, status, output);
       });
     })),
-    vscode.commands.registerCommand(COMMAND_IDE_CONFIGURE, runGuarded(async () => {
+    vscode.commands.registerCommand(COMMAND_REFRESH, runGuarded(async () => {
       const project = findCurrentProject();
       if (project === undefined) {
         await vscode.window.showWarningMessage("当前工作区没有找到 mcpp.toml。");
         return;
       }
       await executeWithWorkspaceClangd(async () => {
-        const context = loadProjectContext(project);
-        if (context === undefined) {
+        const hadUsableDatabase = hasUsableCompilationDatabase(project);
+        const result = await runConfigureOnlyForProject(project, true);
+        if (result === undefined) {
           return;
         }
-        try {
-          const outcome = await ensureIdeConfigured({
-            projectRoot: project.root,
-            compilationDatabasePath: project.compilationDatabasePath,
-            trusted: vscode.workspace.isTrusted,
-            force: true,
-            databaseExists: () => existsSync(project.compilationDatabasePath),
-            configure: async () => {
-              const published = await runIdeConfigureForProject(project, output, true);
-              if (published === undefined) {
-                throw new Error("mcpp ide configure 未发布快照");
-              }
-              return published;
-            },
-          });
-          if (outcome.state === "configured") {
-            await reconcileProjectContext(project, true);
-          }
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          appendOutputLine(output, `[IDE 配置] ${message}`);
+        const reconciled = await reconcileProjectContext(project, true, false, false);
+        const databaseValid = reconciled.context?.analysis.capability !== "unavailable";
+        const outcome = describeConfigureOnlyOutcome(
+          result.exitCode,
+          databaseValid,
+          hadUsableDatabase && result.exitCode !== 0,
+          reconciled.configured,
+        );
+        if (outcome.level === "information") {
+          await vscode.window.showInformationMessage(outcome.message);
+        } else if (outcome.level === "warning") {
+          await vscode.window.showWarningMessage(outcome.message);
+        } else {
+          await vscode.window.showErrorMessage(outcome.message);
         }
       });
-    })),
-    vscode.commands.registerCommand(COMMAND_REFRESH, runGuarded(async () => {
-      await cliController.runProjectTask("build");
     })),
     vscode.commands.registerCommand(COMMAND_CHECK, runGuarded(async () => {
       const project = findCurrentProject();
@@ -1237,7 +1344,7 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
               await runModuleSupportCheck(ctx, status, output, "interactive");
               return;
             case "rebuild":
-              await cliController.runProjectTask("build");
+              await vscode.commands.executeCommand(COMMAND_REFRESH);
               return;
           }
         }
@@ -1325,27 +1432,11 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
   );
 
   extensionContext.subscriptions.push(
-    manifestWatcher.onDidCreate(() => {
-      refreshStatus();
-      cliController.refreshStatus();
-      const project = findCurrentProject();
-      if (project !== undefined) forceIdeConfigureByProject.add(project.root);
-      requestCurrentProjectReconciliation(true);
+    manifestWatcher.onDidCreate((manifestUri) => requestManifestReconciliation(manifestUri)),
+    manifestWatcher.onDidChange((manifestUri) => {
+      requestManifestReconciliation(manifestUri);
     }),
-    manifestWatcher.onDidChange(() => {
-      refreshStatus();
-      cliController.refreshStatus();
-      const project = findCurrentProject();
-      if (project !== undefined) forceIdeConfigureByProject.add(project.root);
-      requestCurrentProjectReconciliation(true);
-    }),
-    manifestWatcher.onDidDelete(() => {
-      refreshStatus();
-      cliController.refreshStatus();
-      const project = findCurrentProject();
-      if (project !== undefined) forceIdeConfigureByProject.add(project.root);
-      requestCurrentProjectReconciliation(true);
-    }),
+    manifestWatcher.onDidDelete((manifestUri) => requestDeletedManifestReconciliation(manifestUri)),
     ...registerCompilationDatabaseReconciliation(
       compilationDatabaseWatcher,
       requestAutomaticReconciliation,
@@ -1357,6 +1448,7 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
     if (project === undefined) {
       await reconcileProjectContext(undefined, false);
     } else {
+      lastReconciledProjectRoot = project.root;
       await reconcileProject(project, false);
     }
   } catch (error) {
@@ -1368,6 +1460,7 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
 export function deactivate(): void {
   moduleStatusByProject.clear();
   moduleCheckOperations.clear();
-  forceIdeConfigureByProject.clear();
+  forceConfigureOnlyByProject.clear();
+  lastReconciledProjectRoot = undefined;
   // VS Code 会释放 activate() 注册的所有订阅。
 }

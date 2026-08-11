@@ -1,5 +1,16 @@
 # 更新日志
 
+## 未发布
+
+- 将编译数据库刷新迁移到 `mcpp build --configure-only`：不解析 stdout 人类文本，以退出码
+  和可解析 CDB 作为成功条件，失败时保留 last-known-good CDB。
+- 删除旧 `mcpp ide configure --format ndjson` 解析层和重复的 `mcpp.configureIde` 命令；
+  configure-only 与 build/run/test 共用项目操作锁，manifest 与 `mcpp.path` 变化按工程协调。
+- CDB watcher 只重读已发布数据库，不反向触发 configure-only；多根工作区按事件 URI 路由，
+  显式刷新会分别报告 CDB 生成与 clangd 协调结果。
+- 对齐 mcpp #387 的最终 workspace 契约：virtual workspace 根不作为单一 clangd 工程，
+  扩展消费当前活动 member 根的 CDB；rooted workspace 仍按根 package 处理。
+
 ## 0.2.7
 
 - 修复「一键配置模块代码提示」在标准 mcpp 安装（install.sh / AUR）下无法发现 mcpp 内置

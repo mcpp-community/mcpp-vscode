@@ -37,7 +37,6 @@
     "onCommand:mcpp.showToolchains",
     "onCommand:mcpp.installToolchain",
     "onCommand:mcpp.selectDefaultToolchain",
-    "onCommand:mcpp.configureIde",
     "onCommand:mcpp.autoConfigureModules"
   ],
   "categories": [
@@ -104,10 +103,6 @@
       {
         "command": "mcpp.selectDefaultToolchain",
         "title": "mcpp: 选择全局默认工具链"
-      },
-      {
-        "command": "mcpp.configureIde",
-        "title": "mcpp: 生成 IDE 编译数据库"
       },
       {
         "command": "mcpp.configureClangd",
