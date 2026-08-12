@@ -595,6 +595,10 @@ async function runModuleSupportCheck(
     return moduleStatus;
   }
 
+  if (stageProjectPcms(context, output)) {
+    await restartClangd(output);
+  }
+
   const checkToken = moduleCheckOperations.begin(context.project.root);
   moduleStatusByProject.delete(context.project.root);
   if (shouldRenderProjectStatus(findCurrentProject()?.root, context.project.root)) {
