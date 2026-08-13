@@ -18,6 +18,8 @@ export interface CompilationDatabaseAnalysis {
   directory?: string;
   arguments?: string[];
   hasPrebuiltModules?: boolean;
+  modulePcmSourceDirectories?: string[];
+  modulePcmConsumerDirectories?: string[];
   reason: string;
 }
 
@@ -54,6 +56,13 @@ interface CompilationCommand {
   file?: unknown;
   arguments?: unknown;
   command?: unknown;
+}
+
+interface CompilationCandidate extends CompilationDatabaseAnalysis {
+  moduleInterface: boolean;
+  projectSource: boolean;
+  moduleCompatibilityKey: string;
+  prebuiltModuleDirectory?: string;
 }
 
 function unavailable(reason: string): CompilationDatabaseAnalysis {
@@ -145,6 +154,37 @@ function compilerKind(compilerPath: string): CompilerKind {
   return "unknown";
 }
 
+function prebuiltModuleDirectory(arguments_: readonly string[]): string | undefined {
+  const flag = arguments_.find((argument) => argument.startsWith("-fprebuilt-module-path="));
+  if (flag === undefined) {
+    return undefined;
+  }
+  const value = flag.slice("-fprebuilt-module-path=".length);
+  return value.length >= 2 && value.startsWith('"') && value.endsWith('"')
+    ? value.slice(1, -1)
+    : value;
+}
+
+function moduleCompatibilityKey(arguments_: readonly string[]): string {
+  const result: string[] = [];
+  for (let index = 1; index < arguments_.length; index += 1) {
+    const argument = arguments_[index];
+    if (argument === "-c" || argument === "-o" || argument === "-I") {
+      index += 1;
+      continue;
+    }
+    if (
+      argument.startsWith("-I")
+      || argument.startsWith("-fmodule-file=")
+      || argument.startsWith("-fprebuilt-module-path=")
+    ) {
+      continue;
+    }
+    result.push(argument);
+  }
+  return result.join("\0");
+}
+
 export function analyzeCompilationDatabase(contents: string): CompilationDatabaseAnalysis {
   let parsed: unknown;
   try {
@@ -157,7 +197,7 @@ export function analyzeCompilationDatabase(contents: string): CompilationDatabas
     return unavailable("compile_commands.json 至少需要包含一条编译命令");
   }
 
-  const candidates: CompilationDatabaseAnalysis[] = [];
+  const candidates: CompilationCandidate[] = [];
 
   for (const value of parsed) {
     if (value === null || typeof value !== "object") {
@@ -183,6 +223,10 @@ export function analyzeCompilationDatabase(contents: string): CompilationDatabas
     const sourceFile = typeof command.file === "string"
       ? resolveCompilationSourceFile(directory, command.file)
       : undefined;
+    const moduleInterface = /\.(?:cppm|ixx|mpp|ccm)$/i.test(sourceFile ?? "");
+    const projectSource = directory !== undefined
+      && sourceFile !== undefined
+      && isProjectSource(directory, sourceFile);
     candidates.push({
       kind,
       capability: kind === "llvm" ? "full" : "syntax-only",
@@ -191,6 +235,10 @@ export function analyzeCompilationDatabase(contents: string): CompilationDatabas
       directory,
       arguments: args,
       hasPrebuiltModules,
+      moduleInterface,
+      projectSource,
+      moduleCompatibilityKey: moduleCompatibilityKey(args),
+      prebuiltModuleDirectory: prebuiltModuleDirectory(args),
       reason: kind === "llvm"
         ? "Clang 编译命令可以由 clangd 使用"
         : `${kind.toUpperCase()} 模块产物不能由 clangd 使用`,
@@ -201,17 +249,41 @@ export function analyzeCompilationDatabase(contents: string): CompilationDatabas
     return unavailable("compile_commands.json 不包含受支持的编译器命令");
   }
 
-  const score = (candidate: CompilationDatabaseAnalysis): number => {
+  const score = (candidate: CompilationCandidate): number => {
     const sourceFile = candidate.sourceFile ?? "";
-    const moduleInterface = /\.(?:cppm|ixx|mpp|ccm)$/i.test(sourceFile);
     const inProject = candidate.directory !== undefined && isWithinDirectory(candidate.directory, sourceFile);
     return (inProject ? 200 : 0)
-      + (candidate.directory !== undefined && isProjectSource(candidate.directory, sourceFile) ? 200 : 0)
-      + (moduleInterface ? 100 : 0)
+      + (candidate.projectSource ? 200 : 0)
+      + (candidate.moduleInterface ? 0 : 100)
       + (candidate.hasPrebuiltModules ? 10 : 0);
   };
 
-  return candidates.reduce((best, candidate) => (score(candidate) > score(best) ? candidate : best));
+  const selected = candidates.reduce(
+    (best, candidate) => (score(candidate) > score(best) ? candidate : best),
+  );
+  const uniqueDirectories = (moduleInterface: boolean): string[] => [...new Set(
+    candidates
+      .filter((candidate) => (
+        candidate.kind === "llvm"
+        && candidate.projectSource
+        && candidate.moduleInterface === moduleInterface
+        && candidate.compilerPath === selected.compilerPath
+        && candidate.moduleCompatibilityKey === selected.moduleCompatibilityKey
+      ))
+      .flatMap((candidate) => candidate.prebuiltModuleDirectory ?? []),
+  )];
+  const {
+    moduleInterface: _moduleInterface,
+    projectSource: _projectSource,
+    moduleCompatibilityKey: _moduleCompatibilityKey,
+    prebuiltModuleDirectory: _prebuiltModuleDirectory,
+    ...analysis
+  } = selected;
+  return {
+    ...analysis,
+    modulePcmSourceDirectories: uniqueDirectories(true),
+    modulePcmConsumerDirectories: uniqueDirectories(false),
+  };
 }
 
 function isWithinDirectory(directory: string, file: string): boolean {

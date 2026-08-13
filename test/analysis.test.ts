@@ -57,6 +57,51 @@ test("prefers a project module interface over an earlier external command", () =
   assert.equal(result.hasPrebuiltModules, true);
 });
 
+test("checks a project module consumer and records its separate PCM directory", () => {
+  const result = analyzeCompilationDatabase(JSON.stringify([
+    {
+      directory: "/work/app",
+      file: "/work/app/src/demo.cppm",
+      arguments: [
+        "/tools/clang++",
+        "-std=c++23",
+        "-O0",
+        "-fprebuilt-module-path=/work/app/target/build/pcm.cache",
+        "-c",
+        "/work/app/src/demo.cppm",
+      ],
+    },
+    {
+      directory: "/work/app",
+      file: "/work/app/tests/demo_test.cpp",
+      arguments: [
+        "/tools/clang++",
+        "-std=c++23",
+        "-O0",
+        "-fprebuilt-module-path=/work/app/target/test/pcm.cache",
+        "-c",
+        "/work/app/tests/demo_test.cpp",
+      ],
+    },
+    {
+      directory: "/work/app",
+      file: "/work/app/tests/release_test.cpp",
+      arguments: [
+        "/tools/clang++",
+        "-std=c++23",
+        "-O2",
+        "-fprebuilt-module-path=/work/app/target/release/pcm.cache",
+        "-c",
+        "/work/app/tests/release_test.cpp",
+      ],
+    },
+  ]));
+
+  assert.equal(result.sourceFile, "/work/app/tests/demo_test.cpp");
+  assert.deepEqual(result.modulePcmSourceDirectories, ["/work/app/target/build/pcm.cache"]);
+  assert.deepEqual(result.modulePcmConsumerDirectories, ["/work/app/target/test/pcm.cache"]);
+});
+
 test("prefers a project source over an external module interface", () => {
   const result = analyzeCompilationDatabase(JSON.stringify([
     {

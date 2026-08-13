@@ -61,6 +61,7 @@ import {
   type ModuleSetupBlockedReason,
   type ModuleSetupStepResult,
 } from "./moduleSetup";
+import { stageAvailableProjectPcms } from "./pcm";
 
 const COMMAND_CONFIGURE = "mcpp.configureClangd";
 const COMMAND_REFRESH = "mcpp.refreshCompilationDatabase";
@@ -185,6 +186,22 @@ function loadProjectContext(project: McppProjectDiscovery | undefined = findCurr
 
 function hasUsableCompilationDatabase(project: McppProjectDiscovery): boolean {
   return loadProjectContext(project)?.analysis.capability !== "unavailable";
+}
+
+function stageProjectPcms(context: ProjectContext, output: vscode.OutputChannel): boolean {
+  try {
+    const copied = stageAvailableProjectPcms(context.analysis);
+    if (copied > 0) {
+      appendOutputLine(output, `[PCM] 已为模块消费者暂存 ${copied} 个现有 PCM。`);
+    }
+    return copied > 0;
+  } catch (error) {
+    appendOutputLine(
+      output,
+      `[PCM] 暂存现有 PCM 失败：${error instanceof Error ? error.message : String(error)}`,
+    );
+    return false;
+  }
 }
 
 function moduleSetupBlockedMessage(reason: ModuleSetupBlockedReason): string {
@@ -578,6 +595,10 @@ async function runModuleSupportCheck(
     return moduleStatus;
   }
 
+  if (stageProjectPcms(context, output)) {
+    await restartClangd(output);
+  }
+
   const checkToken = moduleCheckOperations.begin(context.project.root);
   moduleStatusByProject.delete(context.project.root);
   if (shouldRenderProjectStatus(findCurrentProject()?.root, context.project.root)) {
@@ -800,6 +821,7 @@ async function autoConfigureModulesWizard(
         return { stage: "reload", state: "failed", detail: "无法重新加载 mcpp 工程。" };
       }
       currentContext = refreshed;
+      stageProjectPcms(currentContext, output);
       updateStatusBar(status, currentContext);
       if (currentContext.analysis.capability !== "full" || currentContext.analysis.kind !== "llvm") {
         return {
@@ -1032,6 +1054,9 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
       }
     }
 
+    if (workspaceAllowsToolExecution(vscode.workspace.isTrusted)) {
+      forceRestart ||= stageProjectPcms(context, output);
+    }
     updateStatusBar(status, context);
 
     const configured = await configureClangd(

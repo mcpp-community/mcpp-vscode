@@ -154,6 +154,15 @@ test("IDE commands expose progress and bound clangd restart waits", () => {
   assert.match(source, /output\.show\(true\)/);
 });
 
+test("module checks restore available PCM before invoking clangd", () => {
+  const source = readFileSync(path.join(root, "src/extension.ts"), "utf8");
+  const start = source.indexOf("async function runModuleSupportCheck");
+  const end = source.indexOf("async function updateModuleSupportForContext", start);
+  const method = source.slice(start, end);
+  assert.ok(method.indexOf("stageProjectPcms(context, output)") < method.indexOf("runClangdCheck("));
+  assert.match(method, /stageProjectPcms\(context, output\)[\s\S]*await restartClangd\(output\)/);
+});
+
 test("ships syntax-only C++ highlighting for the exact build.mcpp filename", () => {
   const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
   const associations = manifest.contributes?.configurationDefaults?.["files.associations"] as
