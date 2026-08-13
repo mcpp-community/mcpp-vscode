@@ -210,7 +210,7 @@ test("阻止原因按未信任、未知清单、忙碌、项目覆盖的顺序�
   );
 });
 
-test("模块设置命令使用固定 argv 数组且始终构建", () => {
+test("模块设置命令仅在工具链变化时清缓存", () => {
   assert.deepEqual(
     mcppModuleSetupCommands({ kind: "ready", installLlvm: true, switchDefault: true }),
     [
@@ -221,7 +221,7 @@ test("模块设置命令使用固定 argv 数组且始终构建", () => {
   );
   assert.deepEqual(
     mcppModuleSetupCommands({ kind: "ready", installLlvm: false, switchDefault: false }),
-    [{ stage: "build", mode: "task", args: ["build", "--no-cache"] }],
+    [{ stage: "build", mode: "task", args: ["build"] }],
   );
 });
 
