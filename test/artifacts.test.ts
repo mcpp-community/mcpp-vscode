@@ -26,7 +26,10 @@ interface PackageManifest {
     configurationDefaults?: Record<string, unknown>;
     languages?: Array<{ id: string; aliases?: string[]; filenames?: string[]; configuration?: string }>;
     viewsContainers?: { activitybar?: Array<{ id: string; title?: string; icon?: string }> };
-    views?: Record<string, Array<{ id: string; name?: string; description?: string; when?: string; type?: string }>>;
+    views?: Record<
+      string,
+      Array<{ id: string; name?: string; description?: string; when?: string; type?: string; visibility?: string }>
+    >;
     viewsWelcome?: Array<{ view: string; contents: string; when?: string }>;
     colors?: Array<{ id: string; description?: string }>;
     keybindings?: Array<{ command: string; key?: string; mac?: string; when?: string }>;
@@ -149,6 +152,14 @@ test("each view is gated by its own visibility setting", () => {
     "webview",
     "webview",
   ]);
+  // The cache view starts folded, so the sidebar opens on the library list; the
+  // two above it start open. `visibility` is the only way a view can say this —
+  // VS Code keeps whatever the user does to the header afterwards.
+  assert.deepEqual(manifest.contributes?.views?.mcpp?.map((view) => view.visibility), [
+    undefined,
+    undefined,
+    "collapsed",
+  ]);
 });
 
 test("every webview view registers the provider that fills it", () => {
@@ -170,6 +181,27 @@ test("every webview view registers the provider that fills it", () => {
       `${owners[0][0]} declares ${view.id} but never calls registerWebviewViewProvider`,
     );
   }
+});
+
+test("the library view cannot reload itself in a loop", () => {
+  const view = readFileSync(path.join(root, "src/library", "libraryView.ts"), "utf8");
+  const html = readFileSync(path.join(root, "src/library", "libraryHtml.ts"), "utf8");
+  // Assigning `webview.html` reloads the document. The library document used to
+  // announce its own load with a `ready` message and the host answered it with a
+  // repaint, so the view reloaded itself forever: flicker, rows that could not be
+  // clicked, a pegged CPU. Both halves of that handshake are gone.
+  assert.doesNotMatch(html, /post\(\{\s*type:\s*"ready"\s*\}\)/, "the document must not announce its own load");
+  assert.doesNotMatch(view, /case "ready"/, "the host must not answer a load with a re-render");
+  assert.doesNotMatch(html, /\| \{ type: "ready" \}/);
+  // Two guards keep it shut: the comparison, and a nonce that is per *view* — a
+  // nonce per render would make every render a different document, so the
+  // comparison could never say "unchanged".
+  assert.match(view, /if \(!documentNeedsRender\(this\.document, document\)\) \{/);
+  assert.match(view, /private readonly nonce = randomNonce\(\);/);
+  assert.doesNotMatch(view, /nonce: randomNonce\(\)/);
+  // A freshly resolved view is a new, empty webview: the last document says
+  // nothing about it, so it must be forgotten when the old view goes away.
+  assert.match(view, /this\.document = undefined;/);
 });
 
 /** `src/**\/*.ts`, relative path and text, for the source-level gates. */

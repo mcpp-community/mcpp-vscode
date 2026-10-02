@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-import { QUICK_MENU_GROUPS, quickMenuItems } from "../../src/commands/menu";
+import {
+  QUICK_MENU_COLOURS,
+  QUICK_MENU_GROUPS,
+  quickMenuIconAsset,
+  quickMenuItems,
+} from "../../src/commands/menu";
+import { buildProjectTree } from "../../src/views/models";
 
 /**
  * The status-bar menu is data, so it can be checked as data.
@@ -14,12 +20,19 @@ import { QUICK_MENU_GROUPS, quickMenuItems } from "../../src/commands/menu";
  * and every label — each row *and* each heading — must have a translation.
  * Neither is visible to `tools/l10n-check.mjs`, which only sees literal
  * `t("…")` calls, so both are gated here instead.
+ *
+ * The coloured icons are files on disk, and this file is where the table and the
+ * files are compared. That is the only thing keeping
+ * `tools/generate-quick-menu-icons.mjs` honest: the generator writes what it
+ * parsed, and this walk fails if a row has no asset for either theme.
  */
 
 const zh = JSON.parse(readFileSync(path.join(process.cwd(), "data", "i18n", "zh-cn.json"), "utf8")) as Record<
   string,
   string
 >;
+
+const ICON_DIRECTORY = path.join(process.cwd(), "media", "quick-menu");
 
 test("the entries are written in the declared group order", () => {
   const declared = QUICK_MENU_GROUPS.map((group) => group.id);
@@ -53,4 +66,45 @@ test("every entry carries a codicon id, not a rendered icon", () => {
 test("no command is offered twice", () => {
   const commands = quickMenuItems.map((item) => item.command);
   assert.equal(new Set(commands).size, commands.length);
+});
+
+test("every row has a generated coloured icon for both themes", () => {
+  for (const item of quickMenuItems) {
+    assert.ok(
+      (QUICK_MENU_COLOURS as readonly string[]).includes(item.iconColor),
+      `${item.command} asks for the colour ${JSON.stringify(item.iconColor)}`,
+    );
+    for (const theme of ["dark", "light"] as const) {
+      const file = path.join(ICON_DIRECTORY, quickMenuIconAsset(item, theme));
+      assert.ok(existsSync(file), `${item.command} has no ${theme} icon: ${path.relative(process.cwd(), file)}`);
+      assert.ok(statSync(file).size > 0, `${file} is empty`);
+      // A baked colour, not the codicon's `currentColor`: a quick pick draws this
+      // as a background-image, where `currentColor` resolves to nothing.
+      assert.doesNotMatch(readFileSync(file, "utf8"), /currentColor/, `${file} is still theme-coloured`);
+    }
+  }
+});
+
+test("a row and its project-view twin agree on icon and colour", () => {
+  // The same command shown twice must look the same twice. The tree names a
+  // theme token and the menu names a palette word, which is exactly the kind of
+  // pair that drifts; `charts.<word>` is the join between them.
+  const tree = buildProjectTree({ root: "/w", name: "greeter", version: "0.1.0" });
+  const twins = new Map(
+    tree
+      .flatMap((section) => section.children ?? [])
+      .filter((node) => node.command !== undefined)
+      .map((node) => [node.command?.command ?? "", node] as const),
+  );
+  let compared = 0;
+  for (const item of quickMenuItems) {
+    const twin = twins.get(item.command);
+    if (twin === undefined || twin.iconColor === undefined) {
+      continue;
+    }
+    assert.equal(item.icon, twin.icon, `${item.command} uses a different icon in the two places`);
+    assert.equal(`charts.${item.iconColor}`, twin.iconColor, `${item.command} uses a different colour`);
+    compared += 1;
+  }
+  assert.equal(compared, 7, "the shared commands must all be compared; did the tree or the menu change shape?");
 });

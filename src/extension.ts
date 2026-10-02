@@ -283,6 +283,7 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
 
   const cliController = new McppCliController({
     output,
+    extensionUri: extensionContext.extensionUri,
     currentProject: findCurrentProject,
     afterProjectTask,
     isTrusted: () => vscode.workspace.isTrusted,

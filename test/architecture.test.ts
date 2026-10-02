@@ -29,6 +29,7 @@ const PURE_MODULES = [
   "src/cli/newProject.ts",
   "src/cli/toolchain.ts",
   "src/cli/labels.ts",
+  "src/cli/statusBar.ts",
   "src/cli/selfCheck.ts",
   "src/config/registry.ts",
   "src/config/validate.ts",

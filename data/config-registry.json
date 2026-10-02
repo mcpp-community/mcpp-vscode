@@ -857,6 +857,24 @@
       "description": "Show the C++ Modules language service state in the mcpp status bar item. Off by default because mcppls already has its own status item."
     },
     {
+      "key": "mcpp.ui.statusBar.background",
+      "type": "string",
+      "default": "warning",
+      "enum": [
+        "none",
+        "warning",
+        "error"
+      ],
+      "scope": "window",
+      "group": "ui",
+      "order": 5,
+      "tier": "advanced",
+      "applies": "immediate",
+      "since": "0.6.0",
+      "title": "Highlight the mcpp status bar item",
+      "description": "VS Code accepts only two background colours for a status bar entry, \"statusBarItem.warningBackground\" and \"statusBarItem.errorBackground\", and it overrides the foreground so the text stays readable; any other colour is dropped. \"warning\" paints the mcpp item with the theme's amber chip, \"error\" with its red one, \"none\" leaves it plain."
+    },
+    {
       "key": "mcpp.ui.notifications.success",
       "type": "string",
       "default": "statusBar",
@@ -867,7 +885,7 @@
       ],
       "scope": "window",
       "group": "ui",
-      "order": 5,
+      "order": 6,
       "tier": "public",
       "applies": "immediate",
       "since": "0.5.0",
@@ -882,7 +900,7 @@
       "maximum": 1440,
       "scope": "window",
       "group": "ui",
-      "order": 6,
+      "order": 7,
       "tier": "advanced",
       "applies": "immediate",
       "since": "0.5.0",
@@ -899,7 +917,7 @@
       ],
       "scope": "window",
       "group": "ui",
-      "order": 7,
+      "order": 8,
       "tier": "public",
       "applies": "immediate",
       "since": "0.5.0",

@@ -650,16 +650,23 @@ interface CommandRow {
  *
  * The colours are a small, explainable palette grouped by **what the row acts
  * on**, not by decoration: blue builds or adds, green runs or verifies, purple
- * tests, orange deletes, yellow manages the toolchain, and configuration stays
- * in the ordinary foreground so it never competes with the actions.
+ * tests, red deletes, yellow manages the toolchain, and configuration stays in
+ * the ordinary foreground so it never competes with the actions.
+ *
+ * Deletion is `charts.red` and not `charts.orange` because `charts.orange`
+ * resolves to `minimap.findMatchHighlight` -> `editor.findMatchHighlightBackground`,
+ * which is `#EA5C00` at 33% alpha: as a glyph colour that is a washed-out smear
+ * in both themes. `charts.red` is `editorError.foreground`, a solid value in
+ * every theme. The quick menu uses the same words, one file per colour — see
+ * `src/commands/menu.ts`.
  */
 const COMMON_COMMANDS: readonly CommandRow[] = [
   { id: "project.action.build", label: "Build", icon: "tools", iconColor: "charts.blue", command: "mcpp.build" },
   { id: "project.action.run", label: "Run", icon: "play", iconColor: "charts.green", command: "mcpp.run" },
   { id: "project.action.test", label: "Test", icon: "beaker", iconColor: "charts.purple", command: "mcpp.test" },
-  { id: "project.action.clean", label: "Clean", icon: "trash", iconColor: "charts.orange", command: "mcpp.cleanProjectArtifacts" },
+  { id: "project.action.clean", label: "Clean", icon: "trash", iconColor: "charts.red", command: "mcpp.cleanProjectArtifacts" },
   { id: "project.action.toolchain", label: "Toolchain", icon: "chip", iconColor: "charts.yellow", command: "mcpp.showToolchains" },
-  { id: "project.action.librarySearch", label: "Search and add a dependency…", icon: "cloud", iconColor: "charts.blue", command: "mcpp.library.search" },
+  { id: "project.action.librarySearch", label: "Search and add a dependency…", icon: "library", iconColor: "charts.blue", command: "mcpp.library.search" },
   { id: "project.action.selfCheck", label: "Environment self-check", icon: "heart", iconColor: "charts.green", command: "mcpp.selfCheck" },
   { id: "project.action.settings", label: "Settings", icon: "settings-gear", iconColor: "", command: "mcpp.openSettings" },
 ];

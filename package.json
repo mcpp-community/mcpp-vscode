@@ -829,6 +829,19 @@
           "description": "%mcpp.ui.statusBar.showLanguageServer.title%",
           "markdownDescription": "%mcpp.ui.statusBar.showLanguageServer.description%"
         },
+        "mcpp.ui.statusBar.background": {
+          "type": "string",
+          "default": "warning",
+          "enum": [
+            "none",
+            "warning",
+            "error"
+          ],
+          "scope": "window",
+          "order": 80040,
+          "description": "%mcpp.ui.statusBar.background.title%",
+          "markdownDescription": "%mcpp.ui.statusBar.background.description%"
+        },
         "mcpp.ui.notifications.success": {
           "type": "string",
           "default": "statusBar",
@@ -838,7 +851,7 @@
             "toast"
           ],
           "scope": "window",
-          "order": 80040,
+          "order": 80050,
           "description": "%mcpp.ui.notifications.success.title%",
           "markdownDescription": "%mcpp.ui.notifications.success.description%"
         },
@@ -848,7 +861,7 @@
           "minimum": 0,
           "maximum": 1440,
           "scope": "window",
-          "order": 80050,
+          "order": 80060,
           "description": "%mcpp.ui.notifications.dedupeMinutes.title%",
           "markdownDescription": "%mcpp.ui.notifications.dedupeMinutes.description%"
         },
@@ -860,7 +873,7 @@
             "decimal"
           ],
           "scope": "window",
-          "order": 80060,
+          "order": 80070,
           "description": "%mcpp.ui.numberFormat.title%",
           "markdownDescription": "%mcpp.ui.numberFormat.description%"
         },
@@ -1043,6 +1056,7 @@
           "contextualTitle": "%view.mcpp.cache.name%",
           "description": "%view.mcpp.cache.description%",
           "type": "webview",
+          "visibility": "collapsed",
           "when": "!mcpp.sidebarHidden && mcpp.views.cache"
         }
       ]
@@ -1135,7 +1149,8 @@
     "gen:buildscript": "node tools/generate-buildscript-api.mjs",
     "gen:toml": "node tools/generate-toml-schema.mjs",
     "gen:icon": "node tools/generate-activitybar-icon.mjs",
-    "check:icon": "node tools/generate-activitybar-icon.mjs --check",
+    "gen:menuicons": "node tools/generate-quick-menu-icons.mjs",
+    "check:icon": "node tools/generate-activitybar-icon.mjs --check && node tools/generate-quick-menu-icons.mjs --check",
     "check:generated": "node tools/check-generators.mjs",
     "test:e2e:one": "node dist/test/e2e/runTest.js"
   },
@@ -1143,6 +1158,7 @@
     "@types/mocha": "^10.0.10",
     "@types/node": "^24.0.0",
     "@types/vscode": "^1.91.0",
+    "@vscode/codicons": "0.0.46-24",
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^3.9.2",
     "mocha": "^11.8.0",

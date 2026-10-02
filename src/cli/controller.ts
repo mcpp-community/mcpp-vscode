@@ -32,8 +32,9 @@ import {
   type TaskCompletion,
 } from "./tasks";
 import { classifyExit, explainHint, type McppFailureKind, type McppOutcome } from "./errors";
+import { statusBarBackgroundColour } from "./statusBar";
 import { CLI_COMMANDS } from "../commands/ids";
-import { QUICK_MENU_GROUPS, quickMenuItems, quickMenuStatusText } from "../commands/menu";
+import { QUICK_MENU_GROUPS, quickMenuIconAsset, quickMenuItems, quickMenuStatusText } from "../commands/menu";
 import { read } from "../config/access";
 import { t } from "../i18n/t";
 import { controllerLabels } from "./labels";
@@ -41,6 +42,12 @@ import { runNewProjectFlow, validateNewProjectName } from "./newProject";
 
 export interface McppCliControllerOptions {
   output: vscode.OutputChannel;
+  /**
+   * The extension's own directory, for the assets that cannot be a `ThemeIcon` —
+   * today only the coloured quick menu icons, which VS Code paints as an image
+   * because it drops a `ThemeIcon`'s colour in a quick pick.
+   */
+  extensionUri: vscode.Uri;
   currentProject: () => McppProjectDiscovery | undefined;
   afterProjectTask: (
     project: McppProjectDiscovery,
@@ -64,6 +71,9 @@ interface ToolchainPickItem extends vscode.QuickPickItem {
 }
 
 type OperationToken = object;
+
+/** Where the generated quick menu icons live, under the extension root. */
+const QUICK_MENU_ICON_DIRECTORY = "media/quick-menu";
 
 export interface ProjectTaskRunOptions {
   /** Set to false when the caller performs its own post-task action. */
@@ -716,9 +726,11 @@ export class McppCliController {
    * filtered out (C++ Modules, when `mcpp.languageService.menuItems` is off)
    * takes its heading with it.
    *
-   * The icons are plain codicons: VS Code drops a `ThemeIcon`'s colour in a
-   * quick pick (see `src/commands/menu.ts`), so the menu separates rows by
-   * section and by icon shape rather than by a hue that would never be painted.
+   * The icons are the generated ones under `media/quick-menu/`, handed over as a
+   * `{ light, dark }` pair so the row is legible in both themes. They cannot be
+   * `ThemeIcon`s: VS Code drops a `ThemeIcon`'s colour in a quick pick and paints
+   * a `Uri` as an image, so a coloured row needs a coloured file. See the note at
+   * the top of `src/commands/menu.ts`.
    *
    * Typing filters by command name only. The group names are separator rows, and
    * VS Code hides separators as soon as a query is present, so they are not
@@ -742,7 +754,10 @@ export class McppCliController {
       }
       items.push({
         label: t(item.labelKey),
-        iconPath: new vscode.ThemeIcon(item.icon),
+        iconPath: {
+          light: vscode.Uri.joinPath(this.options.extensionUri, QUICK_MENU_ICON_DIRECTORY, quickMenuIconAsset(item, "light")),
+          dark: vscode.Uri.joinPath(this.options.extensionUri, QUICK_MENU_ICON_DIRECTORY, quickMenuIconAsset(item, "dark")),
+        },
         command: item.command,
       });
     }
@@ -1105,6 +1120,11 @@ export class McppCliController {
     this.status.tooltip = languageServer === undefined
       ? tooltip
       : `${tooltip}\n${t("C++ Modules (provided by the mcpp language server extension): {0}", languageServer)}`;
+    // `mcpp.ui.statusBar.background`: VS Code allows a status bar entry exactly
+    // two backgrounds and picks the matching foreground itself; see
+    // `src/cli/statusBar.ts` for the whitelist this reads.
+    const background = statusBarBackgroundColour(read<string>("mcpp.ui.statusBar.background"));
+    this.status.backgroundColor = background === undefined ? undefined : new vscode.ThemeColor(background);
     if (read<boolean>("mcpp.ui.statusBar.show")) {
       this.status.show();
     } else {

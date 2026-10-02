@@ -7,6 +7,7 @@ import {
   LIBRARY_UI,
   badgeLabels,
   decodeLibraryMessage,
+  documentNeedsRender,
   renderLibraryHtml,
   type LibraryAssets,
   type LibraryModel,
@@ -199,8 +200,7 @@ test("badgeLabels reads the ui record in badge order", () => {
   );
 });
 
-test("decodeLibraryMessage accepts exactly six shapes", () => {
-  assert.deepEqual(decodeLibraryMessage({ type: "ready" }), { type: "ready" });
+test("decodeLibraryMessage accepts exactly five shapes", () => {
   assert.deepEqual(decodeLibraryMessage({ type: "refresh" }), { type: "refresh" });
   assert.deepEqual(decodeLibraryMessage({ type: "filter", chip: "added" }), { type: "filter", chip: "added" });
   assert.deepEqual(decodeLibraryMessage({ type: "search", query: "" }), { type: "search", query: "" });
@@ -222,18 +222,34 @@ test("decodeLibraryMessage accepts exactly six shapes", () => {
     { type: "filter" },
     { type: "filter", chip: "" },
     { type: "open" },
+    { type: "open", id: "" },
     { type: "networkSearch", enabled: "yes" },
     { type: "search" },
+    // The document used to announce itself with this, and the host used to answer
+    // by re-rendering — which reloads the view, which announced itself again.
+    { type: "ready" },
     { type: "ready", extra: "field" },
   ]) {
-    const decoded = decodeLibraryMessage(raw);
-    if (raw !== null && typeof raw === "object" && (raw as { type?: string }).type === "ready") {
-      // `ready` rebuilds to exactly `{type:"ready"}`, dropping foreign fields.
-      assert.deepEqual(decoded, { type: "ready" });
-      continue;
-    }
-    assert.equal(decoded, undefined, `unexpected decode of ${JSON.stringify(raw)}`);
+    assert.equal(decodeLibraryMessage(raw), undefined, `unexpected decode of ${JSON.stringify(raw)}`);
   }
+});
+
+test("the document announces nothing, so it cannot make the host re-render it", () => {
+  const html = renderLibraryHtml(model(), ASSETS);
+  // The client script posts search / filter / networkSearch / open / refresh and
+  // nothing else. A "ready" post is what turned a render into a reload loop:
+  // `webview.html = …` reloads the document, so a document that answers its own
+  // load with "render me again" never stops loading.
+  assert.doesNotMatch(html, /post\(\{\s*type:\s*"ready"/);
+  assert.match(html, /post\(\{\s*type:\s*"refresh"\s*\}\)/);
+});
+
+test("an identical document is not pushed to the view", () => {
+  // `webview.html = same` reloads the iframe and throws away the scroll position
+  // and the caret. The rule is one line, so it is stated as one line.
+  assert.equal(documentNeedsRender(undefined, "<html></html>"), true);
+  assert.equal(documentNeedsRender("<html></html>", "<html></html>"), false);
+  assert.equal(documentNeedsRender("<html></html>", "<html> </html>"), true);
 });
 
 test("the stylesheet uses theme tokens only, and clamps the description to two lines", () => {

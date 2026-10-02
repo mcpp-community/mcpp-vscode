@@ -43,6 +43,7 @@ import { loadSnapshot, type IndexRoot, type LibrarySnapshot } from "./indexLocat
 import {
   LIBRARY_UI,
   decodeLibraryMessage,
+  documentNeedsRender,
   renderLibraryHtml,
   type LibraryChip,
   type LibraryModel,
@@ -136,6 +137,18 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
   private searchNote: string | undefined;
   private searchTimer: NodeJS.Timeout | undefined;
   private rendering: Promise<void> | undefined;
+  /**
+   * The document currently on screen, and the one CSP nonce it was built with.
+   *
+   * Both exist to keep `paint()` from re-assigning a document that has not
+   * changed: an assignment reloads the view, and a reload that is answered by
+   * another render is a loop. The nonce is therefore per view rather than per
+   * render — a fresh nonce would make every render a *different* document and
+   * defeat the comparison, which is how the reload loop started in the first
+   * place.
+   */
+  private document: string | undefined;
+  private readonly nonce = randomNonce();
 
   public constructor(
     private readonly context: vscode.ExtensionContext,
@@ -151,6 +164,8 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
 
   public resolveWebviewView(view: vscode.WebviewView): void {
     this.view = view;
+    // A resolved view is a fresh, empty webview; see the note in `onDidDispose`.
+    this.document = undefined;
     view.webview.options = {
       enableScripts: true,
       localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, MEDIA_DIRECTORY)],
@@ -161,6 +176,10 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
     view.onDidDispose(() => {
       if (this.view === view) {
         this.view = undefined;
+        // The next `resolveWebviewView` gets a brand-new, empty webview: what was
+        // pushed to the old one says nothing about it, so the comparison in
+        // `paint()` must start from nothing again.
+        this.document = undefined;
       }
     });
     // First paint from the cached snapshot, so the view is never blank while the
@@ -196,9 +215,6 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
       return;
     }
     switch (message.type) {
-      case "ready":
-        this.paint();
-        return;
       case "refresh":
         await this.refresh();
         return;
@@ -354,18 +370,31 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
     };
   }
 
+  /**
+   * Put the current model on screen — but only when it says something new.
+   *
+   * `webview.html = …` reloads the document, so pushing an identical one would
+   * throw away the scroll position and the half-typed query for nothing. With a
+   * per-view nonce, "identical" means identical: the same model renders byte for
+   * byte the same document, and a render that produced it is dropped here.
+   */
   private paint(): void {
     const view = this.view;
     if (view === undefined) {
       return;
     }
-    view.webview.html = renderLibraryHtml(this.model(), {
+    const document = renderLibraryHtml(this.model(), {
       cspSource: view.webview.cspSource,
-      nonce: randomNonce(),
+      nonce: this.nonce,
       styleUri: view.webview
         .asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, MEDIA_DIRECTORY, STYLESHEET))
         .toString(),
     });
+    if (!documentNeedsRender(this.document, document)) {
+      return;
+    }
+    this.document = document;
+    view.webview.html = document;
   }
 
   private model(): LibraryModel {

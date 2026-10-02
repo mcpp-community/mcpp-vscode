@@ -139,13 +139,36 @@ const BADGE_KEY_UI: Readonly<Record<BadgeKey, string>> = {
   "openkal-platform": LIBRARY_UI.badgeOpenkalPlatform,
 };
 
+/**
+ * What the document says to the host.
+ *
+ * There is deliberately **no `ready` message**. The document is the data — every
+ * row, badge and count is already in it — so a "I have loaded" announcement can
+ * only invite the host to render the same thing again. It did exactly that, and
+ * because assigning `webview.html` reloads the document while every render mints
+ * a fresh CSP nonce, the page never matched the previous one: the view reloaded
+ * itself forever (flicker, unclickable rows, a pegged CPU). The host now also
+ * refuses to re-assign an identical document, so this cannot come back by
+ * accident — see `libraryView.ts` and `documentNeedsRender` below.
+ */
 export type LibraryMessage =
-  | { type: "ready" }
   | { type: "refresh" }
   | { type: "filter"; chip: string }
   | { type: "search"; query: string }
   | { type: "networkSearch"; enabled: boolean }
   | { type: "open"; id: string };
+
+/**
+ * Whether a freshly rendered document should replace the one on screen.
+ *
+ * Assigning `webview.html` reloads the view, so an identical document must not
+ * be pushed. This is the guard that keeps a "render again" request from turning
+ * into a reload loop; it is a separate function because it is the one rule here
+ * that a unit test can state in one line.
+ */
+export function documentNeedsRender(rendered: string | undefined, next: string): boolean {
+  return rendered !== next;
+}
 
 export type UiLabel = (key: string) => string;
 
@@ -389,7 +412,6 @@ function clientScript(initialModel: string): string {
   });
 
   apply();
-  post({ type: "ready" });
 })();`;
 }
 
@@ -488,7 +510,7 @@ function nonEmptyString(value: unknown): value is string {
 
 /**
  * Decode one `postMessage` payload. Webview input is untrusted: anything that is
- * not exactly one of the six shapes is dropped, and the returned object is
+ * not exactly one of the five shapes is dropped, and the returned object is
  * rebuilt so foreign fields never travel further.
  */
 export function decodeLibraryMessage(raw: unknown): LibraryMessage | undefined {
@@ -496,8 +518,6 @@ export function decodeLibraryMessage(raw: unknown): LibraryMessage | undefined {
     return undefined;
   }
   switch (raw.type) {
-    case "ready":
-      return { type: "ready" };
     case "refresh":
       return { type: "refresh" };
     case "filter":

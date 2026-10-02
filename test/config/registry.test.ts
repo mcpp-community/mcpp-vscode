@@ -16,9 +16,9 @@ import {
   subKey,
 } from "../../src/config/registry";
 
-test("the registry declares 10 groups and 68 settings", () => {
+test("the registry declares 10 groups and 69 settings", () => {
   assert.equal(GROUPS.length, 10);
-  assert.equal(SETTINGS.length, 68);
+  assert.equal(SETTINGS.length, 69);
 });
 
 test("the registry's own shape rules hold", () => {
@@ -27,8 +27,8 @@ test("the registry's own shape rules hold", () => {
 
 test("32 settings are public and the rest are advanced", () => {
   assert.equal(settingsByTier("public").length, 32);
-  // 32 advanced + the 4 deprecated keys the Settings UI keeps out of the way.
-  assert.equal(settingsByTier("advanced").length, 36);
+  // 33 advanced + the 4 deprecated keys the Settings UI keeps out of the way.
+  assert.equal(settingsByTier("advanced").length, 37);
   // The four deprecated keys live in `advanced` so the Settings UI keeps them out of the way.
   assert.equal(settingsByTier("advanced").filter((entry) => entry.deprecated === true).length, 4);
 });

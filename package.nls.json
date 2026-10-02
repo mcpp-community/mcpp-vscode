@@ -172,6 +172,8 @@
   "mcpp.ui.notifications.success.title": "Report successful operations",
   "mcpp.ui.numberFormat.description": "Format byte sizes with binary units (KiB, MiB) or decimal units (KB, MB).",
   "mcpp.ui.numberFormat.title": "Choose number formatting",
+  "mcpp.ui.statusBar.background.description": "VS Code accepts only two background colours for a status bar entry, \"statusBarItem.warningBackground\" and \"statusBarItem.errorBackground\", and it overrides the foreground so the text stays readable; any other colour is dropped. \"warning\" paints the mcpp item with the theme's amber chip, \"error\" with its red one, \"none\" leaves it plain.",
+  "mcpp.ui.statusBar.background.title": "Highlight the mcpp status bar item",
   "mcpp.ui.statusBar.show.description": "Show the main mcpp status bar item.",
   "mcpp.ui.statusBar.show.title": "Show the mcpp status bar item",
   "mcpp.ui.statusBar.showLanguageServer.description": "Show the C++ Modules language service state in the mcpp status bar item. Off by default because mcppls already has its own status item.",

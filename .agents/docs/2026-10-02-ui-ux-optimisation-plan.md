@@ -768,3 +768,148 @@ hover/active 是 `--vscode-activityBar-foreground`）。而官方 logo 是一张
   我没有截图能力；e2e 仍未在本地跑通（要下载固定版 VS Code，本机大文件下载会中断）；
   索引定位的三条路径是靠打桩 `vscode` 后直接跑编译产物验证的，不是通过编辑器 UI 验证的。
 
+
+## 16. round 4：第二轮真实反馈（含一个把库视图打瘫的 bug）
+
+这一轮的第一条是**真 bug**：库视图一显示就抖、点不动、搜不了、CPU 飙高，折叠起来就正常。
+根因和"性能问题"完全无关。
+
+### 16.1 库视图的渲染死循环（反馈 2，最高优先级）
+
+**根因：文档在自我介绍，宿主拿"再渲染一次"回答它。**
+
+`libraryHtml.ts` 的客户端脚本最后一句是 `post({ type: "ready" })`，而 `libraryView.ts` 的
+`handle()` 里恰好有：
+
+```ts
+case "ready":
+  this.paint();        // ← paint() 里是 view.webview.html = …
+  return;
+```
+
+`webview.html = …` 会**重载**文档；文档重载后又发 `ready`。更致命的是每次 `paint()` 都调用
+`randomNonce()` 生成新的 CSP nonce，所以**每次渲染出来的文档都不同**——连"内容没变就别重设"
+这种自然去重也永远不会命中。于是视图以毫秒级无限重载：抖动、DOM 被反复销毁（点不到、输不进）、
+CPU 打满。折叠时 webview 不渲染，所以"折叠就正常"。
+
+上一轮这个 bug 之所以没暴露，恰恰因为 provider 从来没注册过——视图根本没渲染过。**修好注册，
+就把它放出来了。**
+
+修法三条 + 一条门禁：
+
+1. 客户端不再发 `ready`，`decodeLibraryMessage` 不再认识它，宿主删掉 `case "ready"`：
+   文档本身就是数据（每一行、每个徽章、每个计数都已经在里面），"我加载好了"这句话没有用途，
+   只可能招来一次重复渲染。
+2. nonce 改成**每个视图一个**（构造时生成一次），于是"内容没变 ⇒ 文档逐字节相同"成立。
+3. `paint()` 多一道 `documentNeedsRender(this.document, document)`（纯函数，见 `libraryHtml.ts`）：
+   文档相同就**不重设**，滚动位置和输入到一半的搜索框都不会被丢掉。
+   `resolveWebviewView` / `onDidDispose` 会把 `this.document` 清空——新解析出来的 webview 是空的，
+   上一次推给旧 webview 的文档对它没有任何意义。
+4. `test/artifacts.test.ts` 新增源码级门禁：文档不得再 post `ready`、宿主不得再有 `case "ready"`、
+   nonce 必须是每视图一个、比较必须存在。
+
+### 16.2 快捷菜单图标配色（反馈 1）
+
+**能做，但只能靠图片。** 上一轮我查到 `MainThreadQuickOpen.expandIconPath` 会把 `ThemeIcon`
+压成没有颜色的 codicon class；这一轮把同一函数读完了——它是**两条分支**：
+
+```js
+expandIconPath(o){ let e = o.iconPathDto;
+  if (e)
+    if (j.isThemeIcon(e)) o.iconClass = j.asClassName(e);            // 字体图标：颜色由行前景决定
+    else if (Qh(e)) { let t = P.from(e); o.iconPath = { dark: t, light: t }; }   // Uri：当 background-image 画
+    else { … { dark, light } … } }
+```
+
+而列表渲染这边：
+
+```js
+if (r.iconPath) { … i.icon.className = "quick-input-list-icon"; i.icon.style.backgroundImage = kc(f); }
+```
+
+`Uri` 是当**图片**画的，颜色照原样显示；`iconPath` 又恰好接受 `{ light, dark }` 对。所以路线是：
+**给每一行生成一张带颜色的 SVG**。
+
+- 字形来自 `@vscode/codicons`（VS Code 自己那套 codicon 字体的美术源，作为 devDependency 精确锁定
+  `0.0.46-24`），颜色取对应 `charts.*` 主题令牌的**默认 light/dark 值**（从 1.132 的颜色注册表读出）。
+  于是快捷菜单和工程视图用的是同一批颜色：树把 `charts.blue` 交给 `ThemeIcon` 由主题上色，
+  这里把同一个默认值烤进图里。
+- 生成器 `tools/generate-quick-menu-icons.mjs` 解析 `src/commands/menu.ts` 的表格，输出
+  `media/quick-menu/<icon>--<colour>--<dark|light>.svg`（40 个，zip 后约 34 KiB），
+  支持 `--check`（多一个没人要的文件也算漂移），已进 `npm run check`。
+- 门禁在 `test/commands/menu.test.ts`：逐行走表格，两个主题的资产必须存在、非空、不再含
+  `currentColor`；并且**同一个命令在菜单和工程视图里必须是同一个图标 + 同一个颜色**
+  （`charts.<word>` 是两者的接缝）。
+
+顺手抓出三个真问题，都是门禁逼出来的：
+
+| 发现 | 处理 |
+| --- | --- |
+| `charts.orange` 解析到 `minimap.findMatchHighlight` → `editor.findMatchHighlightBackground`，是 `#EA5C00` **33% 透明**；当字形颜色就是两头上都糊成一团 | 破坏性动作改用 `charts.red`（`editorError.foreground`，各主题都是实色）。树里的 Clean 一起改 |
+| `star` 根本不是 codicon（只有 `star-full` / `star-empty` / `star-half`）——"选择全局默认工具链"那一行一直是**空图标** | 换成 `star-full` |
+| "Search and add a dependency" 在树里是 `cloud`、在菜单里是 `library` | 统一成 `library`（它打开的就是 Library 视图） |
+
+另外菜单里那 20 条标签的中英译文上一轮已补齐，这轮没有新增文案。
+
+### 16.3 cache 视图默认折叠（反馈 3）
+
+`contributes.views` 的条目 schema 里本来就有 `visibility: "visible" | "hidden" | "collapsed"`
+（默认 `visible`），消费点是 `createView(n, { …, expanded: !collapsed })`。所以
+`mcpp.cache` 加上 `"visibility": "collapsed"` 就够了：侧边栏打开时 cache 只剩标题栏，
+高度让给上面的库列表。用户手动展开/折叠之后以用户的状态为准（VS Code 把它记在 workspace state 里）。
+门禁在 `test/artifacts.test.ts`：三个视图的 `visibility` 必须恰好是
+`[undefined, undefined, "collapsed"]`。
+
+### 16.4 活动栏"彩色 logo"：做不到，所以不做（反馈 4）
+
+你想要"保留单色 / 配置里切换彩色"。**彩色这条路在活动栏是不存在的**，有两条独立的一手证据：
+
+1. 自定义容器图标是当**模板**画的（15.6 的 `mask: url(icon) … mask-size: 24px`），
+   画出来的是图标的 **alpha 通道**，颜色来自主题变量。颜色信息在第一步就被丢掉了。
+2. 清单里 `viewsContainers.activitybar[].icon` 的 schema 是纯 `string`
+   （`{description:…, type:"string"}`，`required:["id","title","icon"]`），
+   连 `{light, dark}` 这种写法都会被 `isValidViewsContainer` 直接判为非法；
+   而且没有任何运行时 API 能改容器图标。
+
+所以"配置里切换彩色/单色"会是一个**永远无效的开关**——比没有这个开关更糟。
+单色字形保留（你说它和其他图标风格匹配，这也是它本该有的样子：活动栏图标就该是主题前景色的剪影）。
+
+### 16.5 状态栏：背景色可以，logo 不行（反馈 5）
+
+**背景色：VS Code 只允许两种，而且由扩展主机强制执行。** `StatusBarItem.backgroundColor`
+的 API 文档写了"只支持 `statusBarItem.errorBackground` 与 `statusBarItem.warningBackground`"，
+我不满足于文档，去找了实现（`extensionHostProcess.js`）：
+
+```js
+static ALLOWED_BACKGROUND_COLORS = new Map([
+  ["statusBarItem.errorBackground",   new ThemeColor("statusBarItem.errorForeground")],
+  ["statusBarItem.warningBackground", new ThemeColor("statusBarItem.warningForeground")],
+]);
+set backgroundColor(t){ t && !ALLOWED_BACKGROUND_COLORS.has(t.id) && (t = void 0); this._backgroundColor = t; … }
+…
+this._backgroundColor && (n = ALLOWED_BACKGROUND_COLORS.get(this._backgroundColor.id));  // ← 前景色被替换
+```
+
+也就是说：自建一个 `mcpp.statusBarBackground` 颜色会被**静默丢弃**；自己设 `color` 也会被覆盖。
+实现方式是新设置 `mcpp.ui.statusBar.background`（`warning` / `error` / `none`，默认 `warning`），
+纯映射放在 `src/cli/statusBar.ts`（已进纯模块门禁），`applyStatusBar()` 一行接上。
+默认 `warning` = 主题的琥珀色块 + VS Code 自动配的白色前景，正好和 logo 的金橙呼应；不喜欢就设 `none`。
+
+**logo 放状态栏：不行。** `StatusBarItem.text` 是字符串，里面的 `$(name)` 由
+`ThemeIcon.fromString` 解析成 **codicon 字体字形**，没有任何图片通道；`StatusBarItem` 上也没有
+`iconPath` 之类的字段。所以 `$(tools) mcpp` 保持不变——它是这套菜单（构建 / 工具链 / 缓存 / 模块）
+最贴切的字形，而"换成 mcpp logo"这条路在 API 层面不存在。
+
+### 16.6 这一轮的状态与仍然没做到的
+
+- 653 个单元测试通过；`check:config`（69 设置 / 32 public）、`l10n-check`（382 运行串 /
+  203 清单键）、`check:icon`（活动栏图 + 40 个菜单图标）、`check:generators` 全过；
+  VSIX 134 文件 / 377 KiB（两道体积门禁内：<200 文件、<1 MiB）。
+- dev profile 重装并重启（清掉 workspaceStorage，让 cache 的默认折叠生效），扩展主机日志确认激活、无错误。
+- **没做到 / 需要你的眼睛**：快捷菜单的彩色图标我只验证到"文件内容正确、颜色被烤进去、
+  能被栅格化成正确的颜色"，**没有**在真实 quick pick 里看过——如果 `file:` URI 在快速选择里
+  加载不出来，那 16 行的槽位会是空的，那我就改走别的路子（data: URI 或退回单色）。这一条请重点看。
+- 库视图的死循环是**逻辑上**必然成立（文档 self-announce + 每次新 nonce），但没有做进程级
+  的 CPU 观测；"不抖了、能点了"需要你确认。
+- 活动栏彩色、状态栏 logo：API 层面不存在，已用一手源码说明。
+- e2e 仍未在本地跑通；索引定位的三条路径仍是打桩验证，不是 UI 验证。
