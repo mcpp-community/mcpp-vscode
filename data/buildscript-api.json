@@ -1,0 +1,432 @@
+{
+  "sourceVersion": "2026.10.1.3",
+  "sourceCommit": "4d81d062",
+  "protocolVersion": 15,
+  "cacheEpoch": 3,
+  "roles": [
+    "source",
+    "check",
+    "object",
+    "artifact",
+    "prepare"
+  ],
+  "provisions": [
+    {
+      "kind": "tool",
+      "wire": "tool"
+    },
+    {
+      "kind": "host-module",
+      "wire": "host-module"
+    },
+    {
+      "kind": "dep-dir",
+      "wire": "dep-dir"
+    }
+  ],
+  "directives": [
+    {
+      "wire": "cxxflag",
+      "tag": "cxxflag",
+      "slot": "CxxFlags",
+      "scope": "PackagePrivate",
+      "transform": "Verbatim",
+      "mustExist": false,
+      "since": 1,
+      "rules": [
+        "R2.1"
+      ],
+      "docsUrl": null
+    },
+    {
+      "wire": "cflag",
+      "tag": "cflag",
+      "slot": "CFlags",
+      "scope": "PackagePrivate",
+      "transform": "Verbatim",
+      "mustExist": false,
+      "since": 1,
+      "rules": [
+        "R2.1"
+      ],
+      "docsUrl": null
+    },
+    {
+      "wire": "link-lib",
+      "tag": "ldflag",
+      "slot": "LdFlags",
+      "scope": "LinkGlobal",
+      "transform": "LibFlag",
+      "mustExist": false,
+      "since": 1,
+      "rules": [
+        "R2.1"
+      ],
+      "docsUrl": null
+    },
+    {
+      "wire": "link-search",
+      "tag": "ldflag",
+      "slot": "LdFlags",
+      "scope": "LinkGlobal",
+      "transform": "LibSearchPath",
+      "mustExist": false,
+      "since": 1,
+      "rules": [
+        "R2.1"
+      ],
+      "docsUrl": null
+    },
+    {
+      "wire": "cfg",
+      "tag": "define",
+      "slot": "Defines",
+      "scope": "PackagePrivate",
+      "transform": "DefinePrefix",
+      "mustExist": false,
+      "since": 1,
+      "rules": [
+        "R2.1"
+      ],
+      "docsUrl": null
+    },
+    {
+      "wire": "generated",
+      "tag": "generated",
+      "slot": "Generated",
+      "scope": "SourceSet",
+      "transform": "Verbatim",
+      "mustExist": true,
+      "missingPrefix": "declared generated source",
+      "missingSuffix": "but it does not exist after the run",
+      "since": 1,
+      "rules": [
+        "R2.1"
+      ],
+      "docsUrl": null
+    },
+    {
+      "wire": "source",
+      "tag": "source",
+      "slot": "Sources",
+      "scope": "SourceSet",
+      "transform": "Verbatim",
+      "mustExist": true,
+      "missingPrefix": "selected source",
+      "missingSuffix": "(mcpp:source=) but no such file exists",
+      "since": 1,
+      "rules": [
+        "R2.1",
+        "R3.3",
+        "R3.6"
+      ],
+      "docsUrl": null
+    },
+    {
+      "wire": "runner",
+      "tag": "runner",
+      "slot": "Runner",
+      "scope": "RunGlobal",
+      "transform": "Verbatim",
+      "mustExist": false,
+      "since": 4,
+      "rules": [],
+      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/4d81d062/docs/30-build-mcpp.md#runner-how-the-artifact-is-executed-20268192"
+    },
+    {
+      "wire": "runner-named",
+      "tag": "runner-named",
+      "slot": "NamedRunner",
+      "scope": "RunGlobal",
+      "transform": "Verbatim",
+      "mustExist": false,
+      "since": 6,
+      "rules": [],
+      "docsUrl": null
+    },
+    {
+      "wire": "runner-longlived",
+      "tag": "runner-longlived",
+      "slot": "RunnerLongLived",
+      "scope": "RunGlobal",
+      "transform": "Verbatim",
+      "mustExist": false,
+      "since": 6,
+      "rules": [],
+      "docsUrl": null
+    },
+    {
+      "wire": "run-exclusive",
+      "tag": "run-exclusive",
+      "slot": "RunExclusive",
+      "scope": "RunGlobal",
+      "transform": "Verbatim",
+      "mustExist": false,
+      "since": 6,
+      "rules": [],
+      "docsUrl": null
+    },
+    {
+      "wire": "link-script",
+      "tag": "ldflag",
+      "slot": "LdFlags",
+      "scope": "LinkGlobal",
+      "transform": "LinkerScript",
+      "mustExist": false,
+      "since": 3,
+      "rules": [],
+      "docsUrl": null
+    },
+    {
+      "wire": "link-flag",
+      "tag": "ldflag",
+      "slot": "LdFlags",
+      "scope": "LinkGlobal",
+      "transform": "Verbatim",
+      "mustExist": false,
+      "since": 8,
+      "rules": [
+        "R2.1"
+      ],
+      "docsUrl": null
+    },
+    {
+      "wire": "include-dir",
+      "tag": "include-dir",
+      "slot": "IncludeDirs",
+      "scope": "PackagePrivate",
+      "transform": "AbsPath",
+      "mustExist": false,
+      "since": 1,
+      "rules": [
+        "R2.1"
+      ],
+      "docsUrl": null
+    },
+    {
+      "wire": "include-dir-after",
+      "tag": "include-dir-after",
+      "slot": "IncludeDirsAfter",
+      "scope": "PackagePrivate",
+      "transform": "AbsPath",
+      "mustExist": false,
+      "since": 1,
+      "rules": [
+        "R2.1"
+      ],
+      "docsUrl": null
+    },
+    {
+      "wire": "rerun-if-changed",
+      "tag": "",
+      "slot": "RerunFiles",
+      "scope": "RerunKey",
+      "transform": "Verbatim",
+      "mustExist": false,
+      "since": 1,
+      "rules": [],
+      "docsUrl": null
+    },
+    {
+      "wire": "rerun-if-env-changed",
+      "tag": "",
+      "slot": "RerunEnv",
+      "scope": "RerunKey",
+      "transform": "Verbatim",
+      "mustExist": false,
+      "since": 1,
+      "rules": [],
+      "docsUrl": null
+    },
+    {
+      "wire": "rerun-if-changed-glob",
+      "tag": "",
+      "slot": "RerunGlobs",
+      "scope": "RerunKey",
+      "transform": "Verbatim",
+      "mustExist": false,
+      "since": 2,
+      "rules": [],
+      "docsUrl": null
+    },
+    {
+      "wire": "warning",
+      "tag": "warning",
+      "slot": "Warnings",
+      "scope": "Advisory",
+      "transform": "Verbatim",
+      "mustExist": false,
+      "since": 5,
+      "rules": [
+        "R1.2",
+        "R2.1",
+        "R9.4"
+      ],
+      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/4d81d062/docs/30-build-mcpp.md#warning-succeeding-and-still-being-heard-20268212"
+    },
+    {
+      "wire": "diagnostic",
+      "tag": "diagnostic",
+      "slot": "Diagnostics",
+      "scope": "Advisory",
+      "transform": "Verbatim",
+      "mustExist": false,
+      "since": 14,
+      "rules": [],
+      "docsUrl": null
+    },
+    {
+      "wire": "action",
+      "tag": "action",
+      "slot": "Actions",
+      "scope": "GraphNode",
+      "transform": "Verbatim",
+      "mustExist": false,
+      "since": 1,
+      "rules": [
+        "R1.1",
+        "R1.2",
+        "R1.3",
+        "R2.1",
+        "R3.1",
+        "R3.2",
+        "R3.3",
+        "R3.5",
+        "R3.7",
+        "R3.8",
+        "R5.1",
+        "R5.3",
+        "R6.4",
+        "R9.2"
+      ],
+      "docsUrl": null
+    },
+    {
+      "wire": "fact",
+      "tag": "fact",
+      "slot": "Facts",
+      "scope": "Claim",
+      "transform": "Verbatim",
+      "mustExist": false,
+      "since": 7,
+      "rules": [
+        "R2.1"
+      ],
+      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/4d81d062/docs/30-build-mcpp.md#the-probe-channel-fact-floor-2026952"
+    },
+    {
+      "wire": "floor",
+      "tag": "floor",
+      "slot": "Floors",
+      "scope": "Claim",
+      "transform": "Verbatim",
+      "mustExist": false,
+      "since": 7,
+      "rules": [
+        "R2.1"
+      ],
+      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/4d81d062/docs/30-build-mcpp.md#the-probe-channel-fact-floor-2026952"
+    },
+    {
+      "wire": "pack-format",
+      "tag": "pack-format",
+      "slot": "PackFormats",
+      "scope": "Claim",
+      "transform": "Verbatim",
+      "mustExist": false,
+      "since": 9,
+      "rules": [],
+      "docsUrl": null
+    },
+    {
+      "wire": "windows-subsystem",
+      "tag": "windows-subsystem",
+      "slot": "WindowsSubsystem",
+      "scope": "TargetLink",
+      "transform": "Verbatim",
+      "mustExist": false,
+      "since": 10,
+      "rules": [],
+      "docsUrl": null
+    },
+    {
+      "wire": "windows-entry",
+      "tag": "windows-entry",
+      "slot": "WindowsEntry",
+      "scope": "TargetLink",
+      "transform": "Verbatim",
+      "mustExist": false,
+      "since": 10,
+      "rules": [],
+      "docsUrl": null
+    },
+    {
+      "wire": "deploy",
+      "tag": "deploy",
+      "slot": "Deploy",
+      "scope": "LinkGlobal",
+      "transform": "Deploy",
+      "mustExist": false,
+      "since": 11,
+      "rules": [
+        "R2.1",
+        "R4.2",
+        "R9.2",
+        "R9.5"
+      ],
+      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/4d81d062/docs/30-build-mcpp.md#deploying-what-the-program-generated-deploy-20269123-protocol-11"
+    },
+    {
+      "wire": "runtime-search-dir",
+      "tag": "runtime-search-dir",
+      "slot": "RuntimeSearchDir",
+      "scope": "LinkGlobal",
+      "transform": "AbsPath",
+      "mustExist": false,
+      "since": 12,
+      "rules": [
+        "R2.1"
+      ],
+      "docsUrl": null
+    },
+    {
+      "wire": "decision",
+      "tag": "decision",
+      "slot": "ToolDecisions",
+      "scope": "Advisory",
+      "transform": "Verbatim",
+      "mustExist": false,
+      "since": 15,
+      "rules": [
+        "R6.5",
+        "R9.2"
+      ],
+      "docsUrl": null
+    },
+    {
+      "wire": "xpkg-request",
+      "tag": "xpkg-request",
+      "slot": "XpkgRequests",
+      "scope": "Claim",
+      "transform": "Verbatim",
+      "mustExist": false,
+      "since": 15,
+      "rules": [],
+      "docsUrl": null
+    },
+    {
+      "wire": "toolchain",
+      "tag": "toolchain",
+      "slot": "ToolchainStatement",
+      "scope": "Claim",
+      "transform": "Verbatim",
+      "mustExist": false,
+      "since": 15,
+      "rules": [
+        "R9.2",
+        "R9.9"
+      ],
+      "docsUrl": null
+    }
+  ]
+}
