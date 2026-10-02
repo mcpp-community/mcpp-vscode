@@ -53,7 +53,9 @@ test("a warning node appears at and above the threshold", () => {
   const at = buildCacheWarningNode(8 * BYTES_PER_GIB, 8);
   assert.equal(at?.id, "cache.warning");
   assert.equal(at?.icon, "warning");
-  assert.equal(at?.command?.command, "mcpp.showCachePanel");
+  // The cache view is a sidebar webview view now; the node opens it with the
+  // command VS Code registers for a contributed view, not with a command of ours.
+  assert.equal(at?.command?.command, "mcpp.cache.focus");
   const above = buildCacheWarningNode(9.5 * BYTES_PER_GIB, 8);
   assert.equal(above?.id, "cache.warning");
   assert.match(String(above?.description?.args?.[1]), /8/);

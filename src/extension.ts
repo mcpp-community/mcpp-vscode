@@ -4,7 +4,7 @@ import { McppCliController, discoveryBoundaryFromSettings } from "./cli/controll
 import { runProcess } from "./cli/process";
 import { parseProtocolInfo } from "./cli/protocol";
 import { buildSelfCheckText } from "./cli/selfCheck";
-import { CLI_COMMANDS, LEGACY_LANGUAGE_SERVER_COMMANDS, TOOL_COMMANDS } from "./commands/ids";
+import { CLI_COMMANDS, LEGACY_LANGUAGE_SERVER_COMMANDS, LIBRARY_COMMANDS, TOOL_COMMANDS } from "./commands/ids";
 import { findNearestMcppProject, type McppProjectDiscovery } from "./projects/discovery";
 import { MCPP_MANIFEST_GLOB, registerInProjectContext } from "./projects/context";
 import {
@@ -36,7 +36,10 @@ import { applyRenames, pendingRenames, renamePrompt } from "./config/migrate";
 import { registerSettingsPanel } from "./config/panel";
 import { languagePreference, setLanguagePreference, t, type LanguagePreference } from "./i18n/t";
 import { readCacheSnapshot, registerCacheView } from "./views/cacheView";
-import { registerLanguageServerView } from "./views/languageServerView";
+import { registerLanguageServerCommands } from "./views/languageServerView";
+import { createLibraryDetailOpener } from "./library/detailPanel";
+import { locateIndexRoots } from "./library/indexLocator";
+import { registerLibraryView } from "./library/libraryView";
 import { registerProjectView } from "./views/projectView";
 
 /**
@@ -295,21 +298,70 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
   // C++ Modules view only forwards to mcppls.
   const applyViewVisibility = (): void => {
     // Literal keys, so the wiring gate can see them.
+    // `mcpp.views.enabled` is the master switch: with it off every view is hidden and
+    // VS Code removes the container from the activity bar with them. The `when`
+    // clauses in package.json are negated (`!mcpp.sidebarHidden`) so the default
+    // state is visible — otherwise activation would never run to set the key back.
+    void vscode.commands.executeCommand("setContext", "mcpp.sidebarHidden", !read<boolean>("mcpp.views.enabled"));
     void vscode.commands.executeCommand("setContext", "mcpp.views.project", read<boolean>("mcpp.views.project.show"));
+    void vscode.commands.executeCommand("setContext", "mcpp.views.library", read<boolean>("mcpp.views.library.show"));
     void vscode.commands.executeCommand("setContext", "mcpp.views.cache", read<boolean>("mcpp.views.cache.show"));
-    void vscode.commands.executeCommand("setContext", "mcpp.views.languageServer", read<boolean>("mcpp.views.languageServer.show"));
   };
   applyViewVisibility();
   extensionContext.subscriptions.push(onConfigurationChanged(applyViewVisibility));
 
-  registerProjectView(extensionContext, { currentProject: findCurrentProject });
+  // The language service is a block inside the project view, so its state source has
+  // to exist before the view is registered.
+  const languageService = registerLanguageServerCommands(extensionContext, { bridge, output });
+  registerProjectView(extensionContext, { currentProject: findCurrentProject, languageService });
+  // The library ecosystem: a sidebar view plus an editor-area package page. The
+  // detail page writes `mcpp.toml` through `mcpp add`, so it tells the view to
+  // refresh — no save event fires for a file written outside the editor.
+  const openLibraryDetail = createLibraryDetailOpener(extensionContext, {
+    mcppExecutable: () => cliController.mcppExecutable(findCurrentProject()),
+    projectRoot: () => findCurrentProject()?.root,
+    output,
+    isTrusted: () => vscode.workspace.isTrusted,
+    onDependenciesChanged: () => void library.refresh(),
+  });
+  const library = registerLibraryView(extensionContext, {
+    projectRoot: () => findCurrentProject()?.root,
+    mcppExecutable: () => cliController.mcppExecutable(findCurrentProject()),
+    openDetail: openLibraryDetail,
+    output,
+  });
+  // `registerLibraryView` registers its own provider; these are only the two entry
+  // points a menu or the project view can name.
+  extensionContext.subscriptions.push(
+    vscode.commands.registerCommand(LIBRARY_COMMANDS.search, async () => {
+      await vscode.commands.executeCommand("mcpp.library.focus");
+    }),
+    vscode.commands.registerCommand(LIBRARY_COMMANDS.openDetail, async (id: unknown) => {
+      if (typeof id === "string" && id.length > 0) {
+        await openLibraryDetail(id);
+      }
+    }),
+    vscode.commands.registerCommand(LIBRARY_COMMANDS.updateIndex, async () => {
+      const result = await runProcess(cliController.mcppExecutable(findCurrentProject()), ["index", "update"], findCurrentProject()?.root, { timeoutMs: 300_000 });
+      await library.refresh();
+      if (result.exitCode !== 0) {
+        void vscode.window.showErrorMessage(t("mcpp index update failed with exit code {0}", result.exitCode));
+      }
+    }),
+    // `viewsWelcome` shows the empty state only while the key says no index was found.
+    vscode.commands.registerCommand("mcpp.internal.markIndex", (found: unknown) =>
+      vscode.commands.executeCommand("setContext", "mcpp.library.indexFound", found === true)),
+  );
+  void locateIndexRoots().then((roots: readonly unknown[]) => {
+    void vscode.commands.executeCommand("setContext", "mcpp.library.indexFound", roots.length > 0);
+  });
+
   registerCacheView(extensionContext, {
     output,
     currentProject: findCurrentProject,
     mcppExecutable: (project) => cliController.mcppExecutable(project),
     isTrusted: () => vscode.workspace.isTrusted,
   });
-  registerLanguageServerView(extensionContext, { bridge, output });
   registerSettingsPanel(extensionContext);
 
   // Text analysis only: no mcpp process, so both stay available in a restricted

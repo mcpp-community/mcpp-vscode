@@ -1,19 +1,35 @@
 /**
- * The three trees, as **data**.
+ * The trees, as **data**.
  *
  * Labels are keys, not sentences: the builder stays free of `vscode` and of the
  * current language, the tests assert stable keys, and `src/views/treeProvider.ts`
- * resolves them through `src/i18n/t.ts` at render time.
+ * resolves them through `src/i18n/t.ts` at render time. A label's arguments may
+ * themselves be labels, so a phrase like `C++23 · 87 source file(s)` is composed
+ * from two independently translatable pieces instead of one frozen sentence.
  *
- * The same shape serves the project, the cache and the C++ Modules view, so the
- * three providers differ only in the data they hand in.
+ * The project view is two labelled sections: **Basics** (what this project is)
+ * and **Common commands** (what can be done to it). The C++ Modules block is
+ * folded into the first one, with the status line carrying the problem count, so
+ * a degraded language service is visible **without expanding anything**. The
+ * second section is the only place in the view whose rows are all commands.
+ *
+ * Everything the project view needs from disk lives here as well — the declared
+ * dependencies, `mcpp.lock`'s resolved versions and the source-file count — so
+ * the whole layout can be unit tested without an editor host. Nothing here
+ * imports `vscode`; `test/architecture.test.ts` enforces that.
  */
 
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
+
+import { parseMcppToml } from "../toml/parser";
 import { formatBytes, formatCount } from "../util/format";
+
+export type LabelArgument = string | number | Label;
 
 export interface Label {
   key: string;
-  args?: readonly (string | number)[];
+  args?: readonly LabelArgument[];
 }
 
 export interface TreeCommand {
@@ -31,15 +47,43 @@ export interface TreeNode {
   icon?: string;
   /** Consumed by `when` clauses in package.json for inline actions. */
   contextValue?: string;
+  /**
+   * Render expanded on first display. A node with children is collapsed unless
+   * this is set; the two project sections and the dependency group start open,
+   * the folded language-service block deliberately does not.
+   */
+  expanded?: boolean;
   command?: TreeCommand;
   children?: readonly TreeNode[];
 }
 
 const plain = (text: string): Label => ({ key: text });
 
+/** `a`, `b` -> `a · b`, nested so each side keeps its own translation. */
+function joined(parts: readonly Label[]): Label | undefined {
+  if (parts.length === 0) {
+    return undefined;
+  }
+  return parts.reduce((left, right): Label => ({ key: "{0} · {1}", args: [left, right] }));
+}
+
 export interface TargetSummary {
   name: string;
   kind: string;
+}
+
+/** One dependency declared in `mcpp.toml`, before `mcpp.lock` says what it resolved to. */
+export interface DependencyDeclaration {
+  /** `namespace.name` as written in the manifest. */
+  name: string;
+  /** The declared version constraint, when the manifest states one. */
+  version?: string;
+  /** Declared in `[dev-dependencies]`. */
+  dev?: boolean;
+  /** A local path dependency. */
+  path?: string;
+  /** A git dependency. */
+  git?: string;
 }
 
 export interface ProjectSummary {
@@ -52,12 +96,470 @@ export interface ProjectSummary {
   target?: string;
   targets?: readonly TargetSummary[];
   hasTests?: boolean;
+  /** Declared in `[dependencies]` / `[dev-dependencies]`; absent when there are none. */
+  dependencies?: readonly DependencyDeclaration[];
+  /** Source files counted under the project root; absent when not measured. */
+  sourceFiles?: number;
   /** Set when `mcpp.toml` could not be read; the tree then says so instead of lying. */
   error?: string;
 }
 
-/** The project view: identity first, then what the buttons act on. */
-export function buildProjectTree(project: ProjectSummary | undefined): TreeNode[] {
+/* ------------------------------------------------------------------ mcpp.toml */
+
+/** The two manifest groups the project view reports. A dep is either runtime or dev. */
+const DEPENDENCY_GROUPS: Readonly<Record<string, boolean>> = {
+  dependencies: false,
+  "dev-dependencies": true,
+};
+
+function dependencyField(entry: DependencyDeclaration, key: string, value: string | undefined): void {
+  if (value === undefined || value.length === 0) {
+    return;
+  }
+  if (key === "version") {
+    entry.version = value;
+  } else if (key === "path") {
+    entry.path = value;
+  } else if (key === "git") {
+    entry.git = value;
+  }
+}
+
+/**
+ * The declared dependencies, read with the fault-tolerant TOML scanner the
+ * completion provider already uses.
+ *
+ * Three shapes are recognised, because all three are legal mcpp.toml:
+ * `name = "1.0"`, `name = { path = "…" }` (including multi-line inline tables)
+ * and `[dependencies.name]` with the fields on following lines. `workspace` and
+ * `features` are deliberately ignored: neither changes what the row must say.
+ */
+export function readDependencies(lines: readonly string[]): DependencyDeclaration[] {
+  const found: DependencyDeclaration[] = [];
+  const byName = new Map<string, DependencyDeclaration>();
+  const ensure = (name: string, dev: boolean): DependencyDeclaration => {
+    const existing = byName.get(name);
+    if (existing !== undefined) {
+      return existing;
+    }
+    const entry: DependencyDeclaration = dev ? { name, dev: true } : { name };
+    byName.set(name, entry);
+    found.push(entry);
+    return entry;
+  };
+
+  try {
+    let group: string | undefined;
+    let named: DependencyDeclaration | undefined;
+    for (const node of parseMcppToml(lines).nodes) {
+      if (node.type === "section") {
+        const segments = node.segments.map((segment) => segment.name);
+        const head = segments[0];
+        if (head === undefined || DEPENDENCY_GROUPS[head] === undefined) {
+          group = undefined;
+          named = undefined;
+          continue;
+        }
+        group = head;
+        // `[dependencies.name]` names the dependency; its fields follow.
+        named = segments.length >= 2 ? ensure(segments.slice(1).join("."), DEPENDENCY_GROUPS[head] === true) : undefined;
+        continue;
+      }
+      if (group === undefined) {
+        continue;
+      }
+      const dev = DEPENDENCY_GROUPS[group] === true;
+      const key = node.keyPath.map((segment) => segment.name).join(".");
+      const value = node.value;
+      if (value === undefined) {
+        continue;
+      }
+      if (named !== undefined) {
+        dependencyField(named, key, value.text);
+        continue;
+      }
+      if (key.length === 0) {
+        continue;
+      }
+      const entry = ensure(key, dev);
+      if (value.kind === "string") {
+        dependencyField(entry, "version", value.text);
+      } else if (value.kind === "inlineTable") {
+        for (const field of value.entries ?? []) {
+          dependencyField(entry, field.keyPath.map((segment) => segment.name).join("."), field.value?.text);
+        }
+      }
+    }
+  } catch {
+    // A manifest being edited is not an error here; whatever was read stands.
+  }
+  return found;
+}
+
+/* ------------------------------------------------------------------ mcpp.lock */
+
+/** One `[package."…"]` entry of `mcpp.lock`: a resolved package, with no parent edge. */
+export interface LockPackage {
+  /** The table key as written: `openkal` or `compat.freetype`. */
+  key: string;
+  namespace?: string;
+  version?: string;
+  source?: string;
+  hash?: string;
+}
+
+const LOCK_HEADER = /^\[\s*package\s*\.\s*(?:"([^"]*)"|'([^']*)'|([^\]\s]+))\s*\]\s*$/;
+const LOCK_FIELD = /^([A-Za-z0-9_-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^#\s]+))\s*(?:#.*)?$/;
+const LOCK_FIELDS: ReadonlySet<string> = new Set(["namespace", "version", "source", "hash"]);
+
+/**
+ * `mcpp.lock`, read tolerantly.
+ *
+ * The file is a flat TOML set — `version = 2` then one `[package."…"]` table per
+ * resolved package — and it deliberately carries **no parent/child edges**,
+ * which is why the view can only ever show two levels. Anything unrecognised is
+ * skipped and nothing here throws: a file being written is still a valid lock
+ * with fewer entries, not a broken view.
+ */
+export function parseLockfile(text: string): LockPackage[] {
+  const packages: LockPackage[] = [];
+  try {
+    let current: LockPackage | undefined;
+    for (const raw of text.split(/\r?\n/)) {
+      const line = raw.trim();
+      if (line.length === 0 || line.startsWith("#")) {
+        continue;
+      }
+      const header = LOCK_HEADER.exec(line);
+      if (header !== null) {
+        const key = header[1] ?? header[2] ?? header[3] ?? "";
+        if (key.length === 0) {
+          current = undefined;
+          continue;
+        }
+        current = { key };
+        packages.push(current);
+        continue;
+      }
+      if (line.startsWith("[")) {
+        current = undefined;
+        continue;
+      }
+      if (current === undefined) {
+        continue;
+      }
+      const field = LOCK_FIELD.exec(line);
+      if (field === null || !LOCK_FIELDS.has(field[1])) {
+        continue;
+      }
+      const value = field[2] ?? field[3] ?? field[4];
+      if (value === undefined || value.length === 0) {
+        continue;
+      }
+      if (field[1] === "namespace") current.namespace = value;
+      else if (field[1] === "version") current.version = value;
+      else if (field[1] === "source") current.source = value;
+      else current.hash = value;
+    }
+  } catch {
+    // Tolerant by construction: an unreadable lock is an empty lock.
+  }
+  return packages;
+}
+
+/** {@link parseLockfile} for a path that may not exist. A missing lock is empty, not an error. */
+export function readLockfile(file: string): LockPackage[] {
+  try {
+    return parseLockfile(readFileSync(file, "utf8"));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The lock entry a declaration resolved to, matched by `namespace.name`.
+ *
+ * Real lock files are inconsistent about the table key: `[package."openkal"]`
+ * carries `namespace = "mcpplibs"` while `[package."compat.freetype"]` already
+ * folds the namespace into the key. Both resolve here; when the entry has no
+ * namespace of its own, the name is the only thing left to match on.
+ */
+export function resolveLockedPackage(entries: readonly LockPackage[], name: string): LockPackage | undefined {
+  const dot = name.lastIndexOf(".");
+  const namespace = dot > 0 ? name.slice(0, dot) : undefined;
+  const local = dot > 0 ? name.slice(dot + 1) : name;
+  for (const entry of entries) {
+    if (entry.key === name) {
+      return entry;
+    }
+    const entryLocal = entry.key.includes(".") ? entry.key.slice(entry.key.lastIndexOf(".") + 1) : entry.key;
+    if (entryLocal !== local) {
+      continue;
+    }
+    if (namespace === undefined || entry.namespace === undefined || entry.namespace === namespace) {
+      return entry;
+    }
+  }
+  return undefined;
+}
+
+/* --------------------------------------------------------------- source files */
+
+/** Extensions counted as source: module interfaces, translation units and headers. */
+const SOURCE_EXTENSIONS: ReadonlySet<string> = new Set([
+  ".c",
+  ".cc",
+  ".cpp",
+  ".cxx",
+  ".c++",
+  ".cppm",
+  ".ixx",
+  ".mpp",
+  ".h",
+  ".hh",
+  ".hpp",
+  ".hxx",
+  ".ipp",
+  ".inl",
+]);
+
+/** Directories that hold build output or other people's code, never the project's own sources. */
+const SOURCE_SKIP_DIRS: ReadonlySet<string> = new Set([
+  "target",
+  "build",
+  "out",
+  "dist",
+  "node_modules",
+  ".git",
+  ".mcpp",
+  ".vscode",
+  ".cache",
+]);
+
+const SOURCE_MAX_ENTRIES = 20_000;
+const SOURCE_MAX_DEPTH = 8;
+
+/**
+ * How many source files this project has, counted under `root`.
+ *
+ * Bounded and non-throwing, like every other walk in this codebase: a huge or
+ * unreadable tree stops early rather than hanging the extension host, and the
+ * build directories are skipped so `target/` cannot flatter the number. The
+ * count is what makes the identity row say something about the project's size
+ * without running mcpp.
+ */
+export function countSourceFiles(root: string): number {
+  let count = 0;
+  let seen = 0;
+  const visit = (dir: string, depth: number): void => {
+    if (depth > SOURCE_MAX_DEPTH || seen >= SOURCE_MAX_ENTRIES) {
+      return;
+    }
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      seen += 1;
+      if (seen > SOURCE_MAX_ENTRIES) {
+        return;
+      }
+      if (entry.isSymbolicLink()) {
+        continue;
+      }
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (!SOURCE_SKIP_DIRS.has(entry.name)) {
+          visit(full, depth + 1);
+        }
+      } else if (entry.isFile() && SOURCE_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
+        count += 1;
+      }
+    }
+  };
+  visit(root, 0);
+  return count;
+}
+
+/* ---------------------------------------------------------------- keybindings */
+
+export interface KeybindingHint {
+  key?: string;
+  mac?: string;
+}
+
+export type KeyboardPlatform = "mac" | "other";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * The keybindings this extension contributes, keyed by command id, read from
+ * `package.json` rather than copied into the source.
+ *
+ * A hint in the tree that disagrees with the manifest is worse than no hint, so
+ * the row asks the manifest. `context.extension.packageJSON` is what the caller
+ * hands in; this function itself is pure and testable.
+ */
+export function keybindingsFromPackage(packageJSON: unknown): Readonly<Record<string, KeybindingHint>> {
+  const bindings: Record<string, KeybindingHint> = {};
+  if (!isRecord(packageJSON) || !isRecord(packageJSON.contributes)) {
+    return bindings;
+  }
+  const list = packageJSON.contributes.keybindings;
+  if (!Array.isArray(list)) {
+    return bindings;
+  }
+  for (const entry of list) {
+    if (!isRecord(entry) || typeof entry.command !== "string" || bindings[entry.command] !== undefined) {
+      continue;
+    }
+    const key = typeof entry.key === "string" && entry.key.length > 0 ? entry.key : undefined;
+    const mac = typeof entry.mac === "string" && entry.mac.length > 0 ? entry.mac : undefined;
+    if (key === undefined && mac === undefined) {
+      continue;
+    }
+    const hint: KeybindingHint = {};
+    if (key !== undefined) hint.key = key;
+    if (mac !== undefined) hint.mac = mac;
+    bindings[entry.command] = hint;
+  }
+  return bindings;
+}
+
+function keyToken(token: string, platform: KeyboardPlatform): string {
+  if (platform === "mac") {
+    switch (token) {
+      case "cmd":
+      case "meta":
+      case "super":
+        return "⌘";
+      case "ctrl":
+      case "control":
+        return "⌃";
+      case "alt":
+      case "option":
+        return "⌥";
+      case "shift":
+        return "⇧";
+      default:
+        return token.length === 1 ? token.toUpperCase() : token;
+    }
+  }
+  switch (token) {
+    case "cmd":
+    case "meta":
+    case "super":
+      return "Meta";
+    case "ctrl":
+    case "control":
+      return "Ctrl";
+    case "alt":
+    case "option":
+      return "Alt";
+    case "shift":
+      return "Shift";
+    default:
+      return token.length === 1 ? token.toUpperCase() : token;
+  }
+}
+
+/** `cmd+alt+b` -> `⌘⌥B` on macOS, `ctrl+alt+b` -> `Ctrl+Alt+B` elsewhere. */
+export function formatKeybinding(hint: KeybindingHint | undefined, platform: KeyboardPlatform): string | undefined {
+  if (hint === undefined) {
+    return undefined;
+  }
+  const raw = platform === "mac" ? hint.mac ?? hint.key : hint.key ?? hint.mac;
+  if (raw === undefined || raw.trim().length === 0) {
+    return undefined;
+  }
+  const parts = raw
+    .split("+")
+    .map((part) => keyToken(part.trim().toLowerCase(), platform))
+    .filter((part) => part.length > 0);
+  if (parts.length === 0) {
+    return undefined;
+  }
+  return platform === "mac" ? parts.join("") : parts.join("+");
+}
+
+/* ------------------------------------------------------------ language service */
+
+/** The part of an mcppls issue the folded block renders. `clangd` is never among them. */
+export interface LanguageServiceIssue {
+  code: string;
+  message: string;
+  /** mcppls's own remedy for this issue, when it offers one. */
+  command?: { command: string; arguments?: unknown[]; title?: string };
+}
+
+/**
+ * The folded C++ Modules block.
+ *
+ * Only the language service's own identity, its state and its problems are
+ * rendered: the engines, the semantic profile and the compilation database used
+ * to *define* the old view, and the spec is explicit that `clangd` must not
+ * appear anywhere in it (§8.2).
+ */
+export interface LanguageServiceBlock {
+  /** `mcpp.views.languageServer.show`; `false` removes the block from the tree. */
+  show?: boolean;
+  installed: boolean;
+  enabled?: boolean;
+  version?: string;
+  state?: {
+    available: boolean;
+    reason?: string;
+    state?: string;
+    issues?: readonly LanguageServiceIssue[];
+  };
+}
+
+/** The provider line the block always carries, so "who owns this" stays answerable. */
+export const LANGUAGE_SERVICE_PROVIDER = "sunrisepeak.mcpp-language-server";
+
+interface ActionRow {
+  id: string;
+  label: string;
+  icon: string;
+  command: string;
+}
+
+/** The four actions worth a permanent row; everything else folds into 「其它 N 项…」. */
+const LANGUAGE_SERVICE_COMMON_ACTIONS: readonly ActionRow[] = [
+  { id: "project.languageService.action.restart", label: "Restart language service", icon: "debug-restart", command: "mcpp.languageServer.restart" },
+  { id: "project.languageService.action.selectContext", label: "Select analysis context", icon: "symbol-interface", command: "mcpp.languageServer.selectContext" },
+  { id: "project.languageService.action.graph", label: "Module graph", icon: "type-hierarchy", command: "mcpp.languageServer.showModuleGraph" },
+  { id: "project.languageService.action.logs", label: "Open logs", icon: "output", command: "mcpp.languageServer.showLogs" },
+];
+
+const LANGUAGE_SERVICE_MORE_ACTIONS: readonly ActionRow[] = [
+  { id: "project.languageService.action.refreshState", label: "Refresh this view", icon: "refresh", command: "mcpp.languageServer.refreshState" },
+  { id: "project.languageService.action.restartEngine", label: "Restart the semantic engine", icon: "debug-restart", command: "mcpp.languageServer.restartEngine" },
+  { id: "project.languageService.action.resetCache", label: "Reset this workspace's cache", icon: "trash", command: "mcpp.languageServer.resetWorkspaceCache" },
+  { id: "project.languageService.action.report", label: "Collect a diagnostic report", icon: "report", command: "mcpp.languageServer.collectReport" },
+  { id: "project.languageService.action.bundle", label: "Export a diagnostic bundle", icon: "package", command: "mcpp.languageServer.exportDiagnosticBundle" },
+  { id: "project.languageService.action.runBuildTool", label: "Run the build tool in a terminal", icon: "terminal", command: "mcpp.languageServer.runBuildToolInTerminal" },
+  { id: "project.languageService.action.settings", label: "Open the C++ Modules settings", icon: "settings-gear", command: "mcpp.openMcpplsSettings" },
+];
+
+/* -------------------------------------------------------------- project view */
+
+export interface ProjectTreeOptions {
+  /** `mcpp.lock`'s resolved packages, matched to the declarations by name. */
+  lock?: readonly LockPackage[];
+  /** The folded C++ Modules block; omitted means "no block". */
+  languageService?: LanguageServiceBlock;
+  /** Keybindings read from the extension manifest. */
+  keybindings?: Readonly<Record<string, KeybindingHint>>;
+  platform?: KeyboardPlatform;
+}
+
+/** The project view: two labelled sections — what this is, then what to do with it. */
+export function buildProjectTree(project: ProjectSummary | undefined, options: ProjectTreeOptions = {}): TreeNode[] {
   if (project === undefined) {
     return [
       {
@@ -80,78 +582,246 @@ export function buildProjectTree(project: ProjectSummary | undefined): TreeNode[
     ];
   }
 
-  const identity: TreeNode[] = [
-    {
-      id: "project.identity",
-      label: project.version === undefined ? plain(project.name ?? "mcpp project") : { key: "{0} {1}", args: [project.name ?? "mcpp project", project.version] },
-      icon: "package",
-      tooltip: { key: "{0}", args: [project.root] },
-      contextValue: "mcppProject",
-      children: [
-        {
-          id: "project.root",
-          label: plain("Location"),
-          description: { key: "{0}", args: [project.root] },
-          icon: "folder",
-        },
-        ...(project.standard === undefined
-          ? []
-          : [{ id: "project.standard", label: plain("C++ standard"), description: { key: "{0}", args: [project.standard] }, icon: "symbol-namespace" }]),
-        ...(project.profile === undefined
-          ? []
-          : [{ id: "project.profile", label: plain("Profile"), description: { key: "{0}", args: [project.profile] }, icon: "settings-gear" }]),
-      ],
-    },
-  ];
+  const facts: Label[] = [];
+  if (project.standard !== undefined) {
+    facts.push({ key: "{0}", args: [project.standard] });
+  }
+  if (project.sourceFiles !== undefined) {
+    facts.push({ key: "{0} source file(s)", args: [project.sourceFiles] });
+  }
+  const identity: TreeNode = {
+    id: "project.package",
+    label: plain(project.name ?? "mcpp project"),
+    icon: "package",
+    tooltip:
+      project.version === undefined
+        ? { key: "{0}", args: [project.root] }
+        : { key: "{0} · version {1}", args: [project.root, project.version] },
+    contextValue: "mcppProject",
+  };
+  const identityFacts = joined(facts);
+  if (identityFacts !== undefined) {
+    identity.description = identityFacts;
+  }
 
-  const toolchain: TreeNode[] = [
+  const basic: TreeNode[] = [
+    identity,
+    ...(project.target === undefined
+      ? []
+      : [{ id: "project.target", label: plain("Target"), description: { key: "{0}", args: [project.target] }, icon: "target" }]),
     {
       id: "project.toolchain",
       label: plain("Toolchain"),
       description: { key: "{0}", args: [project.toolchainSpec ?? "host default"] },
       icon: "chip",
-      children: [
-        ...(project.target === undefined
-          ? []
-          : [{ id: "project.target", label: plain("Target"), description: { key: "{0}", args: [project.target] }, icon: "target" }]),
-        ...(project.targets ?? []).map((entry): TreeNode => ({
-          id: `project.target.${entry.name}`,
-          label: { key: "{0}", args: [entry.name] },
-          description: { key: "{0}", args: [entry.kind] },
-          icon: "symbol-method",
-        })),
-      ],
     },
+    ...dependencyNodes(project, options),
+    ...languageServiceNodes(options.languageService),
   ];
 
-  const actions: TreeNode[] = [
+  return [
+    { id: "project.section.basic", label: plain("Basics"), icon: "info", expanded: true, children: basic },
+    { id: "project.section.commands", label: plain("Common commands"), icon: "terminal", expanded: true, children: commandNodes(options) },
+  ];
+}
+
+interface CommandRow {
+  id: string;
+  label: string;
+  icon: string;
+  command: string;
+}
+
+/** The eight rows of 「常用命令」, in the order the prototype fixes them. */
+const COMMON_COMMANDS: readonly CommandRow[] = [
+  { id: "project.action.build", label: "Build", icon: "tools", command: "mcpp.build" },
+  { id: "project.action.run", label: "Run", icon: "play", command: "mcpp.run" },
+  { id: "project.action.test", label: "Test", icon: "beaker", command: "mcpp.test" },
+  { id: "project.action.clean", label: "Clean", icon: "trash", command: "mcpp.cleanProjectArtifacts" },
+  { id: "project.action.toolchain", label: "Toolchain", icon: "chip", command: "mcpp.showToolchains" },
+  { id: "project.action.librarySearch", label: "Search and add a dependency…", icon: "cloud", command: "mcpp.library.search" },
+  { id: "project.action.selfCheck", label: "Environment self-check", icon: "heart", command: "mcpp.selfCheck" },
+  { id: "project.action.settings", label: "Settings", icon: "settings-gear", command: "mcpp.openSettings" },
+];
+
+function commandNodes(options: ProjectTreeOptions): TreeNode[] {
+  return COMMON_COMMANDS.map((row): TreeNode => {
+    const hint = formatKeybinding(options.keybindings?.[row.command], options.platform ?? "other");
+    const label = plain(row.label);
+    const node: TreeNode = {
+      id: row.id,
+      label,
+      icon: row.icon,
+      contextValue: "mcppProjectCommand",
+      command: { command: row.command, title: label },
+    };
+    if (hint !== undefined) {
+      node.description = plain(hint);
+    }
+    return node;
+  });
+}
+
+function dependencyNodes(project: ProjectSummary, options: ProjectTreeOptions): TreeNode[] {
+  const declared = project.dependencies ?? [];
+  if (declared.length === 0) {
+    return [];
+  }
+  const lock = options.lock ?? [];
+  const dev = declared.filter((entry) => entry.dev === true).length;
+  return [
     {
-      id: "project.action.build",
-      label: plain("Build"),
-      icon: "tools",
-      command: { command: "mcpp.build", title: plain("Build") },
+      id: "project.dependencies",
+      label: { key: "Dependencies ({0})", args: [declared.length] },
+      ...(dev === 0 ? {} : { description: { key: "{0} dev", args: [dev] } }),
+      icon: "library",
+      tooltip: plain("Declared in mcpp.toml; the resolved version comes from mcpp.lock."),
+      expanded: true,
+      children: declared.map((entry) => dependencyNode(entry, lock)),
     },
+  ];
+}
+
+/**
+ * One declared dependency.
+ *
+ * Level 1 is the declaration, with its markers; level 2 is the single version
+ * `mcpp.lock` resolved, or `Resolved —` when the lock has nothing to say. There
+ * is deliberately no third level and no connector glyph: `mcpp.lock` is a flat
+ * set with no parent/child edges, so a deeper tree would be invented.
+ */
+function dependencyNode(declaration: DependencyDeclaration, lock: readonly LockPackage[]): TreeNode {
+  const resolved = resolveLockedPackage(lock, declaration.name);
+  const resolvedLabel: Label =
+    resolved?.version === undefined ? plain("Resolved —") : { key: "Resolved {0}", args: [resolved.version] };
+  const marker = dependencyMarker(declaration);
+  const node: TreeNode = {
+    id: `project.dependency.${declaration.name}`,
+    label: plain(declaration.name),
+    description: marker === undefined ? resolvedLabel : { key: "{0} · {1}", args: [marker, resolvedLabel] },
+    icon: declaration.path === undefined ? "package" : "folder",
+  };
+  return node;
+}
+
+function dependencyMarker(declaration: DependencyDeclaration): Label | undefined {
+  if (declaration.path !== undefined) {
+    return { key: "path · {0}", args: [declaration.path] };
+  }
+  if (declaration.git !== undefined) {
+    return { key: "git · {0}", args: [declaration.git] };
+  }
+  return declaration.dev === true ? plain("dev") : undefined;
+}
+
+function languageServiceNodes(block: LanguageServiceBlock | undefined): TreeNode[] {
+  if (block === undefined || block.show === false) {
+    return [];
+  }
+  const issues = block.state?.issues ?? [];
+  const healthy = block.state?.available === true && block.state.state === "ready";
+  const identity: Label = { key: "mcppls {0}", args: [block.version ?? "?"] };
+  const node: TreeNode = {
+    id: "project.languageService",
+    label: plain("Language service"),
+    description:
+      issues.length === 0
+        ? identity
+        : { key: "{0} · {1}", args: [identity, { key: "{0} problem(s)", args: [issues.length] }] },
+    icon: healthy ? "pass" : "warning",
+    contextValue: "mcppLanguageService",
+    children: languageServiceChildren(block),
+  };
+  if (block.state?.available === false && block.state.reason !== undefined) {
+    node.tooltip = plain(block.state.reason);
+  }
+  return [node];
+}
+
+/**
+ * The expanded block: state, provider, every problem, then the four common
+ * actions and one folded row for the rest. mcppls's engines and semantic profile
+ * are not read here at all — only the language service itself.
+ */
+function languageServiceChildren(block: LanguageServiceBlock): TreeNode[] {
+  if (!block.installed) {
+    return [
+      {
+        id: "project.languageService.status",
+        label: plain("C++ Modules is not installed"),
+        icon: "warning",
+        command: { command: "mcpp.openMcpplsSettings", title: plain("Install C++ Modules") },
+      },
+    ];
+  }
+
+  const state = block.state;
+  const nodes: TreeNode[] = [
+    languageServiceStatus(state),
     {
-      id: "project.action.run",
-      label: plain("Run"),
-      icon: "play",
-      command: { command: "mcpp.run", title: plain("Run") },
-    },
-    {
-      id: "project.action.test",
-      label: plain("Test"),
+      id: "project.languageService.provider",
+      label: plain("Provided by"),
+      description: plain(LANGUAGE_SERVICE_PROVIDER),
       icon: "beaker",
-      command: { command: "mcpp.test", title: plain("Test") },
-    },
-    {
-      id: "project.action.clean",
-      label: plain("Clean project artifacts"),
-      icon: "trash",
-      command: { command: "mcpp.cleanProjectArtifacts", title: plain("Clean project artifacts") },
     },
   ];
 
-  return [...identity, ...toolchain, ...actions];
+  (state?.issues ?? []).forEach((issue, index) => {
+    nodes.push({
+      id: `project.languageService.issue.${index}.${issue.code}`,
+      label: plain(issue.message),
+      description: plain(issue.code),
+      icon: "warning",
+      // S3 hands us the remedy; use it rather than inventing one.
+      command:
+        issue.command === undefined
+          ? undefined
+          : {
+              command: issue.command.command,
+              // mcppls's own title — a sentence we did not write, shown as-is.
+              title: plain(issue.command.title ?? "Fix"),
+              arguments: issue.command.arguments,
+            },
+    });
+  });
+
+  for (const action of LANGUAGE_SERVICE_COMMON_ACTIONS) {
+    nodes.push(actionNode(action));
+  }
+  nodes.push({
+    id: "project.languageService.action.more",
+    label: { key: "More ({0})…", args: [LANGUAGE_SERVICE_MORE_ACTIONS.length] },
+    icon: "ellipsis",
+    children: LANGUAGE_SERVICE_MORE_ACTIONS.map((action) => actionNode(action)),
+  });
+  return nodes;
+}
+
+function actionNode(action: ActionRow): TreeNode {
+  const label = plain(action.label);
+  return {
+    id: action.id,
+    label,
+    icon: action.icon,
+    contextValue: "mcppProjectCommand",
+    command: { command: action.command, title: label },
+  };
+}
+
+function languageServiceStatus(state: LanguageServiceBlock["state"]): TreeNode {
+  if (state === undefined || !state.available) {
+    return {
+      id: "project.languageService.status",
+      label: plain("Unavailable"),
+      description: plain(state?.reason ?? "not read yet"),
+      icon: "warning",
+    };
+  }
+  return {
+    id: "project.languageService.status",
+    label: plain(state.state === "ready" ? "Ready" : state.state === "degraded" ? "Degraded" : state.state ?? "Unknown"),
+    icon: state.state === "ready" ? "pass" : "warning",
+  };
 }
 
 export interface CacheTreeInput {
@@ -354,7 +1024,7 @@ function globalCacheChildren(inventory: CacheInventorySummary): TreeNode[] {
       id: "cache.action.panel",
       label: plain("Open the cache panel"),
       icon: "graph",
-      command: { command: "mcpp.showCachePanel", title: plain("Cache statistics") },
+      command: { command: "mcpp.cache.focus", title: plain("Cache statistics") },
     },
     {
       id: "cache.action.gc",
@@ -376,185 +1046,4 @@ function globalCacheChildren(inventory: CacheInventorySummary): TreeNode[] {
     },
   );
   return children;
-}
-
-export interface LanguageServerTreeInput {
-  installed: boolean;
-  enabled?: boolean;
-  version?: string;
-  state?: {
-    available: boolean;
-    reason?: string;
-    state?: string;
-    project?: { source: string; level?: number };
-    profile?: { compiler?: string; stdlib: string; target: string; standard?: string };
-    engine?: { name: string; version: string };
-    engines?: Array<{ name: string; version: string; role: string; state: string }>;
-    issues?: Array<{ code: string; message: string; command?: { command: string; arguments?: unknown[]; title?: string } }>;
-    notices?: Array<{ code: string; message: string }>;
-    onlineRun?: { outcome: string; message: string; at: string };
-  };
-}
-
-/**
- * The C++ Modules view. Everything here is provided by mcppls: the tree says so
- * in its description, and every action forwards to an mcppls command.
- */
-export function buildLanguageServerTree(input: LanguageServerTreeInput): TreeNode[] {
-  if (!input.installed) {
-    return [
-      {
-        id: "ls.absent",
-        label: plain("C++ Modules is not installed"),
-        icon: "warning",
-        command: { command: "mcpp.openMcpplsSettings", title: plain("Install C++ Modules") },
-      },
-    ];
-  }
-
-  const status = input.state;
-  const nodes: TreeNode[] = [];
-
-  nodes.push({
-    id: "ls.status",
-    label: plain("Status"),
-    description:
-      status?.available === true
-        ? { key: "{0}", args: [status.state ?? "unknown"] }
-        : { key: "{0}", args: [status?.reason ?? "not read yet"] },
-    icon: status?.available === true ? stateIcon(status.state) : "question",
-    contextValue: "mcppLanguageServerStatus",
-  });
-
-  if (input.version !== undefined || input.enabled !== undefined) {
-    nodes.push({
-      id: "ls.identity",
-      label: plain("C++ Modules"),
-      description: {
-        key: "{0}{1}",
-        args: [input.version ?? "?", input.enabled === false ? " · disabled here" : ""],
-      },
-      icon: "beaker",
-    });
-  }
-
-  if (status?.available === true) {
-    if (status.profile !== undefined) {
-      nodes.push({
-        id: "ls.profile",
-        label: plain("Semantic profile"),
-        description: { key: "{0} · {1}", args: [status.profile.compiler ?? status.profile.stdlib, status.profile.target] },
-        icon: "symbol-class",
-      });
-    }
-    if (status.project !== undefined) {
-      nodes.push({
-        id: "ls.database",
-        label: plain("Build description"),
-        description: { key: "{0}", args: [status.project.source] },
-        icon: "database",
-      });
-    }
-    if (status.engines !== undefined || status.engine !== undefined) {
-      const engines = status.engines ?? [];
-      nodes.push({
-        id: "ls.engines",
-        label: plain("Engines"),
-        icon: "server-process",
-        children:
-          engines.length > 0
-            ? engines.map((engine): TreeNode => ({
-                id: `ls.engine.${engine.name}`,
-                label: { key: "{0}", args: [engine.name] },
-                description: { key: "{0} · {1} · {2}", args: [engine.version, engine.role, engine.state] },
-                icon: engine.state === "ready" ? "check" : "sync~spin",
-              }))
-            : [{ id: "ls.engine.core", label: { key: "{0}", args: [status.engine?.name ?? "?"] }, description: { key: "{0}", args: [status.engine?.version ?? "?"] }, icon: "check" }],
-      });
-    }
-    if (status.onlineRun !== undefined) {
-      nodes.push({
-        id: "ls.onlineRun",
-        label: plain("Last online run"),
-        description: { key: "{0} · {1}", args: [status.onlineRun.outcome, status.onlineRun.at] },
-        icon: "cloud",
-        tooltip: { key: "{0}", args: [status.onlineRun.message] },
-      });
-    }
-  }
-
-  const issues = status?.issues ?? [];
-  if (issues.length > 0) {
-    nodes.push({
-      id: "ls.issues",
-      label: plain("Issues"),
-      description: { key: "{0}", args: [issues.length] },
-      icon: "warning",
-      children: issues.map((issue, index): TreeNode => ({
-        id: `ls.issue.${index}.${issue.code}`,
-        label: { key: "{0}", args: [issue.code] },
-        description: { key: "{0}", args: [issue.message] },
-        icon: "warning",
-        // S3 hands us the remedy; use it rather than inventing one.
-        command:
-          issue.command === undefined
-            ? undefined
-            : {
-                command: issue.command.command,
-                title: issue.command.title === undefined ? plain("Fix") : { key: "{0}", args: [issue.command.title] },
-                arguments: issue.command.arguments,
-              },
-      })),
-    });
-  }
-
-  const notices = status?.notices ?? [];
-  if (notices.length > 0) {
-    nodes.push({
-      id: "ls.notices",
-      label: plain("Notices"),
-      description: { key: "{0}", args: [notices.length] },
-      icon: "info",
-      children: notices.map((notice, index): TreeNode => ({
-        id: `ls.notice.${index}.${notice.code}`,
-        label: { key: "{0}", args: [notice.code] },
-        description: { key: "{0}", args: [notice.message] },
-        icon: "info",
-      })),
-    });
-  }
-
-  nodes.push({
-    id: "ls.actions",
-    label: plain("Actions"),
-    icon: "tools",
-    children: [
-      { id: "ls.action.refreshState", label: plain("Refresh this view"), icon: "refresh", command: { command: "mcpp.languageServer.refreshState", title: plain("Refresh") } },
-      { id: "ls.action.restart", label: plain("Restart the language server"), icon: "debug-restart", command: { command: "mcpp.languageServer.restart", title: plain("Restart") } },
-      { id: "ls.action.restartEngine", label: plain("Restart the semantic engine"), icon: "debug-restart", command: { command: "mcpp.languageServer.restartEngine", title: plain("Restart engine") } },
-      { id: "ls.action.resetCache", label: plain("Reset this workspace's cache"), icon: "trash", command: { command: "mcpp.languageServer.resetWorkspaceCache", title: plain("Reset cache") } },
-      { id: "ls.action.selectContext", label: plain("Select the analysis context"), icon: "symbol-interface", command: { command: "mcpp.languageServer.selectContext", title: plain("Select context") } },
-      { id: "ls.action.graph", label: plain("Show the module graph"), icon: "type-hierarchy", command: { command: "mcpp.languageServer.showModuleGraph", title: plain("Module graph") } },
-      { id: "ls.action.logs", label: plain("Open the C++ Modules log"), icon: "output", command: { command: "mcpp.languageServer.showLogs", title: plain("Logs") } },
-      { id: "ls.action.report", label: plain("Collect a diagnostic report"), icon: "report", command: { command: "mcpp.languageServer.collectReport", title: plain("Report") } },
-      { id: "ls.action.bundle", label: plain("Export a diagnostic bundle"), icon: "package", command: { command: "mcpp.languageServer.exportDiagnosticBundle", title: plain("Bundle") } },
-      { id: "ls.action.runBuildTool", label: plain("Run the build tool in a terminal"), icon: "terminal", command: { command: "mcpp.languageServer.runBuildToolInTerminal", title: plain("Run build tool") } },
-      { id: "ls.action.settings", label: plain("Open the C++ Modules settings"), icon: "settings-gear", command: { command: "mcpp.openMcpplsSettings", title: plain("Settings") } },
-    ],
-  });
-
-  return nodes;
-}
-
-function stateIcon(state: string | undefined): string {
-  switch (state) {
-    case "ready":
-      return "pass-filled";
-    case "degraded":
-      return "warning";
-    case "error":
-      return "error";
-    default:
-      return "sync~spin";
-  }
 }

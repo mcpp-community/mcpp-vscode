@@ -1,5 +1,6 @@
 /**
- * The VS Code half of the cache panel: `mcpp: Cache statistics` (plan §3.4.3).
+ * The VS Code half of the cache view: the sidebar **WebviewView** (`mcpp.cache`,
+ * plan §8.1).
  *
  * The panel is a **reading aid** for what `mcpp cache list`, `mcpp cache dir`
  * and a bounded walk of `target/` already report: composition, age, the largest
@@ -9,21 +10,30 @@
  *
  * Deliberate boundaries:
  *
- * - **Nothing runs on its own.** Every read comes from the injected `read()`;
- *   every write goes through the injected `run()`, which is the same routine the
- *   cache view uses, so a confirmation cannot be bypassed by opening a panel.
- * - **One panel per window.** Reopening reveals and re-renders the existing one.
- * - **A failure still renders.** When `read()` rejects, the panel draws an
- *   unavailable state with the reason instead of leaving the webview blank.
+ * - **Nothing runs on its own.** Every figure comes from the injected `refresh`
+ *   + `read` pair; every write goes through the injected `run()`, which is the
+ *   same routine the cache commands use, so a confirmation cannot be bypassed by
+ *   opening the view.
  * - **The document is re-rendered after every action**, so there is exactly one
  *   renderer (the pure one) and no client-side model application to keep in
- *   sync.
+ *   sync. `renderCachePanelHtml` is idempotent, which is what a `WebviewView`
+ *   needs: it has no `retainContextWhenHidden`, so hiding the sidebar destroys
+ *   the document and showing it renders a new one.
+ * - **A failure still renders.** When the refresh/read pair rejects, the view
+ *   draws an unavailable state with the reason instead of going blank. A global
+ *   block that is unavailable is rendered *open*, because a reason hidden behind
+ *   a collapsed disclosure is worse than no disclosure at all.
+ * - **One webview per window.** The provider is registered once; VS Code hands
+ *   it the view whenever the sidebar shows it.
+ *
+ * The confirmation logic does not live here: `run()` is the caller's, and every
+ * destructive path still goes through `src/cli/clean.ts`'s plans and the graded
+ * modals in `src/views/cacheView.ts`.
  */
 
 import { randomBytes } from "node:crypto";
 import * as vscode from "vscode";
 
-import { CACHE_COMMANDS } from "../commands/ids";
 import { read } from "../config/access";
 import { languagePreference, t } from "../i18n/t";
 import { localeFromEditorLanguage } from "../i18n/translate";
@@ -37,7 +47,15 @@ import {
   type CachePanelModel,
 } from "./cachePanelHtml";
 
-const PANEL_VIEW_TYPE = "mcpp.cachePanel";
+/** The sidebar view this module provides; `package.json` spells the same id. */
+export const CACHE_VIEW_ID = "mcpp.cache";
+
+/**
+ * VS Code registers `<viewId>.focus` for every contributed view, so bringing the
+ * cache view on screen needs no command of our own. Used by the status item.
+ */
+export const CACHE_VIEW_FOCUS_COMMAND = `${CACHE_VIEW_ID}.focus`;
+
 const MEDIA_DIRECTORY = "media";
 const STYLESHEET = "cache.css";
 
@@ -60,113 +78,156 @@ export type CachePanelAction = Extract<
 >;
 
 export interface CachePanelDeps {
-  /** Recomputes what the panel shows; the same routine the tree uses. */
-  read: () => Promise<CachePanelData>;
+  /** Brings the caller's figures up to date; may run mcpp. */
+  refresh: () => Promise<void>;
+  /** The figures as they stand, without running anything. */
+  read: () => CachePanelData;
   /** Runs one of the cleanup commands; the caller owns confirmation. */
   run: (message: CachePanelAction) => Promise<void>;
   showEntry: (label: string) => Promise<void>;
+  /** The webview view became visible or hidden; the caller owns the refresh timer. */
+  onVisibilityChanged?: (visible: boolean) => void;
 }
 
-interface CachePanelSession {
-  panel: vscode.WebviewPanel;
-  context: vscode.ExtensionContext;
-  /** Set by `onDidDispose`, so an in-flight `read()` cannot touch a dead webview. */
-  disposed: boolean;
-}
-
-/** One panel per window: reopening reveals and refreshes the existing one. */
-let session: CachePanelSession | undefined;
-
-export function registerCachePanel(context: vscode.ExtensionContext, deps: CachePanelDeps): void {
-  context.subscriptions.push(
-    vscode.commands.registerCommand(CACHE_COMMANDS.showPanel, () => open(context, deps)),
-    vscode.workspace.onDidChangeConfiguration((event) => {
-      if (session === undefined) {
-        return;
-      }
-      if (
-        event.affectsConfiguration("mcpp.cache") ||
-        event.affectsConfiguration("mcpp.views.cache") ||
-        event.affectsConfiguration("mcpp.ui.numberFormat")
-      ) {
-        void render(session, deps);
-      }
-    }),
-    {
-      dispose: () => {
-        session?.panel.dispose();
-        session = undefined;
-      },
-    },
-  );
-}
-
-async function open(context: vscode.ExtensionContext, deps: CachePanelDeps): Promise<void> {
-  if (session !== undefined) {
-    session.panel.reveal();
-    await render(session, deps);
-    return;
-  }
-  const panel = vscode.window.createWebviewPanel(
-    PANEL_VIEW_TYPE,
-    t("Cache statistics"),
-    vscode.ViewColumn.Active,
-    {
-      enableScripts: true,
-      localResourceRoots: [mediaRoot(context)],
-      retainContextWhenHidden: false,
-    },
-  );
-  const active: CachePanelSession = { panel, context, disposed: false };
-  session = active;
-  panel.webview.onDidReceiveMessage((raw: unknown) => {
-    void handle(active, deps, raw);
-  });
-  panel.onDidDispose(() => {
-    active.disposed = true;
-    if (session === active) {
-      session = undefined;
-    }
-  });
-  await render(active, deps);
-}
-
-async function handle(active: CachePanelSession, deps: CachePanelDeps, raw: unknown): Promise<void> {
-  const message = decodeCachePanelMessage(raw);
-  if (message === undefined) {
-    return;
-  }
-  try {
-    if (message.type === "refresh") {
-      // Nothing to run: the render below re-reads everything.
-    } else if (message.type === "showEntry") {
-      await deps.showEntry(message.label);
-    } else {
-      await deps.run(message);
-    }
-  } catch {
-    // The caller owns confirmation and error reporting. The panel still
-    // re-renders, so the user sees the state that actually resulted.
-  }
-  await render(active, deps);
+/** What `cacheView.ts` needs back from the registration. */
+export interface CachePanelProvider extends vscode.WebviewViewProvider {
+  /** True while the sidebar view is on screen. The caller's timer checks it. */
+  readonly visible: boolean;
+  /** Redraws from the caller's current figures. A no-op while the view is not resolved. */
+  refresh: () => void;
 }
 
 /**
- * Resolve the model and put it on the webview. A rejected `read()` becomes an
- * unavailable model carrying the reason, because a blank panel tells the user
- * nothing and a panel that is still usable can be refreshed.
+ * Register the provider for the `mcpp.cache` sidebar view.
+ *
+ * The provider is returned so the caller can ask "is the view on screen?" (the
+ * auto-refresh timer) and "redraw" (after a settings change — the caller already
+ * listens for those, and keeps the status item and the timer in step in the same
+ * handler). It is registered with `retainContextWhenHidden: false`, the only
+ * value a `WebviewView` supports, which is why the document is re-rendered on
+ * every resolve.
  */
-async function render(active: CachePanelSession, deps: CachePanelDeps): Promise<void> {
-  let model: CachePanelModel;
-  try {
-    model = buildModel(await deps.read());
-  } catch (error) {
-    model = unavailableModel(error instanceof Error ? error.message : String(error));
+export function registerCachePanel(context: vscode.ExtensionContext, deps: CachePanelDeps): CachePanelProvider {
+  const provider = new CacheWebviewViewProvider(context, deps);
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(CACHE_VIEW_ID, provider, {
+      webviewOptions: { retainContextWhenHidden: false },
+    }),
+  );
+  return provider;
+}
+
+class CacheWebviewViewProvider implements CachePanelProvider {
+  private view: vscode.WebviewView | undefined;
+  private busy = false;
+  /** A redraw was asked for while one was running: do exactly one more pass. */
+  private again = false;
+
+  constructor(
+    private readonly context: vscode.ExtensionContext,
+    private readonly deps: CachePanelDeps,
+  ) {}
+
+  get visible(): boolean {
+    return this.view?.visible === true;
   }
-  if (active.disposed) {
-    return;
+
+  /**
+   * The `WebviewViewProvider` contract:
+   * `resolveWebviewView(view: WebviewView, context: WebviewViewResolveContext, token: CancellationToken)`.
+   * The two trailing arguments are unused on purpose: the document is a pure
+   * function of the caller's figures, so a resolve needs neither the previous
+   * state nor a cancellation token, and the render it starts checks `this.view`
+   * before it touches the DOM.
+   *
+   * Called by VS Code every time the sidebar shows the view — and because a
+   * `WebviewView` cannot retain its context while hidden, that is also the point
+   * at which the document is drawn from scratch.
+   */
+  resolveWebviewView(view: vscode.WebviewView): void {
+    this.view = view;
+    view.webview.options = {
+      enableScripts: true,
+      localResourceRoots: [mediaRoot(this.context)],
+    };
+    view.onDidDispose(() => {
+      if (this.view === view) {
+        this.view = undefined;
+      }
+    });
+    view.onDidChangeVisibility(() => {
+      this.deps.onVisibilityChanged?.(view.visible);
+    });
+    view.webview.onDidReceiveMessage((raw: unknown) => {
+      void this.handle(raw);
+    });
+    this.deps.onVisibilityChanged?.(view.visible);
+    this.refresh();
   }
-  active.panel.webview.html = renderCachePanelHtml(model, assets(active));
+
+  refresh(): void {
+    if (this.busy) {
+      this.again = true;
+      return;
+    }
+    void this.run();
+  }
+
+  /** One pass at a time; a request arriving mid-pass earns exactly one more. */
+  private async run(): Promise<void> {
+    this.busy = true;
+    try {
+      do {
+        this.again = false;
+        await this.render();
+      } while (this.again && this.view !== undefined);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  private async handle(raw: unknown): Promise<void> {
+    const message = decodeCachePanelMessage(raw);
+    if (message === undefined) {
+      return;
+    }
+    try {
+      if (message.type === "refresh") {
+        // Nothing to run: the render below re-reads everything.
+      } else if (message.type === "showEntry") {
+        await this.deps.showEntry(message.label);
+      } else {
+        await this.deps.run(message);
+      }
+    } catch {
+      // The caller owns confirmation and error reporting. The view still
+      // re-renders, so the user sees the state that actually resulted.
+    }
+    this.refresh();
+  }
+
+  /**
+   * Resolve the model and put it on the webview. A rejected refresh/read pair
+   * becomes an unavailable model carrying the reason, because a blank view tells
+   * the user nothing and a view that is still usable can be redrawn.
+   */
+  private async render(): Promise<void> {
+    const view = this.view;
+    if (view === undefined) {
+      return;
+    }
+    let model: CachePanelModel;
+    try {
+      await this.deps.refresh();
+      model = buildModel(this.deps.read());
+    } catch (error) {
+      model = unavailableModel(error instanceof Error ? error.message : String(error));
+    }
+    if (this.view !== view) {
+      return;
+    }
+    view.webview.html = renderCachePanelHtml(model, assets(this.context, view));
+  }
 }
 
 function buildModel(data: CachePanelData): CachePanelModel {
@@ -194,7 +255,7 @@ function buildModel(data: CachePanelData): CachePanelModel {
   return model;
 }
 
-/** Both halves unavailable, with one reason. Used when `read()` rejects. */
+/** Both halves unavailable, with one reason. Used when the read rejects. */
 function unavailableModel(message: string): CachePanelModel {
   return {
     ui: panelLabels(),
@@ -244,6 +305,10 @@ function numberFormat(): NumberFormat {
 /**
  * Every visible string, resolved once per model. These are the literals
  * `tools/l10n-check.mjs` holds to `data/i18n/zh-cn.json`.
+ *
+ * A key the §8.1 layout no longer prints (`refresh`, `details`, `colActions`,
+ * the four section hints, `barsHint`) is gone rather than left as a dictionary
+ * entry: the constant and the renderer have to keep meaning the same thing.
  */
 function panelLabels(): Record<string, string> {
   return {
@@ -252,58 +317,49 @@ function panelLabels(): Record<string, string> {
     [CACHE_PANEL_UI.boundary]: t(
       "Every figure here is read from mcpp cache list, mcpp cache dir and a bounded walk of target/. Sizes are estimates; cleanup runs only after confirmation and never automatically.",
     ),
-    [CACHE_PANEL_UI.projectTitle]: t("Project artifacts"),
+    [CACHE_PANEL_UI.projectTitle]: t("Project cache"),
     [CACHE_PANEL_UI.projectFiles]: t("{0} file(s) · {1} group(s)"),
+    [CACHE_PANEL_UI.projectStale]: t("Stale artifacts: about {0}"),
     [CACHE_PANEL_UI.sharedTitle]: t("Global build cache"),
     [CACHE_PANEL_UI.sharedEntries]: t("{0} entries"),
     [CACHE_PANEL_UI.sharedRoot]: t("Root: {0}"),
-    [CACHE_PANEL_UI.sharedOldest]: t("Oldest use: {0}"),
-    [CACHE_PANEL_UI.sharedNewest]: t("Newest use: {0}"),
     [CACHE_PANEL_UI.legacyTitle]: t("Pre-v1 cache"),
     [CACHE_PANEL_UI.legacyPath]: t("Path: {0}"),
     [CACHE_PANEL_UI.unknown]: t("unknown"),
     [CACHE_PANEL_UI.projectUnavailable]: t("Project artifacts could not be measured."),
     [CACHE_PANEL_UI.sharedUnavailable]: t("The shared build cache could not be read."),
     [CACHE_PANEL_UI.actions]: t("Cache actions"),
-    [CACHE_PANEL_UI.refresh]: t("Refresh"),
     [CACHE_PANEL_UI.cleanStale]: t("Clean stale artifacts"),
     [CACHE_PANEL_UI.cleanProject]: t("Clean project artifacts"),
     [CACHE_PANEL_UI.prune]: t("Drop entries unused for a while"),
     [CACHE_PANEL_UI.verify]: t("Verify the cache"),
     [CACHE_PANEL_UI.cleanLegacy]: t("Remove the pre-v1 cache"),
     [CACHE_PANEL_UI.collect]: t("Collect to this budget"),
-    [CACHE_PANEL_UI.details]: t("Details"),
     [CACHE_PANEL_UI.detailsFor]: t("Show cache entry details for {0}"),
     [CACHE_PANEL_UI.reasonShared]: t("The shared build cache is not available."),
     [CACHE_PANEL_UI.reasonProject]: t("Project artifacts are not available."),
     [CACHE_PANEL_UI.reasonLegacy]: t("There is no pre-v1 cache to remove."),
     [CACHE_PANEL_UI.composition]: t("Composition by kind"),
-    [CACHE_PANEL_UI.compositionHint]: t("Share of the total cache size, by entry kind."),
     [CACHE_PANEL_UI.compositionEmpty]: t("No cache entries were found."),
-    [CACHE_PANEL_UI.age]: t("Age distribution"),
-    [CACHE_PANEL_UI.ageHint]: t("Bytes and entries by how long ago they were last used."),
+    [CACHE_PANEL_UI.age]: t("Last use"),
     [CACHE_PANEL_UI.ageEmpty]: t("No entry has a recorded last use."),
     [CACHE_PANEL_UI.ageUnder]: t("under {0} day(s)"),
     [CACHE_PANEL_UI.ageRange]: t("{0}–{1} day(s)"),
     [CACHE_PANEL_UI.ageOverflow]: t("more than {0} day(s)"),
     [CACHE_PANEL_UI.ageUnknown]: t("{0} entries have no recorded last use and are not counted in this bar."),
     [CACHE_PANEL_UI.top]: t("Largest packages (top {0})"),
-    [CACHE_PANEL_UI.topHint]: t("The {0} largest cache labels, by bytes."),
     [CACHE_PANEL_UI.topEmpty]: t("No cache label was read."),
     [CACHE_PANEL_UI.colLabel]: t("Label"),
     [CACHE_PANEL_UI.colEntries]: t("Entries"),
     [CACHE_PANEL_UI.colBytes]: t("Size"),
     [CACHE_PANEL_UI.colOldest]: t("Oldest use"),
-    [CACHE_PANEL_UI.colActions]: t("Actions"),
-    [CACHE_PANEL_UI.budget]: t("Budget simulator"),
+    [CACHE_PANEL_UI.budgetLabel]: t("Keep the shared build cache under"),
     [CACHE_PANEL_UI.budgetHint]: t(
       "Simulates mcpp cache gc --max-size: the estimate is a local projection, so mcpp's own policy decides in the end.",
     ),
-    [CACHE_PANEL_UI.budgetLabel]: t("Keep the shared build cache under"),
     [CACHE_PANEL_UI.budgetUnit]: t("GiB"),
     [CACHE_PANEL_UI.incompleteWarning]: t("{0} cache entries are incomplete; run mcpp cache verify to see which ones."),
     [CACHE_PANEL_UI.sizeWarning]: t("The shared build cache is {0}, at or above the {1} warning threshold."),
-    [CACHE_PANEL_UI.barsHint]: t("The same figures are listed as text next to each bar."),
   };
 }
 
@@ -323,10 +379,10 @@ function mediaRoot(context: vscode.ExtensionContext): vscode.Uri {
   return vscode.Uri.joinPath(context.extensionUri, MEDIA_DIRECTORY);
 }
 
-function assets(active: CachePanelSession): CachePanelAssets {
+function assets(context: vscode.ExtensionContext, view: vscode.WebviewView): CachePanelAssets {
   return {
-    cspSource: active.panel.webview.cspSource,
+    cspSource: view.webview.cspSource,
     nonce: randomBytes(16).toString("base64"),
-    styleUri: active.panel.webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot(active.context), STYLESHEET)).toString(),
+    styleUri: view.webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot(context), STYLESHEET)).toString(),
   };
 }

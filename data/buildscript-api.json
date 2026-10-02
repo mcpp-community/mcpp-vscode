@@ -1,6 +1,6 @@
 {
-  "sourceVersion": "2026.10.1.3",
-  "sourceCommit": "4d81d062",
+  "sourceVersion": "2026.10.3.1",
+  "sourceCommit": "74bcb859",
   "protocolVersion": 15,
   "cacheEpoch": 3,
   "roles": [
@@ -131,7 +131,7 @@
       "mustExist": false,
       "since": 4,
       "rules": [],
-      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/4d81d062/docs/30-build-mcpp.md#runner-how-the-artifact-is-executed-20268192"
+      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/74bcb859/docs/30-build-mcpp.md#runner-how-the-artifact-is-executed-20268192"
     },
     {
       "wire": "runner-named",
@@ -262,7 +262,7 @@
         "R2.1",
         "R9.4"
       ],
-      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/4d81d062/docs/30-build-mcpp.md#warning-succeeding-and-still-being-heard-20268212"
+      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/74bcb859/docs/30-build-mcpp.md#warning-succeeding-and-still-being-heard-20268212"
     },
     {
       "wire": "diagnostic",
@@ -312,7 +312,7 @@
       "rules": [
         "R2.1"
       ],
-      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/4d81d062/docs/30-build-mcpp.md#the-probe-channel-fact-floor-2026952"
+      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/74bcb859/docs/30-build-mcpp.md#the-probe-channel-fact-floor-2026952"
     },
     {
       "wire": "floor",
@@ -325,7 +325,7 @@
       "rules": [
         "R2.1"
       ],
-      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/4d81d062/docs/30-build-mcpp.md#the-probe-channel-fact-floor-2026952"
+      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/74bcb859/docs/30-build-mcpp.md#the-probe-channel-fact-floor-2026952"
     },
     {
       "wire": "pack-format",
@@ -374,7 +374,7 @@
         "R9.2",
         "R9.5"
       ],
-      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/4d81d062/docs/30-build-mcpp.md#deploying-what-the-program-generated-deploy-20269123-protocol-11"
+      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/74bcb859/docs/30-build-mcpp.md#deploying-what-the-program-generated-deploy-20269123-protocol-11"
     },
     {
       "wire": "runtime-search-dir",

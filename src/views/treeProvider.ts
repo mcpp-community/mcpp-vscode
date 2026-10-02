@@ -9,22 +9,31 @@
 import * as vscode from "vscode";
 
 import { t } from "../i18n/t";
-import type { Label, TreeNode } from "./models";
+import type { Label, LabelArgument, TreeNode } from "./models";
 
 /** `{ key, args }` -> a sentence in the user's language. */
 export function resolveLabel(label: Label | undefined): string {
   if (label === undefined) {
     return "";
   }
-  return t(label.key, ...(label.args ?? []));
+  return t(label.key, ...(label.args ?? []).map(resolveArgument));
+}
+
+/**
+ * An argument is usually a value, but it may be another label: `C++23 · 87
+ * source file(s)` is two translatable pieces, and the join happens here rather
+ * than in a builder that must stay free of the current language.
+ */
+function resolveArgument(argument: LabelArgument): string | number {
+  return typeof argument === "object" ? resolveLabel(argument) : argument;
 }
 
 export function toTreeItem(node: TreeNode): vscode.TreeItem {
   const collapsible =
-    node.children === undefined
+    node.children === undefined || node.children.length === 0
       ? vscode.TreeItemCollapsibleState.None
-      : node.children.length === 0
-        ? vscode.TreeItemCollapsibleState.None
+      : node.expanded === true
+        ? vscode.TreeItemCollapsibleState.Expanded
         : vscode.TreeItemCollapsibleState.Collapsed;
 
   const item = new vscode.TreeItem(resolveLabel(node.label), collapsible);
@@ -79,12 +88,18 @@ export class StaticTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
   }
 }
 
-/** Registers a view and returns nothing; the provider can be refreshed by the caller. */
+/**
+ * Registers a view and hands back the provider, the view and its disposable.
+ *
+ * The `TreeView` is returned (rather than using `registerTreeDataProvider`)
+ * because a caller may need its visibility: the project view gates the C++
+ * Modules poller on whether its tree is actually on screen.
+ */
 export function registerTreeView(
   viewId: string,
   roots: () => readonly TreeNode[],
-): { provider: StaticTreeProvider; disposable: vscode.Disposable } {
+): { provider: StaticTreeProvider; view: vscode.TreeView<TreeNode>; disposable: vscode.Disposable } {
   const provider = new StaticTreeProvider(roots);
-  const disposable = vscode.window.registerTreeDataProvider(viewId, provider);
-  return { provider, disposable };
+  const view = vscode.window.createTreeView(viewId, { treeDataProvider: provider });
+  return { provider, view, disposable: view };
 }

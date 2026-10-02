@@ -26,7 +26,8 @@ interface PackageManifest {
     configurationDefaults?: Record<string, unknown>;
     languages?: Array<{ id: string; aliases?: string[]; filenames?: string[]; configuration?: string }>;
     viewsContainers?: { activitybar?: Array<{ id: string; title?: string; icon?: string }> };
-    views?: Record<string, Array<{ id: string; name?: string; description?: string; when?: string }>>;
+    views?: Record<string, Array<{ id: string; name?: string; description?: string; when?: string; type?: string }>>;
+    viewsWelcome?: Array<{ view: string; contents: string; when?: string }>;
     colors?: Array<{ id: string; description?: string }>;
     keybindings?: Array<{ command: string; key?: string; mac?: string; when?: string }>;
     grammars?: Array<{ language?: string; scopeName: string; injectTo?: string[]; path: string }>;
@@ -72,7 +73,7 @@ test("declares mcpp-language-server as the C++ modules language service", () => 
   );
   assert.deepEqual(
     manifest.contributes?.views?.mcpp?.map((view) => view.id),
-    ["mcpp.project", "mcpp.cache", "mcpp.languageServer"],
+    ["mcpp.project", "mcpp.library", "mcpp.cache"],
   );
   assert.deepEqual(
     manifest.contributes?.colors?.map((color) => color.id),
@@ -136,10 +137,17 @@ test("the promised keybindings are contributed and scoped to a project", () => {
 
 test("each view is gated by its own visibility setting", () => {
   const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
+  // The master switch comes first, in negated form: with `mcpp.views.enabled` off
+  // every view is hidden and VS Code drops the container from the activity bar.
   assert.deepEqual(manifest.contributes?.views?.mcpp?.map((view) => view.when), [
-    "mcpp.views.project",
-    "mcpp.views.cache",
-    "mcpp.views.languageServer",
+    "!mcpp.sidebarHidden && mcpp.views.project",
+    "!mcpp.sidebarHidden && mcpp.views.library",
+    "!mcpp.sidebarHidden && mcpp.views.cache",
+  ]);
+  assert.deepEqual(manifest.contributes?.views?.mcpp?.map((view) => view.type), [
+    undefined,
+    "webview",
+    "webview",
   ]);
 });
 

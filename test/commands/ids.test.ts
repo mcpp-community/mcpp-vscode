@@ -74,6 +74,8 @@ test("the cache group carries both cleanup levels and the read-only pair", () =>
   assert.equal(CACHE_COMMANDS.cleanStale, "mcpp.cleanStaleArtifacts");
   assert.equal(CACHE_COMMANDS.cleanProject, "mcpp.cleanProjectArtifacts");
   assert.equal(CACHE_COMMANDS.verify, "mcpp.verifyGlobalCache");
+  // The statistics moved into the sidebar view, so the "open a panel" command is gone.
+  assert.ok(!("showPanel" in CACHE_COMMANDS));
   assert.equal(CACHE_COMMANDS.refreshStats, "mcpp.refreshCacheStats");
 });
 

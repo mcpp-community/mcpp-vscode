@@ -2,7 +2,7 @@
   "name": "mcpp-vscode",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "publisher": "mcpp-community",
   "license": "Apache-2.0",
   "icon": "images/logo.png",
@@ -57,19 +57,9 @@
           "group": "navigation@2"
         },
         {
-          "command": "mcpp.showCachePanel",
-          "when": "view == mcpp.cache",
-          "group": "navigation@3"
-        },
-        {
-          "command": "mcpp.languageServer.refreshState",
-          "when": "view == mcpp.languageServer",
+          "command": "mcpp.library.updateIndex",
+          "when": "view == mcpp.library",
           "group": "navigation@2"
-        },
-        {
-          "command": "mcpp.languageServer.restart",
-          "when": "view == mcpp.languageServer",
-          "group": "navigation@3"
         }
       ],
       "commandPalette": [
@@ -145,11 +135,6 @@
       {
         "command": "mcpp.autoConfigureModules",
         "title": "%command.mcpp.autoConfigureModules.title%",
-        "category": "%category%"
-      },
-      {
-        "command": "mcpp.showCachePanel",
-        "title": "%command.mcpp.showCachePanel.title%",
         "category": "%category%"
       },
       {
@@ -290,6 +275,22 @@
       {
         "command": "mcpp.showLanguageServerLogs",
         "title": "%command.mcpp.showLanguageServerLogs.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.library.search",
+        "title": "%command.mcpp.library.search.title%",
+        "category": "%category%",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "mcpp.library.openDetail",
+        "title": "%command.mcpp.library.openDetail.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.library.updateIndex",
+        "title": "%command.mcpp.library.updateIndex.title%",
         "category": "%category%"
       }
     ],
@@ -729,21 +730,53 @@
           "description": "%mcpp.views.cache.show.title%",
           "markdownDescription": "%mcpp.views.cache.show.description%"
         },
-        "mcpp.views.languageServer.show": {
+        "mcpp.views.enabled": {
           "type": "boolean",
           "default": true,
           "scope": "window",
           "order": 70030,
+          "description": "%mcpp.views.enabled.title%",
+          "markdownDescription": "%mcpp.views.enabled.description%"
+        },
+        "mcpp.views.library.show": {
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "order": 70040,
+          "description": "%mcpp.views.library.show.title%",
+          "markdownDescription": "%mcpp.views.library.show.description%"
+        },
+        "mcpp.library.indexPath": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "order": 70050,
+          "description": "%mcpp.library.indexPath.title%",
+          "markdownDescription": "%mcpp.library.indexPath.description%"
+        },
+        "mcpp.library.networkSearch": {
+          "type": "boolean",
+          "default": false,
+          "scope": "window",
+          "order": 70060,
+          "description": "%mcpp.library.networkSearch.title%",
+          "markdownDescription": "%mcpp.library.networkSearch.description%"
+        },
+        "mcpp.views.languageServer.show": {
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "order": 70070,
           "description": "%mcpp.views.languageServer.show.title%",
           "markdownDescription": "%mcpp.views.languageServer.show.description%"
         },
         "mcpp.views.cache.topN": {
           "type": "number",
           "default": 5,
+          "scope": "window",
+          "order": 70080,
           "minimum": 1,
           "maximum": 50,
-          "scope": "window",
-          "order": 70040,
           "description": "%mcpp.views.cache.topN.title%",
           "markdownDescription": "%mcpp.views.cache.topN.description%"
         },
@@ -754,11 +787,8 @@
             "7d",
             "30d"
           ],
-          "items": {
-            "type": "string"
-          },
           "scope": "window",
-          "order": 70050,
+          "order": 70090,
           "description": "%mcpp.views.cache.ageBuckets.title%",
           "markdownDescription": "%mcpp.views.cache.ageBuckets.description%"
         },
@@ -997,19 +1027,23 @@
           "id": "mcpp.project",
           "name": "%view.mcpp.project.name%",
           "contextualTitle": "%view.mcpp.project.name%",
-          "when": "mcpp.views.project"
+          "when": "!mcpp.sidebarHidden && mcpp.views.project"
+        },
+        {
+          "id": "mcpp.library",
+          "name": "%view.mcpp.library.name%",
+          "contextualTitle": "%view.mcpp.library.name%",
+          "description": "%view.mcpp.library.description%",
+          "type": "webview",
+          "when": "!mcpp.sidebarHidden && mcpp.views.library"
         },
         {
           "id": "mcpp.cache",
           "name": "%view.mcpp.cache.name%",
           "contextualTitle": "%view.mcpp.cache.name%",
-          "when": "mcpp.views.cache"
-        },
-        {
-          "id": "mcpp.languageServer",
-          "name": "%view.mcpp.languageServer.name%",
-          "description": "%view.mcpp.languageServer.description%",
-          "when": "mcpp.views.languageServer"
+          "description": "%view.mcpp.cache.description%",
+          "type": "webview",
+          "when": "!mcpp.sidebarHidden && mcpp.views.cache"
         }
       ]
     },
@@ -1082,6 +1116,13 @@
           "severity": 4,
           "message": 5
         }
+      }
+    ],
+    "viewsWelcome": [
+      {
+        "view": "mcpp.library",
+        "contents": "%viewsWelcome.library%",
+        "when": "!mcpp.library.indexFound"
       }
     ]
   },

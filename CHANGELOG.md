@@ -1,4 +1,41 @@
-# 更新日志
+## 0.6.0 - 2026-10-02
+
+The sidebar was reorganised around one rule: **the body shows state, the actions sit
+next to it, and the two are visually separate.**
+
+### Changed
+
+- **Three views instead of four**: 工程 / mcpp 库生态 / 缓存. The C++ Modules view is
+  gone as a view; its state is now one row inside 工程 → 基本信息, collapsed by
+  default. **The collapsed row always carries a status icon**, so a degraded language
+  service is visible without expanding it.
+- **The project view** is two labelled sections: 基本信息 (identity, target, toolchain,
+  dependencies, the language service) and 常用命令 (build/run/test/clean/toolchain/
+  search-and-add/self-check/settings, each with its keybinding).
+- **Dependencies are shown as two levels**: what `mcpp.toml` declares, and the version
+  `mcpp.lock` resolved for it. No connector lines — `mcpp.lock` has no parent/child
+  edges, and drawing them would be inventing a tree.
+- **The cache view is a sidebar webview**, not an editor tab. 项目缓存 is always
+  visible; 全局缓存 is collapsed and shows its summary on one line. One 6px bar and a
+  single-line legend replace the previous stack.
+- **The activity bar can be switched off** with `mcpp.views.enabled`; the icon
+  disappears with the last visible view.
+- The extension icon is now mcpp's official logo — the same file the C++ Modules
+  extension uses.
+
+### Added
+
+- **mcpp 库生态** — browse the package index already on this machine, offline:
+  search, namespace and surface filters, `已添加` / `有更新` state, and a per-package
+  detail page in the editor with the real **example code** the index's CI builds and
+  runs (172 example projects), the version matrix per platform, licence, repository and
+  a one-click **mcpp add** — which is the only thing that writes `mcpp.toml`.
+- Searching the *other* registries is a separate switch, `mcpp.library.networkSearch`,
+  **off by default**: that tier runs `mcpp search`, which may use the network and can
+  only be read from human output on a best-effort basis.
+- Labels use the official index site's own vocabulary — `import` / `#include` / `tool`
+  / 上游 mcpp.toml — read from `mcpp xpkg parse --json`, so the editor and the site say
+  the same thing.
 
 > From 0.5.0 on, entries are written in English. Earlier entries remain as they
 > were written.

@@ -9,3 +9,6 @@ dist/
 
 # 本地验收 profile（tools/dev-profile.mjs 生成）
 .dev-profile/
+
+# 界面原型（tools/ 之外的设计评审产物，体积大，不入库）
+.agents/prototypes/

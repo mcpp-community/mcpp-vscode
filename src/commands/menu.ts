@@ -1,4 +1,4 @@
-import { CACHE_COMMANDS, CLI_COMMANDS, LANGUAGE_SERVER_COMMANDS, TOOL_COMMANDS } from "./ids";
+import { CACHE_COMMANDS, CLI_COMMANDS, LANGUAGE_SERVER_COMMANDS, LIBRARY_COMMANDS, TOOL_COMMANDS } from "./ids";
 
 /**
  * The status-bar menu. Entries are keyed by command id; the titles are resolved
@@ -21,8 +21,8 @@ export const quickMenuItems: readonly QuickMenuItem[] = [
   { labelKey: "Select the global default toolchain", command: CLI_COMMANDS.selectDefaultToolchain, group: "toolchain" },
 
   { labelKey: "Clean stale artifacts", command: CACHE_COMMANDS.cleanStale, group: "cache" },
-  { labelKey: "Cache statistics", command: CACHE_COMMANDS.showPanel, group: "cache" },
   { labelKey: "Refresh cache statistics", command: CACHE_COMMANDS.refreshStats, group: "cache" },
+  { labelKey: "Search and add a dependency", command: LIBRARY_COMMANDS.search, group: "cache" },
   { labelKey: "Collect the global cache to a budget", command: CACHE_COMMANDS.collect, group: "cache" },
   { labelKey: "Verify the shared cache", command: CACHE_COMMANDS.verify, group: "cache" },
 

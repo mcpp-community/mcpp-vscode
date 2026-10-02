@@ -21,8 +21,11 @@ export const BYTES_PER_GIB = 1024 ** 3;
 
 /**
  * A node built here rather than in `./models.ts`, so the tree model needs no
- * edit: the shape is structurally the tree's `TreeNode`, and the cache view
- * prepends the warning node to the list `buildCacheTree` returns.
+ * edit: the shape is structurally the tree's `TreeNode`. The cache view itself is
+ * a sidebar `WebviewView` since §8.1 and no longer builds a tree, so this node is
+ * kept as the policy (§8 G6) that the warning threshold is decided in one pure
+ * place — the view states the same threshold in
+ * `src/views/cachePanelHtml.ts`'s warning banner.
  */
 export interface CacheTreeNode {
   id: string;
@@ -102,7 +105,10 @@ export function buildCacheWarningNode(bytes: number, thresholdGiB: number): Cach
     },
     icon: "warning",
     contextValue: "mcppCacheWarning",
-    command: { command: "mcpp.showCachePanel", title: { key: "Cache statistics" } },
+    // The cache view is a sidebar `WebviewView` now, so the node points at the
+    // view's own focus command (VS Code registers `<viewId>.focus` for every
+    // contributed view) rather than at the removed `mcpp.showCachePanel`.
+    command: { command: "mcpp.cache.focus", title: { key: "Cache statistics" } },
   };
 }
 

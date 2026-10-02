@@ -1,10 +1,12 @@
 /**
- * The C++ Modules view: mcppls's state, and every action that forwards to it.
+ * The C++ Modules language service, as commands plus one state source.
  *
- * The view states its provider in its own description, so nobody has to guess
- * which extension owns what. Every button forwards an mcppls command — this
- * extension never reimplements language-service behaviour and never writes an
- * `mcppls.*` setting itself.
+ * There is no view of its own any more: the four things worth seeing — state,
+ * provider, problems, actions — are folded into the project view's 「基本信息」
+ * section, and this file feeds that block. Every button still forwards an mcppls
+ * command; this extension never reimplements language-service behaviour and never
+ * writes an `mcppls.*` setting itself. The block states its provider on its own
+ * line, so "who owns what" stays answerable after the fold.
  *
  * Confirmation policy comes from the capability table (`danger` + `confirmHint`),
  * so a new dangerous action cannot be added without saying what it does.
@@ -12,10 +14,11 @@
  * reset-cache action; it can never take the capability's own modal away, and
  * `./viewPolicy.ts` is where that rule lives.
  *
- * Three settings also own the view's *timing*: `mcpp.languageService.readState`
+ * Three settings also own the block's *timing*: `mcpp.languageService.readState`
  * decides whether state is read at all, `…stateRefreshSeconds` whether it is
  * re-read on an interval, and `…notifyOnDegraded` whether the one-time
- * missing-dependency line is written.
+ * missing-dependency line is written. `mcpp.views.languageServer.show` decides
+ * whether the block appears in the project view at all.
  */
 
 import * as vscode from "vscode";
@@ -34,11 +37,8 @@ import {
 } from "../mcppls/stateSource";
 import { PollTimer } from "../mcppls/timers";
 import { refreshTimerDecision } from "./cacheState";
-import { buildLanguageServerTree } from "./models";
-import { StaticTreeProvider } from "./treeProvider";
+import type { LanguageServiceBlock } from "./models";
 import { degradedNoticeEnabled, resetCacheConfirmation } from "./viewPolicy";
-
-export const LANGUAGE_SERVER_VIEW_ID = "mcpp.languageServer";
 
 /** The tick granularity; the settings are in seconds. */
 const REFRESH_TICK_MS = 100;
@@ -46,6 +46,24 @@ const REFRESH_TICK_MS = 100;
 export interface LanguageServerViewDeps {
   bridge: LanguageServerBridge;
   output: vscode.OutputChannel;
+}
+
+/**
+ * The folded block's data source, handed to the project view.
+ *
+ * `input()` reads; `onDidChange` tells the project view when to rebuild; and
+ * `setVisible` is how the poller learns whether the project view is on screen at
+ * all. Keeping the timer here rather than in the project view means the setting
+ * that shapes it (`mcpp.languageService.stateRefreshSeconds`) is read next to the
+ * action it governs.
+ */
+export interface LanguageServerBlockSource {
+  /** The block's current input, or `undefined` while `mcpp.views.languageServer.show` is off. */
+  input(): LanguageServiceBlock | undefined;
+  /** Fires whenever the state, or the setting that shows it, may have changed. */
+  onDidChange(listener: () => void): vscode.Disposable;
+  /** The project view says whether its tree is visible; the poller follows it. */
+  setVisible(visible: boolean): void;
 }
 
 /** Ask, run, report — the same shape for every forwarded command. */
@@ -110,44 +128,45 @@ export function extraResetCacheConfirmation(
   return decision === "extra-modal" ? capability("resetCache")?.confirmHint : undefined;
 }
 
-export function registerLanguageServerView(
+/**
+ * Registers every `mcpp.languageServer.*` command (and the forwarded mcppls
+ * actions behind them) and returns the state source the project view renders.
+ */
+export function registerLanguageServerCommands(
   context: vscode.ExtensionContext,
   deps: LanguageServerViewDeps,
-): void {
-  const provider = new StaticTreeProvider(() =>
-    buildLanguageServerTree({
+): LanguageServerBlockSource {
+  const changed = new vscode.EventEmitter<void>();
+  context.subscriptions.push(changed);
+
+  // Whether the project view's tree is on screen. The timer below follows it, so
+  // a collapsed sidebar does not keep asking mcppls for state.
+  let visible = false;
+  const refresh = (): void => {
+    changed.fire();
+  };
+
+  const input = (): LanguageServiceBlock | undefined => {
+    // Literal key, so the wiring gate can see it.
+    if (read<boolean>("mcpp.views.languageServer.show") === false) {
+      return undefined;
+    }
+    return {
+      show: true,
       installed: languageServerInstalled(),
       enabled: languageServerEnabled(),
       version: languageServerVersion(),
       state: readLanguageServerState(),
-    }),
-  );
-  const view = vscode.window.createTreeView(LANGUAGE_SERVER_VIEW_ID, { treeDataProvider: provider });
-  context.subscriptions.push(view, provider);
-
-  // A refresh must never overlap one that is still running: `getChildren` reads
-  // the extension host, and the interval exists to keep that read fresh, not to
-  // queue more of them.
-  let refreshing = false;
-  const refreshState = (): void => {
-    if (refreshing) {
-      return;
-    }
-    refreshing = true;
-    try {
-      provider.refresh();
-    } finally {
-      refreshing = false;
-    }
+    };
   };
 
-  // `mcpp.languageService.stateRefreshSeconds`, but only while this view is
+  // `mcpp.languageService.stateRefreshSeconds`, but only while the project view is
   // visible and only while state is read at all (0 = off).
   const timer = new PollTimer({
     periodMs: 0,
     tick: (): void => {
-      if (view.visible) {
-        refreshState();
+      if (visible) {
+        refresh();
       }
     },
   });
@@ -156,10 +175,9 @@ export function registerLanguageServerView(
     const disabled = read<boolean>("mcpp.languageService.readState") === false;
     const seconds = read<number>("mcpp.languageService.stateRefreshSeconds");
     const usable = !disabled && Number.isFinite(seconds) && seconds > 0;
-    const decision = refreshTimerDecision(usable ? seconds : 0, view.visible);
+    const decision = refreshTimerDecision(usable ? seconds : 0, visible);
     timer.start(decision.active ? decision.seconds * 1000 : 0);
   };
-  context.subscriptions.push(view.onDidChangeVisibility(() => applyTimer()));
   applyTimer();
 
   const register = (id: string, handler: (...args: unknown[]) => Promise<void>): void => {
@@ -190,12 +208,12 @@ export function registerLanguageServerView(
         }
       }
       await runLanguageServerCommand(deps.bridge, deps.output, key, options);
-      refreshState();
+      refresh();
     });
   };
 
   register(LANGUAGE_SERVER_COMMANDS.refreshState, async () => {
-    refreshState();
+    refresh();
   });
 
   forward(LANGUAGE_SERVER_COMMANDS.restart, "restartServer");
@@ -234,14 +252,14 @@ export function registerLanguageServerView(
   });
 
   context.subscriptions.push(
-    vscode.extensions.onDidChange(() => refreshState()),
+    vscode.extensions.onDidChange(() => refresh()),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (
         event.affectsConfiguration("mcppls.enable") ||
         event.affectsConfiguration("mcpp.views.languageServer") ||
         event.affectsConfiguration("mcpp.languageService")
       ) {
-        refreshState();
+        refresh();
         applyTimer();
       }
     }),
@@ -254,4 +272,37 @@ export function registerLanguageServerView(
       t("The C++ Modules extension ({0}) is not installed or is disabled.", capability("refresh")?.key ?? ""),
     );
   }
+
+  return {
+    input,
+    onDidChange: (listener: () => void): vscode.Disposable => changed.event(listener),
+    setVisible: (next: boolean): void => {
+      if (visible === next) {
+        return;
+      }
+      visible = next;
+      applyTimer();
+      // Becoming visible is exactly when a stale block must be re-read.
+      if (visible) {
+        refresh();
+      }
+    },
+  };
+}
+
+/**
+ * Compatibility shim, rewritten 0.5.0: the standalone view is gone.
+ *
+ * Kept only so `extension.ts` compiles while it still calls the old name; the
+ * return value must be handed to `registerProjectView` or the folded block never
+ * renders. Delete this once `extension.ts` calls
+ * {@link registerLanguageServerCommands} directly.
+ *
+ * @deprecated Use {@link registerLanguageServerCommands}.
+ */
+export function registerLanguageServerView(
+  context: vscode.ExtensionContext,
+  deps: LanguageServerViewDeps,
+): LanguageServerBlockSource {
+  return registerLanguageServerCommands(context, deps);
 }

@@ -1,6 +1,11 @@
 /**
  * The cache view and every cleanup command.
  *
+ * The view is a sidebar **WebviewView** (`mcpp.cache`, plan §8.1): the numbers
+ * and the bars live in one document whose host is `src/views/cachePanel.ts`, and
+ * whose structure is the pure `src/views/cachePanelHtml.ts`. This file owns the
+ * data behind it, the status item, the auto-refresh timer and the commands.
+ *
  * The *policy* — which argv, how much confirmation, whether a preview is shown —
  * lives in `src/cli/clean.ts` and is unit-tested there. This file only asks the
  * user, runs the command and reports the result, so the safety rules cannot be
@@ -13,8 +18,8 @@
  *
  * - `mcpp.cache.showLegacy` decides whether the pre-v1 cache is measured and
  *   offered at all (`src/views/cacheState.ts`, §8 G6);
- * - `mcpp.cache.warnAboveGiB` adds a warning node when the shared cache is large;
- * - `mcpp.cache.autoRefreshSeconds` re-reads while the view is visible;
+ * - `mcpp.cache.warnAboveGiB` adds a warning when the shared cache is large;
+ * - `mcpp.cache.autoRefreshSeconds` re-reads while the view is on screen;
  * - `mcpp.cache.gc.confirmAboveGiB` adds one confirmation level to a large `gc`.
  */
 
@@ -32,20 +37,23 @@ import type { McppProjectDiscovery } from "../projects/discovery";
 import { formatBytes, projectGc } from "../util/format";
 import { clampOutput } from "../util/text";
 import {
-  buildCacheWarningNode,
   cacheSnapshotFrom,
   gcBudgetDialog,
   gcBudgetNeedsExtraConfirm,
-  legacyBytesForTree,
   legacyForPanel,
   refreshTimerDecision,
   type CacheSnapshot,
 } from "./cacheState";
-import { buildCacheTree, type CacheTreeInput } from "./models";
-import { StaticTreeProvider } from "./treeProvider";
-import { registerCachePanel, type CachePanelData } from "./cachePanel";
+import type { CacheTreeInput } from "./models";
+import {
+  CACHE_VIEW_ID,
+  CACHE_VIEW_FOCUS_COMMAND,
+  registerCachePanel,
+  type CachePanelData,
+  type CachePanelProvider,
+} from "./cachePanel";
 
-export const CACHE_VIEW_ID = "mcpp.cache";
+export { CACHE_VIEW_ID, CACHE_VIEW_FOCUS_COMMAND };
 
 /** The tick granularity; `mcpp.cache.autoRefreshSeconds` is in seconds. */
 const REFRESH_TICK_MS = 100;
@@ -87,7 +95,6 @@ function workingDirectory(project: McppProjectDiscovery | undefined): string | u
   return project?.root;
 }
 
-/** Settings that shape the numbers the view shows. */
 /** Unix seconds -> an ISO instant the panel can print; the panel does not do dates. */
 function timestamp(seconds: number | undefined): string | undefined {
   return seconds === undefined || !Number.isFinite(seconds) ? undefined : new Date(seconds * 1000).toISOString();
@@ -98,8 +105,8 @@ function numberFormat(): "binary" | "decimal" {
 }
 
 /**
- * `mcpp.cache.showLegacy`: the whole rule in one object, so the tree, the panel
- * and the self-check read the same answer.
+ * `mcpp.cache.showLegacy`: the whole rule in one object, so the panel and the
+ * self-check read the same answer.
  */
 function legacyGate(settings: { showLegacy: boolean }, legacy: LegacyCache | undefined): {
   enabled: boolean;
@@ -245,73 +252,32 @@ export function extraGcConfirmation(
   };
 }
 
-export function registerCacheView(context: vscode.ExtensionContext, deps: CacheViewDeps): void {
+/**
+ * The cache view and its commands.
+ *
+ * Returns the sidebar provider it registered, so a caller that would rather own
+ * the `registerWebviewViewProvider` call can register this value itself instead
+ * (see `registerCachePanel`). Ignoring the return value is the normal case: the
+ * view is registered here, and `extension.ts` needs no extra line.
+ */
+export function registerCacheView(context: vscode.ExtensionContext, deps: CacheViewDeps): CachePanelProvider {
   let state: CacheState = { entries: [] };
   /** Guards the interval: one refresh at a time, and none after a failure. */
   let refreshInFlight: Promise<void> | undefined;
-
-  const treeInput = (settings: ReturnType<typeof viewSettings>): CacheTreeInput => {
-    const gate = legacyGate(settings, state.legacy);
-    return {
-      projectRoot: deps.currentProject()?.root,
-      artifacts:
-        state.artifacts === undefined
-          ? undefined
-          : {
-              exists: state.artifacts.exists,
-              totalBytes: state.artifacts.totalBytes,
-              files: state.artifacts.files,
-              groups: state.artifacts.byTopLevel.length,
-              truncated: state.artifacts.truncated,
-            },
-      inventory:
-        state.inventory === undefined
-          ? undefined
-          : {
-              root: state.inventory.root,
-              totalBytes: state.inventory.totalBytes,
-              totalEntries: state.inventory.totalEntries,
-              byKind: state.inventory.byKind,
-              topLabels: state.inventory.topLabels,
-              incomplete: state.inventory.incomplete.length,
-              oldestAccessed: state.inventory.oldestAccessed,
-              newestAccessed: state.inventory.newestAccessed,
-              ageBuckets: state.inventory.ageBuckets,
-            },
-      legacyBytes: legacyBytesForTree(gate),
-      error: state.error,
-    };
-  };
-
   /**
-   * The warning node for `mcpp.cache.warnAboveGiB`, prepended to the cache tree.
-   *
-   * The node is built here, next to the setting that earns it, and the tree
-   * model stays a pure list builder: `src/views/models.ts` needs no edit for
-   * this, which is why the node is prepended rather than threaded through
-   * `CacheTreeInput`. The builder is pure and covered in
-   * `test/views/cacheState.test.ts`.
+   * The sidebar view. Assigned after the timer below is declared, because the
+   * timer asks the provider whether the view is on screen; everything that reads
+   * it does so long after `registerCacheView` has returned.
    */
-  const buildTree = (): ReturnType<typeof buildCacheTree> => {
-    const settings = viewSettings();
-    const input = treeInput(settings);
-    const warning = cacheWarningChildren(state.inventory?.totalBytes, settings.warnAboveGiB);
-    if (warning.length === 0) {
-      return buildCacheTree(input);
-    }
-    return [...warning, ...buildCacheTree(input)];
-  };
-
-  // `createTreeView` (rather than `registerTreeDataProvider`) is what makes the
-  // auto-refresh honest: the timer only runs while the view is actually visible.
-  const provider = new StaticTreeProvider(() => buildTree());
-  const view = vscode.window.createTreeView(CACHE_VIEW_ID, { treeDataProvider: provider });
-  context.subscriptions.push(view, provider);
+  let provider: CachePanelProvider | undefined;
+  const viewVisible = (): boolean => provider?.visible === true;
 
   // An optional, second status item. Off by default: the C++ Modules extension
   // already owns a status item, and the mcpp quick menu owns ours.
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 39);
-  status.command = CACHE_COMMANDS.showPanel;
+  // `mcpp.cache.focus` is registered by VS Code for the contributed view, so the
+  // status item can bring the sidebar view on screen without a command of ours.
+  status.command = CACHE_VIEW_FOCUS_COMMAND;
   context.subscriptions.push(status);
 
   const updateStatus = (): void => {
@@ -338,6 +304,12 @@ export function registerCacheView(context: vscode.ExtensionContext, deps: CacheV
     );
   };
 
+  /**
+   * Re-read everything the view shows. It deliberately does **not** redraw the
+   * webview: the draw path (`CachePanelDeps.read` is `read` + `panelData`) calls
+   * this first, and a redraw from inside here would ask itself for the same
+   * figures again.
+   */
   const refreshNow = async (): Promise<void> => {
     const project = deps.currentProject();
     const settings = viewSettings();
@@ -346,7 +318,6 @@ export function registerCacheView(context: vscode.ExtensionContext, deps: CacheV
     if (!deps.isTrusted()) {
       next.error = t("the workspace is not trusted");
       applyState(next);
-      provider.refresh();
       return;
     }
 
@@ -391,7 +362,6 @@ export function registerCacheView(context: vscode.ExtensionContext, deps: CacheV
     }
 
     applyState(next);
-    provider.refresh();
     updateStatus();
   };
 
@@ -405,26 +375,6 @@ export function registerCacheView(context: vscode.ExtensionContext, deps: CacheV
     });
     return refreshInFlight;
   };
-
-  // `mcpp.cache.autoRefreshSeconds`: re-read while the view is visible, never in
-  // an untrusted workspace, and never on top of a read that is still running.
-  const timer = new PollTimer({
-    periodMs: 0,
-    tick: (): void => {
-      if (view.visible && deps.isTrusted()) {
-        void refresh();
-      }
-    },
-  });
-  context.subscriptions.push(timer);
-  const applyTimer = (): void => {
-    const seconds = viewSettings().autoRefreshSeconds;
-    const usable = deps.isTrusted() && Number.isFinite(seconds) && seconds > 0;
-    const decision = refreshTimerDecision(usable ? seconds : 0, view.visible);
-    timer.start(decision.active ? decision.seconds * 1000 : 0);
-  };
-  context.subscriptions.push(view.onDidChangeVisibility(() => applyTimer()));
-  applyTimer();
 
   /** The figures a confirmation dialogue needs, without running anything new. */
   const figures = (): string => {
@@ -493,13 +443,8 @@ export function registerCacheView(context: vscode.ExtensionContext, deps: CacheV
     );
   };
 
-  register(CACHE_COMMANDS.refreshStats, async () => {
-    if (!requireTrusted()) return;
-    await refresh();
-  });
-
-  /** What the panel shows, from the same state the tree uses. */
-  const panelData = async (): Promise<CachePanelData> => {
+  /** What the view shows, from the same state the commands use. Runs nothing. */
+  const panelData = (): CachePanelData => {
     const inventory = state.inventory;
     const artifacts = state.artifacts;
     return {
@@ -538,15 +483,33 @@ export function registerCacheView(context: vscode.ExtensionContext, deps: CacheV
     };
   };
 
-  // `registerCachePanel` owns `mcpp.showCachePanel`; opening it refreshes first so
-  // the panel never shows a stale figure.
-  registerCachePanel(context, {
-    read: async () => {
-      if (deps.isTrusted()) {
-        await refresh();
+  // `mcpp.cache.autoRefreshSeconds`: re-read while the view is on screen, never
+  // in an untrusted workspace, and never on top of a read that is still running.
+  // The tick only redraws: the provider's own read path performs the refresh, so
+  // one tick costs one round of queries.
+  const timer = new PollTimer({
+    periodMs: 0,
+    tick: (): void => {
+      if (viewVisible() && deps.isTrusted()) {
+        provider?.refresh();
       }
-      return panelData();
     },
+  });
+  context.subscriptions.push(timer);
+  const applyTimer = (): void => {
+    const seconds = viewSettings().autoRefreshSeconds;
+    const usable = deps.isTrusted() && Number.isFinite(seconds) && seconds > 0;
+    const decision = refreshTimerDecision(usable ? seconds : 0, viewVisible());
+    timer.start(decision.active ? decision.seconds * 1000 : 0);
+  };
+  applyTimer();
+
+  // The sidebar webview view: `mcpp.cache` is a `"type": "webview"` view, so
+  // this provider (not a tree) is what draws it. Every destructive action still
+  // goes through `runPlan` above.
+  provider = registerCachePanel(context, {
+    refresh,
+    read: panelData,
     run: async (message) => {
       const project = deps.currentProject();
       switch (message.type) {
@@ -573,6 +536,13 @@ export function registerCacheView(context: vscode.ExtensionContext, deps: CacheV
     showEntry: async (label) => {
       await vscode.commands.executeCommand(CACHE_COMMANDS.showEntry, label);
     },
+    onVisibilityChanged: () => applyTimer(),
+  });
+
+  register(CACHE_COMMANDS.refreshStats, async () => {
+    if (!requireTrusted()) return;
+    await refresh();
+    provider?.refresh();
   });
 
   register(CACHE_COMMANDS.showEntry, async (label) => {
@@ -700,25 +670,18 @@ export function registerCacheView(context: vscode.ExtensionContext, deps: CacheV
   provider.refresh();
   updateStatus();
 
-  // Keep the tree, the timer and the status item in step with the settings.
+  // Keep the view, the timer and the status item in step with the settings.
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("mcpp.views.cache") || event.affectsConfiguration("mcpp.cache") || event.affectsConfiguration("mcpp.ui.numberFormat")) {
-        provider.refresh();
+        provider?.refresh();
         updateStatus();
         applyTimer();
       }
     }),
   );
-}
 
-/** The warning node, or nothing: one place so the tree and the tests agree. */
-export function cacheWarningChildren(
-  totalBytes: number | undefined,
-  warnAboveGiB: number,
-): NonNullable<ReturnType<typeof buildCacheWarningNode>>[] {
-  const node = buildCacheWarningNode(totalBytes ?? Number.NaN, warnAboveGiB);
-  return node === undefined ? [] : [node];
+  return provider;
 }
 
 // ── the self-check's cache snapshot (§8 G9) ──────────────────────────────────
@@ -798,7 +761,7 @@ export async function readCacheSnapshotNow(): Promise<CacheSnapshot | undefined>
   }
 }
 
-/** The panel's text form; the webview panel is a later milestone. */
+/** The panel's text form; kept for callers that want the figures as Markdown. */
 export function cacheSummaryText(input: CacheTreeInput): string {
   const lines: string[] = [];
   const artifacts = input.artifacts;

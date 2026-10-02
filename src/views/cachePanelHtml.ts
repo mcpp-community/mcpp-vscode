@@ -1,11 +1,11 @@
 /**
- * The cache panel's document, as a pure function (plan §3.4.3, §3.5).
+ * The cache view's document, as a pure function (plan §8.1).
  *
  * `src/views/cachePanel.ts` resolves the cache inventory into a
  * `CachePanelModel`; this module turns that into one self-contained HTML
  * document. No `vscode`, no file system, no network — which is what makes the
- * interesting parts (escaping, the strict CSP, the proportional bars, the empty
- * state) unit-testable.
+ * interesting parts (escaping, the strict CSP, the proportional bars, the
+ * collapsed global block, the empty state) unit-testable.
  *
  * House rules, the same ones `src/config/panelHtml.ts` pins down:
  *
@@ -18,13 +18,19 @@
  * - **No unescaped interpolation.** Every value that reaches the markup goes
  *   through `escapeHtml`.
  * - **State is text plus shape, not colour.** Every bar is drawn twice: once as
- *   inline SVG (shape) and once as a `<table>`-free textual list of the same
- *   figures (text). Colour is decoration, so a high-contrast theme and a screen
- *   reader both get the whole story.
+ *   inline SVG (shape) and once as the text of the row beside it (the legend, or
+ *   the figure line under the project bar). Colour is decoration, so a
+ *   high-contrast theme and a screen reader both get the whole story.
+ *
+ * §8.1 puts one primary bar in the document (the project block's, 6 px) and
+ * compresses the legend into a single wrapped line separated by `·`; the type
+ * scale is 26 / 12 / 11 px and everything is separated by whitespace rather than
+ * nested borders. The global block is a real `<details>` that renders
+ * **collapsed**: the markup carries no `open` attribute.
  *
  * The visualisation is CSS plus inline SVG on purpose. A `<rect width>` is not
- * an inline style, so the composition and age bars can be proportional without
- * ever breaking the CSP.
+ * an inline style, so the bars can be proportional without ever breaking the
+ * CSP. Bar *heights* are class-driven (`media/cache.css`), never inline.
  *
  * Numbers: every size and count is rendered through `model.format`, so this
  * module never chooses binary vs decimal units and never applies a locale. Two
@@ -62,7 +68,13 @@ export interface CachePanelModel {
     totalBytes: number;
     files: number;
     groups: number;
-    staleNote?: string;
+    /**
+     * Bytes mcpp would drop with `mcpp clean --stale`. Optional on purpose:
+     * nothing in this extension can know that figure today (mcpp owns the
+     * staleness rule), so the block renders the line and the split bar only
+     * when a caller supplies one.
+     */
+    staleBytes?: number;
     truncated?: string;
   };
   shared: {
@@ -88,7 +100,7 @@ export interface CachePanelModel {
     budgetGiB?: number;
   };
   /**
-   * The caller's LRU projection for the budget simulator. Optional: when the
+   * The caller's LRU projection for the budget control. Optional: when the
    * caller has no estimate the renderer omits the line rather than inventing a
    * number.
    */
@@ -102,7 +114,7 @@ export interface CachePanelAssets {
 }
 
 /**
- * The `ui` keys the renderer reads, so the caller and the renderer cannot drift
+ * The `ui` keys the panel uses, so the caller and the renderer cannot drift
  * apart on a string. `cachePanel.ts` fills all of them through `t()`.
  */
 export const CACHE_PANEL_UI = {
@@ -111,54 +123,45 @@ export const CACHE_PANEL_UI = {
   boundary: "cache.boundary",
   projectTitle: "cache.project.title",
   projectFiles: "cache.project.files",
+  projectStale: "cache.project.stale",
   sharedTitle: "cache.shared.title",
   sharedEntries: "cache.shared.entries",
   sharedRoot: "cache.shared.root",
-  sharedOldest: "cache.shared.oldest",
-  sharedNewest: "cache.shared.newest",
   legacyTitle: "cache.legacy.title",
   legacyPath: "cache.legacy.path",
   unknown: "cache.unknown",
   projectUnavailable: "cache.project.unavailable",
   sharedUnavailable: "cache.shared.unavailable",
   actions: "cache.actions",
-  refresh: "cache.action.refresh",
   cleanStale: "cache.action.cleanStale",
   cleanProject: "cache.action.cleanProject",
   prune: "cache.action.prune",
   verify: "cache.action.verify",
   cleanLegacy: "cache.action.cleanLegacy",
   collect: "cache.action.collect",
-  details: "cache.action.details",
   detailsFor: "cache.action.detailsFor",
   reasonShared: "cache.reason.shared",
   reasonProject: "cache.reason.project",
   reasonLegacy: "cache.reason.legacy",
   composition: "cache.composition.title",
-  compositionHint: "cache.composition.hint",
   compositionEmpty: "cache.composition.empty",
   age: "cache.age.title",
-  ageHint: "cache.age.hint",
   ageEmpty: "cache.age.empty",
   ageUnder: "cache.age.under",
   ageRange: "cache.age.range",
   ageOverflow: "cache.age.overflow",
   ageUnknown: "cache.age.unknown",
   top: "cache.top.title",
-  topHint: "cache.top.hint",
   topEmpty: "cache.top.empty",
   colLabel: "cache.col.label",
   colEntries: "cache.col.entries",
   colBytes: "cache.col.bytes",
   colOldest: "cache.col.oldest",
-  colActions: "cache.col.actions",
-  budget: "cache.budget.title",
-  budgetHint: "cache.budget.hint",
   budgetLabel: "cache.budget.label",
+  budgetHint: "cache.budget.hint",
   budgetUnit: "cache.budget.unit",
   incompleteWarning: "cache.warn.incomplete",
   sizeWarning: "cache.warn.size",
-  barsHint: "cache.bars.hint",
 } as const;
 
 export type CachePanelMessage =
@@ -248,6 +251,27 @@ function isoSeconds(seconds: number | undefined): string | undefined {
   return value <= 0 ? undefined : new Date(value * 1000).toISOString();
 }
 
+/**
+ * `"12.4 MiB"` -> the 26 px value and the small unit beside it. The split is
+ * pure text: the renderer never re-formats a number, so binary and decimal read
+ * the same way they do everywhere else in the extension. A figure with no space
+ * (`"1000B"`) is rendered as one value with no unit element.
+ */
+function splitMetric(text: string): { value: string; unit?: string } {
+  const at = text.lastIndexOf(" ");
+  if (at <= 0 || at === text.length - 1) {
+    return { value: text };
+  }
+  return { value: text.slice(0, at), unit: text.slice(at + 1) };
+}
+
+/** The primary figure: 26 px value, small unit, tabular figures (plan §8.1). */
+function renderMetric(text: string): string {
+  const parts = splitMetric(text);
+  const unit = parts.unit === undefined ? "" : `<span class="metric-unit">${escapeHtml(parts.unit)}</span>`;
+  return `<p class="metric"><span class="metric-value">${escapeHtml(parts.value)}</span>${unit}</p>`;
+}
+
 /** One segment of a bar: pre-rendered attributes, a caption and a size. */
 interface BarPart {
   /** Already-escaped `data-*` attributes, including a leading space. */
@@ -256,8 +280,14 @@ interface BarPart {
   bytes: number;
 }
 
-/** Inline SVG: one `<rect>` per part, widths proportional to bytes. */
-function renderBar(parts: readonly BarPart[], total: number, className: string): string {
+/**
+ * Inline SVG: one `<rect>` per part, widths proportional to bytes. `className`
+ * chooses the height (6 px or 14 px) — the renderer never sets a style.
+ *
+ * Without an `ariaLabel` the graphic is decoration for the labelled text beside
+ * it; with one it becomes the shape whose name carries the same figure.
+ */
+function renderBar(parts: readonly BarPart[], total: number, className: string, ariaLabel?: string): string {
   let cumulative = 0;
   const groups = parts
     .map((part) => {
@@ -273,21 +303,157 @@ function renderBar(parts: readonly BarPart[], total: number, className: string):
       ].join("\n");
     })
     .join("\n");
+  const semantics =
+    ariaLabel === undefined
+      ? ` aria-hidden="true" focusable="false"`
+      : ` role="img" aria-label="${escapeHtml(ariaLabel)}" focusable="false"`;
   return [
-    `<svg class="${className}" viewBox="0 0 ${BAR_UNITS} ${BAR_HEIGHT}" preserveAspectRatio="none" aria-hidden="true" focusable="false">`,
+    `<svg class="${className}" viewBox="0 0 ${BAR_UNITS} ${BAR_HEIGHT}" preserveAspectRatio="none"${semantics}>`,
     groups,
     `</svg>`,
   ].join("\n");
 }
 
-function renderSection(id: string, title: string, body: string): string {
-  return [
-    `<section class="viz" data-viz="${escapeHtml(id)}">`,
-    `  <h2 class="viz-title">${escapeHtml(title)}</h2>`,
-    body,
-    `</section>`,
-  ].join("\n");
+/**
+ * The legend, compressed into **one line** (§8.1): every item is inline, the
+ * `·` separators are generated by the stylesheet, and all items share a single
+ * `<ul>` so the line wraps as text rather than as rows.
+ */
+function renderLegend(id: string, items: readonly string[]): string {
+  return `<ul class="legend legend-inline" data-legend="${escapeHtml(id)}" role="list">${items.join("")}</ul>`;
 }
+
+/** One legend item: swatch (shape), caption (text) and share (text). */
+function legendItem(attributes: string, caption: string, pct: number, detail: string): string {
+  return (
+    `<li class="legend-item"${attributes} data-percent="${percentText(pct)}" role="listitem" title="${escapeHtml(detail)}">` +
+    `<span class="swatch"${attributes} aria-hidden="true"></span>` +
+    `<span class="legend-label">${escapeHtml(caption)}</span>` +
+    `<span class="legend-value">${escapeHtml(`${percentText(pct)}%`)}</span>` +
+    `</li>`
+  );
+}
+
+/** `Reason` plus the caller's explanation, when there is one. */
+function reasonText(label: UiLabel, key: string, note?: string): string {
+  const base = label(key);
+  return note === undefined || note.length === 0 ? base : `${base} ${note}`;
+}
+
+function button(action: string, text: string, disabled: boolean, reason: string): string {
+  return (
+    `<button type="button" data-action="${action}"${flag("disabled", disabled)}` +
+    ` title="${escapeHtml(disabled ? reason : text)}">${escapeHtml(text)}</button>`
+  );
+}
+
+// ─────────────────────────────────────────────────────────────── warnings
+
+function renderWarnings(model: CachePanelModel, label: UiLabel): string {
+  const formatters = model.format;
+  const warnings: string[] = [];
+  if (model.shared.available && finite(model.shared.incomplete) > 0) {
+    warnings.push(
+      `<p class="warning" role="note"><span class="marker" aria-hidden="true">&#9888;</span> ${escapeHtml(
+        fill(label, CACHE_PANEL_UI.incompleteWarning, [formatters.count(finite(model.shared.incomplete))]),
+      )}</p>`,
+    );
+  }
+  const threshold = finite(model.limits.warnAboveGiB);
+  const gib = finite(model.shared.totalBytes) / 1024 ** 3;
+  if (threshold > 0 && gib >= threshold) {
+    warnings.push(
+      `<p class="warning" role="note"><span class="marker" aria-hidden="true">&#9888;</span> ${escapeHtml(
+        fill(label, CACHE_PANEL_UI.sizeWarning, [
+          formatters.bytes(finite(model.shared.totalBytes)),
+          formatters.bytes(threshold * 1024 ** 3),
+        ]),
+      )}</p>`,
+    );
+  }
+  return warnings.length === 0 ? "" : `<section class="warnings">\n${warnings.join("\n")}\n</section>`;
+}
+
+// ────────────────────────────────────────────────────────── project cache
+
+/**
+ * The project block, always on screen (§8.1): the primary figure, one line of
+ * secondary figures, one 6 px bar, the stale line when a caller can name it, and
+ * the two project actions.
+ */
+function renderProjectBlock(model: CachePanelModel, label: UiLabel): string {
+  const formatters = model.format;
+  const available = model.project.available;
+  const total = Math.max(0, finite(model.project.totalBytes));
+  const value = available ? formatters.bytes(total) : label(CACHE_PANEL_UI.unknown);
+
+  const parts: string[] = [
+    `<section class="block block-project" data-block="project">`,
+    `  <h2 class="block-heading">${escapeHtml(label(CACHE_PANEL_UI.projectTitle))}</h2>`,
+    `  ${renderMetric(value)}`,
+  ];
+
+  if (available) {
+    parts.push(
+      `  <p class="metric-sub">${escapeHtml(
+        fill(label, CACHE_PANEL_UI.projectFiles, [
+          formatters.count(finite(model.project.files)),
+          formatters.count(finite(model.project.groups)),
+        ]),
+      )}</p>`,
+    );
+  } else {
+    parts.push(
+      `  <p class="metric-sub">${escapeHtml(model.project.note ?? label(CACHE_PANEL_UI.projectUnavailable))}</p>`,
+    );
+  }
+
+  const stale = available ? Math.max(0, finite(model.project.staleBytes ?? 0)) : 0;
+  if (available && stale > 0 && total > 0) {
+    const bar = renderBar(
+      [
+        {
+          attributes: ` data-segment="stale"`,
+          label: fill(label, CACHE_PANEL_UI.projectStale, [formatters.bytes(stale)]),
+          bytes: stale,
+        },
+        {
+          attributes: ` data-segment="current"`,
+          label: label(CACHE_PANEL_UI.projectTitle),
+          bytes: Math.max(0, total - stale),
+        },
+      ],
+      total,
+      "viz-bar viz-bar-thin project-bar",
+      fill(label, CACHE_PANEL_UI.projectStale, [formatters.bytes(stale)]),
+    );
+    parts.push(`  ${bar}`);
+    parts.push(
+      `  <p class="metric-note">${escapeHtml(
+        fill(label, CACHE_PANEL_UI.projectStale, [formatters.bytes(stale)]),
+      )}</p>`,
+    );
+  }
+
+  if (available && model.project.truncated !== undefined) {
+    parts.push(`  <p class="metric-note">${escapeHtml(model.project.truncated)}</p>`);
+  }
+  if (available && model.project.note !== undefined) {
+    parts.push(`  <p class="metric-note">${escapeHtml(model.project.note)}</p>`);
+  }
+
+  const reason = reasonText(label, CACHE_PANEL_UI.reasonProject, model.project.note);
+  parts.push(
+    `  <div class="actions" role="toolbar" aria-label="${escapeHtml(label(CACHE_PANEL_UI.projectTitle))}">`,
+    `    ${button("cleanStale", label(CACHE_PANEL_UI.cleanStale), !available, reason)}`,
+    `    ${button("cleanProject", label(CACHE_PANEL_UI.cleanProject), !available, reason)}`,
+    `  </div>`,
+  );
+  parts.push(`</section>`);
+  return parts.join("\n");
+}
+
+// ─────────────────────────────────────────────────────────── global cache
 
 /** One source segment of the composition bar, before percentages are known. */
 interface CompositionSource {
@@ -317,42 +483,47 @@ function renderComposition(model: CachePanelModel, label: UiLabel): string {
     }
   }
   if (legacyBytes > 0) {
-    sources.push({ kind: "legacy", segment: "legacy", caption: label(CACHE_PANEL_UI.legacyTitle), bytes: legacyBytes });
+    sources.push({
+      kind: "legacy",
+      segment: "legacy",
+      caption: label(CACHE_PANEL_UI.legacyTitle),
+      bytes: legacyBytes,
+    });
   }
 
   const total = sources.reduce((sum, source) => sum + Math.max(0, finite(source.bytes)), 0);
+  const aria = label(CACHE_PANEL_UI.composition);
+  if (sources.length === 0 || total <= 0) {
+    return [
+      `<section class="viz" data-viz="composition" aria-label="${escapeHtml(aria)}">`,
+      `  <p class="empty">${escapeHtml(label(CACHE_PANEL_UI.compositionEmpty))}</p>`,
+      `</section>`,
+    ].join("\n");
+  }
+
   const parts: BarPart[] = [];
-  const legend: string[] = [];
+  const items: string[] = [];
   for (const source of sources) {
     // `data-kind` stays the raw mcpp value: it is the hook the stylesheet and
     // the tests select on, so a translated caption must not change it.
     const attributes = ` data-kind="${escapeHtml(source.kind)}" data-segment="${source.segment}"`;
     parts.push({ attributes, label: source.caption, bytes: source.bytes });
-    const values = [`${percentText(percent(source.bytes, total))}%`, formatters.bytes(finite(source.bytes))];
-    if (source.entries !== undefined) {
-      values.push(formatters.count(finite(source.entries)));
-    }
-    legend.push(
-      `<li${attributes} data-percent="${percentText(percent(source.bytes, total))}">` +
-        `<span class="swatch"${attributes} aria-hidden="true"></span>` +
-        `<span class="legend-label">${escapeHtml(source.caption)}</span>` +
-        `<span class="legend-value">${escapeHtml(values.join(" · "))}</span>` +
-        `</li>`,
-    );
+    const pct = percent(source.bytes, total);
+    const detail = [
+      source.caption,
+      `${percentText(pct)}%`,
+      formatters.bytes(finite(source.bytes)),
+      ...(source.entries === undefined ? [] : [formatters.count(finite(source.entries))]),
+    ].join(" · ");
+    items.push(legendItem(attributes, source.caption, pct, detail));
   }
 
-  const hint = `<p class="hint">${escapeHtml(label(CACHE_PANEL_UI.compositionHint))}</p>`;
-  if (parts.length === 0 || total <= 0) {
-    return renderSection("composition", label(CACHE_PANEL_UI.composition), `${hint}\n<p class="empty">${escapeHtml(label(CACHE_PANEL_UI.compositionEmpty))}</p>`);
-  }
-  const body = [
-    hint,
-    renderBar(parts, total, "viz-bar"),
-    `<ul class="legend" data-legend="composition">`,
-    legend.join("\n"),
-    `</ul>`,
+  return [
+    `<section class="viz" data-viz="composition" aria-label="${escapeHtml(aria)}">`,
+    `  ${renderBar(parts, total, "viz-bar")}`,
+    `  ${renderLegend("composition", items)}`,
+    `</section>`,
   ].join("\n");
-  return renderSection("composition", label(CACHE_PANEL_UI.composition), body);
 }
 
 /** One age bucket, with its caption already resolved. */
@@ -364,7 +535,7 @@ interface AgeSource {
   index: number;
 }
 
-/** The age distribution bar: one segment per bucket, `<1d` through the overflow. */
+/** The age bar: one segment per bucket, `<1d` through the overflow. */
 function renderAge(model: CachePanelModel, label: UiLabel): string {
   const formatters = model.format;
   const buckets = model.shared.available ? model.shared.buckets : [];
@@ -391,50 +562,74 @@ function renderAge(model: CachePanelModel, label: UiLabel): string {
   });
 
   const ageTotal = sources.reduce((sum, source) => sum + Math.max(0, finite(source.bytes)), 0);
-  const parts: BarPart[] = [];
-  const legend: string[] = [];
-  for (const source of sources) {
-    const attributes = ` data-bucket="${source.oldest ? "oldest" : "recent"}" data-bucket-index="${source.index}"`;
-    parts.push({ attributes, label: source.caption, bytes: source.bytes });
-    legend.push(
-      `<li${attributes} data-percent="${percentText(percent(source.bytes, ageTotal))}">` +
-        `<span class="swatch"${attributes} aria-hidden="true"></span>` +
-        `<span class="legend-label">${escapeHtml(source.caption)}</span>` +
-        `<span class="legend-value">${escapeHtml(`${formatters.bytes(finite(source.bytes))} · ${formatters.count(finite(source.entries))}`)}</span>` +
-        `</li>`,
+  const heading = `<h3 class="viz-heading">${escapeHtml(label(CACHE_PANEL_UI.age))}</h3>`;
+  const notes: string[] = [];
+  const unaccounted = finite(model.shared.totalEntries) - accounted;
+  if (model.shared.available && unaccounted > 0) {
+    notes.push(
+      `<p class="viz-note">${escapeHtml(
+        fill(label, CACHE_PANEL_UI.ageUnknown, [formatters.count(unaccounted)]),
+      )}</p>`,
     );
   }
 
-  const hints = [`<p class="hint">${escapeHtml(label(CACHE_PANEL_UI.ageHint))}</p>`];
-  const unaccounted = finite(model.shared.totalEntries) - accounted;
-  if (model.shared.available && unaccounted > 0) {
-    hints.push(`<p class="hint">${escapeHtml(fill(label, CACHE_PANEL_UI.ageUnknown, [formatters.count(unaccounted)]))}</p>`);
+  if (sources.length === 0 || ageTotal <= 0) {
+    return [
+      `<section class="viz" data-viz="age">`,
+      `  ${heading}`,
+      ...notes.map((note) => `  ${note}`),
+      `  <p class="empty">${escapeHtml(label(CACHE_PANEL_UI.ageEmpty))}</p>`,
+      `</section>`,
+    ].join("\n");
   }
-  if (parts.length === 0 || ageTotal <= 0) {
-    hints.push(`<p class="empty">${escapeHtml(label(CACHE_PANEL_UI.ageEmpty))}</p>`);
-    return renderSection("age", label(CACHE_PANEL_UI.age), hints.join("\n"));
+
+  const parts: BarPart[] = [];
+  const items: string[] = [];
+  for (const source of sources) {
+    const attributes = ` data-bucket="${source.oldest ? "oldest" : "recent"}" data-bucket-index="${source.index}"`;
+    parts.push({ attributes, label: source.caption, bytes: source.bytes });
+    const pct = percent(source.bytes, ageTotal);
+    const detail = [
+      source.caption,
+      `${percentText(pct)}%`,
+      formatters.bytes(finite(source.bytes)),
+      formatters.count(finite(source.entries)),
+    ].join(" · ");
+    items.push(legendItem(attributes, source.caption, pct, detail));
   }
-  const body = [
-    hints.join("\n"),
-    renderBar(parts, ageTotal, "viz-bar"),
-    `<ul class="legend" data-legend="age">`,
-    legend.join("\n"),
-    `</ul>`,
+
+  return [
+    `<section class="viz" data-viz="age">`,
+    `  ${heading}`,
+    ...notes.map((note) => `  ${note}`),
+    `  ${renderBar(parts, ageTotal, "viz-bar viz-bar-thin")}`,
+    `  ${renderLegend("age", items)}`,
+    `</section>`,
   ].join("\n");
-  return renderSection("age", label(CACHE_PANEL_UI.age), body);
 }
 
-/** The largest packages, each row carrying its label and a `showEntry` button. */
+/**
+ * The largest packages, inside a second collapsed `<details>` (§8.1). Each label
+ * is itself the `showEntry` button, so dropping the old "Actions" column does
+ * not drop the drill-down.
+ */
 function renderTop(model: CachePanelModel, label: UiLabel): string {
   const formatters = model.format;
-  const head =
-    `<tr>` +
-    `<th scope="col">${escapeHtml(label(CACHE_PANEL_UI.colLabel))}</th>` +
-    `<th scope="col">${escapeHtml(label(CACHE_PANEL_UI.colEntries))}</th>` +
-    `<th scope="col">${escapeHtml(label(CACHE_PANEL_UI.colBytes))}</th>` +
-    `<th scope="col">${escapeHtml(label(CACHE_PANEL_UI.colOldest))}</th>` +
-    `<th scope="col">${escapeHtml(label(CACHE_PANEL_UI.colActions))}</th>` +
-    `</tr>`;
+  if (model.shared.top.length === 0) {
+    return [
+      `<section class="viz" data-viz="top">`,
+      `  <p class="empty">${escapeHtml(label(CACHE_PANEL_UI.topEmpty))}</p>`,
+      `</section>`,
+    ].join("\n");
+  }
+
+  const head: Array<[string, string]> = [
+    [CACHE_PANEL_UI.colLabel, label(CACHE_PANEL_UI.colLabel)],
+    [CACHE_PANEL_UI.colEntries, label(CACHE_PANEL_UI.colEntries)],
+    [CACHE_PANEL_UI.colBytes, label(CACHE_PANEL_UI.colBytes)],
+    [CACHE_PANEL_UI.colOldest, label(CACHE_PANEL_UI.colOldest)],
+  ];
+  const header = `<tr>${head.map(([, text]) => `<th scope="col">${escapeHtml(text)}</th>`).join("")}</tr>`;
 
   const rows = model.shared.top.map((row) => {
     const iso = isoSeconds(row.oldestAccessed);
@@ -442,181 +637,172 @@ function renderTop(model: CachePanelModel, label: UiLabel): string {
       iso === undefined
         ? `<span class="unknown">${escapeHtml(label(CACHE_PANEL_UI.unknown))}</span>`
         : `<time datetime="${escapeHtml(iso)}" data-oldest="${escapeHtml(String(finite(row.oldestAccessed ?? 0)))}">${escapeHtml(iso.slice(0, 10))}</time>`;
+    const detailsFor = fill(label, CACHE_PANEL_UI.detailsFor, [row.label]);
     return [
       `<tr data-label="${escapeHtml(row.label)}">`,
-      `  <td class="cell-label">${escapeHtml(row.label)}</td>`,
-      `  <td>${escapeHtml(formatters.count(finite(row.entries)))}</td>`,
-      `  <td>${escapeHtml(formatters.bytes(finite(row.bytes)))}</td>`,
-      `  <td>${oldest}</td>`,
-      `  <td><button type="button" data-show-entry="${escapeHtml(row.label)}" aria-label="${escapeHtml(fill(label, CACHE_PANEL_UI.detailsFor, [row.label]))}" title="${escapeHtml(fill(label, CACHE_PANEL_UI.detailsFor, [row.label]))}">${escapeHtml(label(CACHE_PANEL_UI.details))}</button></td>`,
+      // `data-head` carries the column name onto the cell, so the stylesheet can
+      // stack the table into labelled rows at 200 px without a second renderer.
+      `  <td class="cell-label" data-head="${escapeHtml(label(CACHE_PANEL_UI.colLabel))}">` +
+        `<button type="button" class="link" data-show-entry="${escapeHtml(row.label)}" title="${escapeHtml(detailsFor)}" aria-label="${escapeHtml(detailsFor)}">${escapeHtml(row.label)}</button></td>`,
+      `  <td data-head="${escapeHtml(label(CACHE_PANEL_UI.colEntries))}">${escapeHtml(formatters.count(finite(row.entries)))}</td>`,
+      `  <td data-head="${escapeHtml(label(CACHE_PANEL_UI.colBytes))}">${escapeHtml(formatters.bytes(finite(row.bytes)))}</td>`,
+      `  <td data-head="${escapeHtml(label(CACHE_PANEL_UI.colOldest))}">${oldest}</td>`,
       `</tr>`,
     ].join("\n");
   });
 
-  const body =
-    model.shared.top.length === 0
-      ? `<p class="empty">${escapeHtml(label(CACHE_PANEL_UI.topEmpty))}</p>`
-      : [
-          `<p class="hint">${escapeHtml(fill(label, CACHE_PANEL_UI.topHint, [formatters.count(finite(model.limits.topN))]))}</p>`,
-          `<table class="top-table">`,
-          `<thead>${head}</thead>`,
-          `<tbody>`,
-          rows.join("\n"),
-          `</tbody>`,
-          `</table>`,
-        ].join("\n");
-  return renderSection(
-    "top",
-    fill(label, CACHE_PANEL_UI.top, [formatters.count(finite(model.limits.topN))]),
-    body,
-  );
-}
-
-/** The budget simulator: a GiB input, a `collect` button, and the estimate. */
-function renderBudget(model: CachePanelModel, label: UiLabel): string {
-  const disabled = !model.shared.available;
-  const budget = model.limits.budgetGiB;
-  const value = budget === undefined || !Number.isFinite(budget) ? undefined : Math.max(0, Math.floor(budget));
-  const notes = [`<p class="hint">${escapeHtml(label(CACHE_PANEL_UI.budgetHint))}</p>`];
-  if (model.estimate !== undefined && model.estimate.length > 0) {
-    notes.push(`<p class="estimate">${escapeHtml(model.estimate)}</p>`);
-  }
-  notes.push(
-    `<div class="budget-row">`,
-    `  <label class="budget-label" for="cache-budget">${escapeHtml(label(CACHE_PANEL_UI.budgetLabel))}</label>`,
-    `  <input id="cache-budget" type="number" min="0" step="1" inputmode="numeric" aria-label="${escapeHtml(label(CACHE_PANEL_UI.budgetLabel))}"${attribute("value", value)}${flag("disabled", disabled)}>`,
-    `  <span class="budget-unit">${escapeHtml(label(CACHE_PANEL_UI.budgetUnit))}</span>`,
-    `  <button type="button" data-action="collect"${flag("disabled", disabled)} title="${escapeHtml(disabled ? reasonText(label, CACHE_PANEL_UI.reasonShared, model.shared.note) : label(CACHE_PANEL_UI.collect))}">${escapeHtml(label(CACHE_PANEL_UI.collect))}</button>`,
-    `</div>`,
-  );
-  return renderSection("budget", label(CACHE_PANEL_UI.budget), notes.join("\n"));
-}
-
-/** `Reason` plus the caller's explanation, when there is one. */
-function reasonText(label: UiLabel, key: string, note?: string): string {
-  const base = label(key);
-  return note === undefined || note.length === 0 ? base : `${base} ${note}`;
-}
-
-function renderActions(model: CachePanelModel, label: UiLabel): string {
-  const sharedAvailable = model.shared.available;
-  const projectAvailable = model.project.available;
-  const anyAvailable = sharedAvailable || projectAvailable;
-  const legacyBytes = finite(model.legacy?.bytes ?? 0);
-  const sharedReason = reasonText(label, CACHE_PANEL_UI.reasonShared, model.shared.note);
-  const projectReason = reasonText(label, CACHE_PANEL_UI.reasonProject, model.project.note);
-  const refreshReason = sharedAvailable ? projectReason : sharedReason;
-
-  const button = (action: string, text: string, disabled: boolean, reason: string): string =>
-    `<button type="button" data-action="${action}"${flag("disabled", disabled)} title="${escapeHtml(disabled ? reason : text)}">${escapeHtml(text)}</button>`;
-
   return [
-    `<div class="actions" role="toolbar" aria-label="${escapeHtml(label(CACHE_PANEL_UI.actions))}">`,
-    `  ${button("refresh", label(CACHE_PANEL_UI.refresh), !anyAvailable, refreshReason)}`,
-    `  ${button("cleanStale", label(CACHE_PANEL_UI.cleanStale), !projectAvailable, projectReason)}`,
-    `  ${button("cleanProject", label(CACHE_PANEL_UI.cleanProject), !projectAvailable, projectReason)}`,
-    `  ${button("prune", label(CACHE_PANEL_UI.prune), !sharedAvailable, sharedReason)}`,
-    `  ${button("verify", label(CACHE_PANEL_UI.verify), !sharedAvailable, sharedReason)}`,
-    `  ${button("cleanLegacy", label(CACHE_PANEL_UI.cleanLegacy), !(legacyBytes > 0), label(CACHE_PANEL_UI.reasonLegacy))}`,
-    `</div>`,
+    `<details class="viz viz-details" data-viz="top" data-details="top">`,
+    `  <summary class="viz-summary">${escapeHtml(
+      fill(label, CACHE_PANEL_UI.top, [formatters.count(finite(model.limits.topN))]),
+    )}</summary>`,
+    `  <table class="top-table">`,
+    `    <thead>${header}</thead>`,
+    `    <tbody>`,
+    rows.join("\n"),
+    `    </tbody>`,
+    `  </table>`,
+    `</details>`,
   ].join("\n");
 }
 
-function renderCards(model: CachePanelModel, label: UiLabel): string {
-  const formatters = model.format;
-  const unknown = label(CACHE_PANEL_UI.unknown);
+/**
+ * The ones that must be asked for (plan §8.1): the budget input stays next to
+ * the button that uses it — `mcpp cache gc --max-size` has no implicit default,
+ * so the figure has to come from somewhere the user can see.
+ */
+function renderSharedActions(model: CachePanelModel, label: UiLabel): string {
+  const sharedAvailable = model.shared.available;
+  const legacyBytes = finite(model.legacy?.bytes ?? 0);
+  const sharedReason = reasonText(label, CACHE_PANEL_UI.reasonShared, model.shared.note);
+  const budget = model.limits.budgetGiB;
+  const value = budget === undefined || !Number.isFinite(budget) ? undefined : Math.max(0, Math.floor(budget));
+  const budgetHint = label(CACHE_PANEL_UI.budgetHint);
+  const estimate =
+    model.estimate === undefined || model.estimate.length === 0
+      ? ""
+      : `<span class="budget-estimate">${escapeHtml(model.estimate)}</span>`;
+  return [
+    `<div class="actions actions-shared" role="toolbar" aria-label="${escapeHtml(label(CACHE_PANEL_UI.actions))}">`,
+    `  ${button("verify", label(CACHE_PANEL_UI.verify), !sharedAvailable, sharedReason)}`,
+    `  <span class="budget">`,
+    `    ${button("collect", label(CACHE_PANEL_UI.collect), !sharedAvailable, sharedReason)}`,
+    `    <input id="cache-budget" type="number" min="0" step="1" inputmode="numeric" aria-label="${escapeHtml(label(CACHE_PANEL_UI.budgetLabel))}" title="${escapeHtml(budgetHint)}"${attribute("value", value)}${flag("disabled", !sharedAvailable)}>`,
+    `    <span class="budget-unit">${escapeHtml(label(CACHE_PANEL_UI.budgetUnit))}</span>`,
+    `  </span>`,
+    `  ${estimate}`,
+    `  ${button("prune", label(CACHE_PANEL_UI.prune), !sharedAvailable, sharedReason)}`,
+    legacyBytes > 0
+      ? `  ${button("cleanLegacy", label(CACHE_PANEL_UI.cleanLegacy), false, label(CACHE_PANEL_UI.reasonLegacy))}`
+      : "",
+    `</div>`,
+  ].filter((line) => line.length > 0).join("\n");
+}
 
-  const projectNotes: string[] = [];
-  if (!model.project.available) {
-    projectNotes.push(model.project.note ?? label(CACHE_PANEL_UI.projectUnavailable));
-  } else {
-    projectNotes.push(fill(label, CACHE_PANEL_UI.projectFiles, [formatters.count(finite(model.project.files)), formatters.count(finite(model.project.groups))]));
-    if (model.project.staleNote !== undefined) projectNotes.push(model.project.staleNote);
-    if (model.project.note !== undefined) projectNotes.push(model.project.note);
-    if (model.project.truncated !== undefined) projectNotes.push(model.project.truncated);
+/**
+ * The global block. Expanded it is the composition bar, the age bar, the nested
+ * largest-packages list and the shared actions; collapsed it is one summary line
+ * (`7.20 GiB · 657 entries`). The markup carries **no `open` attribute**, which
+ * is what makes the first render collapsed.
+ */
+function renderSharedBlock(model: CachePanelModel, label: UiLabel): string {
+  const formatters = model.format;
+  const notes: string[] = [];
+  if (model.shared.root !== undefined) {
+    notes.push(
+      `<p class="viz-note">${escapeHtml(fill(label, CACHE_PANEL_UI.sharedRoot, [model.shared.root]))}</p>`,
+    );
+  }
+  if (model.legacy !== undefined && model.legacy.path !== undefined) {
+    notes.push(
+      `<p class="viz-note">${escapeHtml(fill(label, CACHE_PANEL_UI.legacyPath, [model.legacy.path]))}</p>`,
+    );
   }
 
-  const sharedNotes: string[] = [];
+  const body = [
+    renderComposition(model, label),
+    renderAge(model, label),
+    renderTop(model, label),
+    renderSharedActions(model, label),
+    ...notes,
+  ].join("\n");
+
   if (!model.shared.available) {
-    sharedNotes.push(model.shared.note ?? label(CACHE_PANEL_UI.sharedUnavailable));
-  } else {
-    sharedNotes.push(fill(label, CACHE_PANEL_UI.sharedEntries, [formatters.count(finite(model.shared.totalEntries))]));
-    if (model.shared.root !== undefined) sharedNotes.push(fill(label, CACHE_PANEL_UI.sharedRoot, [model.shared.root]));
-    if (model.shared.oldestAccessed !== undefined) sharedNotes.push(fill(label, CACHE_PANEL_UI.sharedOldest, [model.shared.oldestAccessed]));
-    if (model.shared.newestAccessed !== undefined) sharedNotes.push(fill(label, CACHE_PANEL_UI.sharedNewest, [model.shared.newestAccessed]));
-    if (model.shared.note !== undefined) sharedNotes.push(model.shared.note);
+    // A failure must not be hidden behind a collapsed disclosure: render the
+    // block open, with the reason where the summary would have been.
+    return [
+      `<section class="block block-shared" data-block="shared">`,
+      `  <h2 class="block-heading">${escapeHtml(label(CACHE_PANEL_UI.sharedTitle))}</h2>`,
+      `  <p class="metric-sub">${escapeHtml(model.shared.note ?? label(CACHE_PANEL_UI.sharedUnavailable))}</p>`,
+      renderSharedActions(model, label),
+      `</section>`,
+    ].join("\n");
   }
 
-  const card = (id: string, title: string, value: string, notes: readonly string[]): string =>
-    [
-      `<article class="card" data-card="${escapeHtml(id)}">`,
-      `  <h2 class="card-title">${escapeHtml(title)}</h2>`,
-      `  <p class="card-value">${escapeHtml(value)}</p>`,
-      notes.map((note) => `  <p class="card-note">${escapeHtml(note)}</p>`).join("\n"),
-      `</article>`,
-    ]
-      .filter((line) => line.length > 0)
-      .join("\n");
-
-  const cards = [
-    card(
-      "project",
-      label(CACHE_PANEL_UI.projectTitle),
-      model.project.available ? formatters.bytes(finite(model.project.totalBytes)) : unknown,
-      projectNotes,
-    ),
-    card(
-      "shared",
-      label(CACHE_PANEL_UI.sharedTitle),
-      model.shared.available ? formatters.bytes(finite(model.shared.totalBytes)) : unknown,
-      sharedNotes,
-    ),
-  ];
-  if (model.legacy !== undefined) {
-    const legacyNotes =
-      model.legacy.path === undefined ? [] : [fill(label, CACHE_PANEL_UI.legacyPath, [model.legacy.path])];
-    cards.push(card("legacy", label(CACHE_PANEL_UI.legacyTitle), formatters.bytes(finite(model.legacy.bytes)), legacyNotes));
-  }
-  return `<section class="cards">\n${cards.join("\n")}\n</section>`;
+  const summary = `${formatters.bytes(finite(model.shared.totalBytes))} · ${fill(
+    label,
+    CACHE_PANEL_UI.sharedEntries,
+    [formatters.count(finite(model.shared.totalEntries))],
+  )}`;
+  return [
+    `<details class="block block-shared" data-block="shared" data-details="shared">`,
+    `  <summary class="block-summary">`,
+    `    <span class="summary-title">${escapeHtml(label(CACHE_PANEL_UI.sharedTitle))}</span>`,
+    `    <span class="summary-value">${escapeHtml(summary)}</span>`,
+    `  </summary>`,
+    `  <div class="block-body">`,
+    body,
+    `  </div>`,
+    `</details>`,
+  ].join("\n");
 }
 
-function renderWarnings(model: CachePanelModel, label: UiLabel): string {
-  const formatters = model.format;
-  const warnings: string[] = [];
-  if (model.shared.available && finite(model.shared.incomplete) > 0) {
-    warnings.push(
-      `<p class="warning" role="note"><span class="marker" aria-hidden="true">&#9888;</span> ${escapeHtml(
-        fill(label, CACHE_PANEL_UI.incompleteWarning, [formatters.count(finite(model.shared.incomplete))]),
-      )}</p>`,
-    );
-  }
-  const threshold = finite(model.limits.warnAboveGiB);
-  const gib = finite(model.shared.totalBytes) / 1024 ** 3;
-  if (threshold > 0 && gib >= threshold) {
-    warnings.push(
-      `<p class="warning" role="note"><span class="marker" aria-hidden="true">&#9888;</span> ${escapeHtml(
-        fill(label, CACHE_PANEL_UI.sizeWarning, [
-          formatters.bytes(finite(model.shared.totalBytes)),
-          formatters.bytes(threshold * 1024 ** 3),
-        ]),
-      )}</p>`,
-    );
-  }
-  return warnings.length === 0 ? "" : `<section class="warnings">\n${warnings.join("\n")}\n</section>`;
-}
+// ───────────────────────────────────────────────────────────────── client
 
 /**
  * The client. Dependency-free, no template literals of its own, and it only
  * posts messages: the host re-renders the whole document after every action, so
  * there is exactly one renderer instead of two.
+ *
+ * The open/closed state of the two `<details>` is the one thing the client
+ * remembers (`setState`), so re-rendering after an action does not re-collapse
+ * the block the user just opened. The document itself still ships collapsed.
  */
 function clientScript(): string {
   return `(function () {
   "use strict";
   var api = typeof acquireVsCodeApi === "function" ? acquireVsCodeApi() : undefined;
+  var saved = {};
+  if (api && typeof api.getState === "function") {
+    try { saved = api.getState() || {}; } catch (error) { saved = {}; }
+  }
 
   function post(message) {
     if (api) { api.postMessage(message); }
+  }
+
+  function detailsList() {
+    return document.querySelectorAll("details[data-details]");
+  }
+
+  function restoreOpen() {
+    var open = saved && typeof saved.open === "object" && saved.open !== null ? saved.open : {};
+    var all = detailsList();
+    for (var index = 0; index < all.length; index += 1) {
+      var id = all[index].getAttribute("data-details");
+      if (id && open[id] === true) { all[index].open = true; }
+    }
+  }
+
+  function rememberOpen() {
+    var open = {};
+    var all = detailsList();
+    for (var index = 0; index < all.length; index += 1) {
+      var id = all[index].getAttribute("data-details");
+      if (id) { open[id] = all[index].open === true; }
+    }
+    saved.open = open;
+    if (api && typeof api.setState === "function") { api.setState(saved); }
   }
 
   function budgetGiB() {
@@ -646,8 +832,20 @@ function clientScript(): string {
     }
     post({ type: action });
   });
+
+  // A toggle event does not bubble, so the listener captures it on the way down.
+  document.addEventListener("toggle", function (event) {
+    var target = event.target;
+    if (target && typeof target.getAttribute === "function" && target.hasAttribute("data-details")) {
+      rememberOpen();
+    }
+  }, true);
+
+  restoreOpen();
 })();`;
 }
+
+// ───────────────────────────────────────────────────────────── the document
 
 /** The whole document. */
 export function renderCachePanelHtml(model: CachePanelModel, assets: CachePanelAssets): string {
@@ -655,13 +853,9 @@ export function renderCachePanelHtml(model: CachePanelModel, assets: CachePanelA
   const csp = `default-src 'none'; style-src ${assets.cspSource}; script-src 'nonce-${assets.nonce}'; img-src ${assets.cspSource}`;
   const body = [
     renderWarnings(model, label),
-    renderCards(model, label),
-    renderActions(model, label),
-    renderComposition(model, label),
-    renderAge(model, label),
-    renderTop(model, label),
-    renderBudget(model, label),
-    `<p class="bars-hint">${escapeHtml(label(CACHE_PANEL_UI.barsHint))}</p>`,
+    renderProjectBlock(model, label),
+    renderSharedBlock(model, label),
+    `<p class="boundary" role="note">${escapeHtml(label(CACHE_PANEL_UI.boundary))}</p>`,
   ]
     .filter((part) => part.length > 0)
     .join("\n");
@@ -675,10 +869,7 @@ export function renderCachePanelHtml(model: CachePanelModel, assets: CachePanelA
 <title>${escapeHtml(label(CACHE_PANEL_UI.title))}</title>
 </head>
 <body>
-<header class="panel-header">
-  <h1 class="panel-title">${escapeHtml(label(CACHE_PANEL_UI.title))}</h1>
-  <p class="boundary" role="note">${escapeHtml(label(CACHE_PANEL_UI.boundary))}</p>
-</header>
+<h1 class="sr-only">${escapeHtml(label(CACHE_PANEL_UI.title))}</h1>
 <main>
 ${body}
 </main>

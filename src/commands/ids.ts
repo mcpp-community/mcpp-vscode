@@ -55,7 +55,6 @@ export const LANGUAGE_SERVER_COMMANDS = {
 
 /** Cache statistics and the cleanup table. */
 export const CACHE_COMMANDS = {
-  showPanel: "mcpp.showCachePanel",
   refreshStats: "mcpp.refreshCacheStats",
   showEntry: "mcpp.showCacheEntry",
   cleanStale: "mcpp.cleanStaleArtifacts",
@@ -64,6 +63,16 @@ export const CACHE_COMMANDS = {
   prune: "mcpp.pruneGlobalCache",
   verify: "mcpp.verifyGlobalCache",
   cleanLegacy: "mcpp.cleanLegacyCache",
+} as const;
+
+/**
+ * The library-ecosystem view. The list and the detail page talk to their
+ * webviews over messages, so these are the only ids a menu can name.
+ */
+export const LIBRARY_COMMANDS = {
+  search: "mcpp.library.search",
+  openDetail: "mcpp.library.openDetail",
+  updateIndex: "mcpp.library.updateIndex",
 } as const;
 
 /** Settings, diagnostics and the mcpp CLI entry points added in 0.5.0. */
@@ -86,6 +95,7 @@ export type CommandId =
   | (typeof LEGACY_LANGUAGE_SERVER_COMMANDS)[keyof typeof LEGACY_LANGUAGE_SERVER_COMMANDS]
   | (typeof LANGUAGE_SERVER_COMMANDS)[keyof typeof LANGUAGE_SERVER_COMMANDS]
   | (typeof CACHE_COMMANDS)[keyof typeof CACHE_COMMANDS]
+  | (typeof LIBRARY_COMMANDS)[keyof typeof LIBRARY_COMMANDS]
   | (typeof TOOL_COMMANDS)[keyof typeof TOOL_COMMANDS];
 
 /** Every id the manifest contributes, in the order the palette shows them. */
@@ -94,6 +104,7 @@ export function contributedCommandIds(): string[] {
     ...Object.values(TOOL_COMMANDS),
     ...Object.values(CLI_COMMANDS),
     ...Object.values(CACHE_COMMANDS),
+    ...Object.values(LIBRARY_COMMANDS),
     ...Object.values(LANGUAGE_SERVER_COMMANDS),
     ...Object.values(LEGACY_LANGUAGE_SERVER_COMMANDS),
     ...Object.values(DEPRECATED_COMMANDS),

@@ -1,12 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  buildCacheTree,
-  buildLanguageServerTree,
-  buildProjectTree,
-  type TreeNode,
-} from "../../src/views/models";
+import { format } from "../../src/i18n/translate";
+import { buildCacheTree, buildProjectTree, type Label, type TreeNode } from "../../src/views/models";
 
 function ids(nodes: readonly TreeNode[]): string[] {
   return nodes.map((node) => node.id);
@@ -19,6 +15,17 @@ function find(nodes: readonly TreeNode[], id: string): TreeNode | undefined {
     if (hit !== undefined) return hit;
   }
   return undefined;
+}
+
+/** The label as the tree renders it: `t()` with the English text as the key. */
+function text(label: Label | undefined): string {
+  if (label === undefined) {
+    return "";
+  }
+  return format(
+    label.key,
+    (label.args ?? []).map((argument) => (typeof argument === "object" ? text(argument) : argument)),
+  );
 }
 
 test("an empty workspace says so and suggests the fix", () => {
@@ -34,7 +41,7 @@ test("an unreadable manifest is reported instead of half-rendered", () => {
   assert.deepEqual(tree[0].description?.args, ["bad TOML"]);
 });
 
-test("the project tree carries identity, toolchain and the four actions", () => {
+test("the project view is two labelled, expanded sections", () => {
   const tree = buildProjectTree({
     root: "/w",
     name: "greeter",
@@ -44,20 +51,47 @@ test("the project tree carries identity, toolchain and the four actions", () => 
     toolchainSpec: "llvm@22.1.8",
     target: "x86_64-unknown-linux-gnu",
     targets: [{ name: "greet", kind: "bin" }],
+    sourceFiles: 87,
   });
-  assert.deepEqual(ids(tree), ["project.identity", "project.toolchain", "project.action.build", "project.action.run", "project.action.test", "project.action.clean"]);
-  assert.deepEqual(find(tree, "project.identity")?.label.args, ["greeter", "0.1.0"]);
-  assert.deepEqual(find(tree, "project.standard")?.description?.args, ["c++23"]);
-  assert.deepEqual(find(tree, "project.toolchain")?.description?.args, ["llvm@22.1.8"]);
-  assert.equal(find(tree, "project.target.greet")?.description?.args?.[0], "bin");
-  assert.equal(find(tree, "project.action.build")?.command?.command, "mcpp.build");
-  assert.equal(find(tree, "project.action.clean")?.command?.command, "mcpp.cleanProjectArtifacts");
+  assert.deepEqual(ids(tree), ["project.section.basic", "project.section.commands"]);
+  assert.equal(find(tree, "project.section.basic")?.label.key, "Basics");
+  assert.equal(find(tree, "project.section.commands")?.label.key, "Common commands");
+  assert.equal(find(tree, "project.section.basic")?.expanded, true);
+  assert.equal(find(tree, "project.section.commands")?.expanded, true);
+});
+
+test("the identity row carries the name, the standard and the source count", () => {
+  const tree = buildProjectTree({ root: "/w", name: "greeter", version: "0.1.0", standard: "c++23", sourceFiles: 87 });
+  const identity = find(tree, "project.package");
+  assert.equal(identity?.label.key, "greeter");
+  assert.equal(text(identity?.description), "c++23 · 87 source file(s)");
+  // The version is still reachable, just not competing with the name.
+  assert.match(text(identity?.tooltip), /0\.1\.0/);
+  assert.equal(find(tree, "project.target"), undefined);
+  assert.equal(find(tree, "project.toolchain")?.description?.args?.[0], "host default");
+});
+
+test("a standard without a source count still renders, and vice versa", () => {
+  assert.equal(text(find(buildProjectTree({ root: "/w", standard: "c++23" }), "project.package")?.description), "c++23");
+  assert.equal(
+    text(find(buildProjectTree({ root: "/w", sourceFiles: 3 }), "project.package")?.description),
+    "3 source file(s)",
+  );
+  assert.equal(find(buildProjectTree({ root: "/w" }), "project.package")?.description, undefined);
 });
 
 test("a project without a toolchain says host default rather than inventing one", () => {
   const tree = buildProjectTree({ root: "/w" });
   assert.deepEqual(find(tree, "project.toolchain")?.description?.args, ["host default"]);
-  assert.equal(find(tree, "project.standard"), undefined);
+  assert.equal(find(tree, "project.target"), undefined);
+});
+
+test("a project with no declared dependency has no dependency group", () => {
+  assert.equal(find(buildProjectTree({ root: "/w" }), "project.dependencies"), undefined);
+  assert.equal(
+    find(buildProjectTree({ root: "/w", dependencies: [] }), "project.dependencies"),
+    undefined,
+  );
 });
 
 test("the cache tree separates project artifacts from the shared cache", () => {
@@ -126,73 +160,4 @@ test("a pre-v1 cache is offered for removal only when it exists", () => {
   assert.equal(find(buildCacheTree({ legacyBytes: 0 }), "cache.legacy"), undefined);
   const tree = buildCacheTree({ legacyBytes: 175_000_000 });
   assert.equal(find(tree, "cache.legacy")?.command?.command, "mcpp.cleanLegacyCache");
-});
-
-test("the C++ Modules view offers to install when the dependency is absent", () => {
-  const tree = buildLanguageServerTree({ installed: false });
-  assert.equal(tree[0].id, "ls.absent");
-  assert.equal(tree[0].command?.command, "mcpp.openMcpplsSettings");
-});
-
-test("an unreadable state is stated without pretending to know the status", () => {
-  const tree = buildLanguageServerTree({ installed: true, state: { available: false, reason: "no status yet" } });
-  assert.deepEqual(find(tree, "ls.status")?.description?.args, ["no status yet"]);
-  assert.equal(find(tree, "ls.status")?.icon, "question");
-  assert.ok(find(tree, "ls.actions"));
-});
-
-test("a ready status renders profile, database and engines", () => {
-  const tree = buildLanguageServerTree({
-    installed: true,
-    version: "0.0.9",
-    enabled: true,
-    state: {
-      available: true,
-      state: "ready",
-      project: { source: "mcpp", level: 3 },
-      profile: { compiler: "clang 22.1.8", stdlib: "libc++", target: "x86_64-linux-gnu" },
-      engine: { name: "clangd", version: "23.1.0" },
-      engines: [
-        { name: "clangd", version: "23.1.0", role: "core", state: "ready" },
-        { name: "mcppls", version: "0.0.9", role: "modules", state: "ready" },
-      ],
-    },
-  });
-  assert.equal(find(tree, "ls.status")?.icon, "pass-filled");
-  assert.deepEqual(find(tree, "ls.database")?.description?.args, ["mcpp"]);
-  assert.equal(find(tree, "ls.engines")?.children?.length, 2);
-  assert.equal(find(tree, "ls.engine.clangd")?.icon, "check");
-});
-
-test("an issue carrying S3's own remedy becomes a clickable node", () => {
-  const tree = buildLanguageServerTree({
-    installed: true,
-    state: {
-      available: true,
-      state: "degraded",
-      issues: [
-        {
-          code: "producer-needs-download",
-          message: "needs a download",
-          command: { command: "mcppls.describeOnline", arguments: [], title: "Allow" },
-        },
-      ],
-    },
-  });
-  const issue = find(tree, "ls.issue.0.producer-needs-download");
-  assert.equal(issue?.command?.command, "mcppls.describeOnline");
-  assert.deepEqual(issue?.command?.title, { key: "{0}", args: ["Allow"] });
-});
-
-test("an issue without a remedy stays informative and non-clickable", () => {
-  const tree = buildLanguageServerTree({
-    installed: true,
-    state: { available: true, state: "degraded", issues: [{ code: "x", message: "y" }] },
-  });
-  assert.equal(find(tree, "ls.issue.0.x")?.command, undefined);
-});
-
-test("a disabled workspace says so next to the version", () => {
-  const tree = buildLanguageServerTree({ installed: true, version: "0.0.9", enabled: false });
-  assert.match(String(find(tree, "ls.identity")?.description?.args?.[1]), /disabled here/);
 });

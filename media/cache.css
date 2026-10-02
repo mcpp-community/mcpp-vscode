@@ -1,210 +1,183 @@
 /*
- * The cache panel's stylesheet.
+ * The cache view's stylesheet (§8.1).
  *
- * Three rules hold this together, and all three come from the plan (§3.4.3,
- * §3.5):
+ * Four rules hold this together, and all four come from the plan (§8.1, §3.5):
  *
- * 1. **Theme tokens only.** Every colour is a `var(--vscode-*)` reference, so
- *    the panel follows light, dark and high-contrast themes without a second
- *    stylesheet. `currentColor` is used for borders that should inherit the
- *    text colour; there is not a single literal colour value in this file.
- * 2. **Never colour alone.** Each bar segment is also a labelled row in the
- *    legend beneath it, every segment is outlined, and state is carried by the
- *    text of that row. Colour is decoration on top, which is what keeps the
- *    panel readable when a theme collapses every hue into one.
+ * 1. **Theme tokens only.** Every colour is a `var(--vscode-*)` reference, so the
+ *    view follows light, dark and high-contrast themes without a second
+ *    stylesheet. `currentColor` and `transparent` are the only other values, and
+ *    `transparent` is used as the *fallback* of a theme token that a theme may
+ *    not define. There is not a single literal colour value in this file.
+ * 2. **Never colour alone.** Each bar segment is also a labelled item in the
+ *    legend beneath it — caption and share, as text — so a theme that collapses
+ *    every hue into one still reads. Colour is decoration on top.
  * 3. **No inline styles.** The document sets `data-*` attributes and this file
  *    turns them into fill and border, so the strict CSP holds.
+ * 4. **One primary bar, and whitespace instead of borders.** §8.1 asks for a
+ *    6 px bar in the project block, a 14 px composition bar and a 6 px age bar,
+ *    the legend compressed into a single wrapped line separated by `·`, and
+ *    sections separated by space rather than by nested boxes. The only
+ *    hairline left is the one between table rows.
  *
  * `--vscode-mcpp-cacheOkForeground` and `--vscode-mcpp-cacheStaleForeground`
  * are the two colour ids this extension contributes; the plan's chart tokens
  * are the fallbacks, so an older rendering host still gets a sensible hue.
+ *
+ * Sizes are the plan's own scale (26 / 12 / 11 px) rather than
+ * `var(--vscode-font-size)`: the sidebar has to stay compact at 170–520 px, and
+ * the review is by eye against §8.1. Nothing here depends on a colour, so a
+ * theme change cannot make a control unusable.
  */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
 
 body {
   margin: 0;
   padding: 0;
   color: var(--vscode-foreground);
-  background-color: var(--vscode-editor-background);
+  background-color: var(--vscode-sideBar-background, var(--vscode-editor-background));
   font-family: var(--vscode-font-family);
-  font-size: var(--vscode-font-size);
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 1.45;
+  /* Tabular figures: the summary, the metric and the table line up by digit. */
+  font-variant-numeric: tabular-nums;
+  /* A long cache path or package label wraps instead of widening the sidebar. */
+  overflow-wrap: anywhere;
 }
 
 [hidden] {
   display: none !important;
 }
 
-button,
-input {
-  font-family: inherit;
-  font-size: inherit;
-  color: var(--vscode-input-foreground);
-  background-color: var(--vscode-input-background);
-  border: 1px solid;
-  border-color: var(--vscode-input-border, currentColor);
-  border-radius: 2px;
-  padding: 3px 8px;
+/* The view title is the real heading; this is its accessible twin. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
-button {
+main {
+  padding: 8px 10px 14px;
+}
+
+/* ----------------------------------------------------------------- blocks */
+
+.block {
+  margin: 0 0 14px;
+}
+
+.block-heading {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.block-summary,
+.viz-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
   cursor: pointer;
+  list-style: none;
 }
 
-button:hover:not([disabled]) {
-  background-color: var(--vscode-button-secondaryHoverBackground, var(--vscode-toolbar-hoverBackground));
+.block-summary::-webkit-details-marker,
+.viz-summary::-webkit-details-marker {
+  display: none;
 }
 
-button[disabled],
-input[disabled] {
-  /* Dashed plus dimmed: "closed" is visible without relying on colour. */
-  border-style: dashed;
-  opacity: 0.7;
-  cursor: default;
+.block-summary::before,
+.viz-summary::before {
+  content: "▸";
+  color: var(--vscode-icon-foreground, currentColor);
 }
 
-button:focus-visible,
-input:focus-visible {
+details[open] > .block-summary::before,
+details[open] > .viz-summary::before {
+  content: "▾";
+}
+
+.block-summary:focus-visible,
+.viz-summary:focus-visible {
   outline: 1px solid var(--vscode-focusBorder);
   outline-offset: 1px;
 }
 
-/* ------------------------------------------------------------------ header */
-
-.panel-header {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--vscode-panel-border, currentColor);
-}
-
-.panel-title {
-  margin: 0 0 6px;
-  font-size: 1.3em;
-  font-weight: 600;
-}
-
-.boundary {
-  margin: 0;
-  padding: 8px 10px;
-  border: 1px solid;
-  border-color: var(--vscode-inputValidation-infoBorder, currentColor);
-  background-color: var(--vscode-inputValidation-infoBackground);
-}
-
-main {
-  padding: 0 16px 16px;
-}
-
-/* ---------------------------------------------------------------- warnings */
-
-.warnings {
-  display: grid;
-  gap: 6px;
-  margin: 12px 0;
-}
-
-.warning {
-  margin: 0;
-  padding: 8px 10px;
-  border: 1px solid;
-  border-color: var(--vscode-inputValidation-warningBorder, currentColor);
-  background-color: var(--vscode-inputValidation-warningBackground);
-}
-
-.marker {
-  color: var(--vscode-editorWarning-foreground, currentColor);
-  font-weight: 600;
-}
-
-/* ------------------------------------------------------------------- cards */
-
-.cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 10px;
-  margin: 12px 0;
-}
-
-.card {
-  padding: 10px 12px;
-  border: 1px solid var(--vscode-panel-border, currentColor);
-  border-top-width: 3px;
-  border-radius: 2px;
-  background-color: var(--vscode-sideBar-background);
-}
-
-.card[data-card="shared"] {
-  border-top-color: var(--vscode-mcpp-cacheOkForeground, var(--vscode-charts-green, currentColor));
-}
-
-.card[data-card="project"] {
-  border-top-color: var(--vscode-charts-blue, currentColor);
-}
-
-.card[data-card="legacy"] {
-  border-top-color: var(--vscode-mcpp-cacheStaleForeground, var(--vscode-charts-yellow, currentColor));
-}
-
-.card-title {
-  margin: 0;
-  font-size: 0.9em;
-  font-weight: 600;
-  color: var(--vscode-descriptionForeground);
-}
-
-.card-value {
-  margin: 4px 0;
-  font-size: 1.5em;
+.summary-title {
   font-weight: 600;
   overflow-wrap: anywhere;
 }
 
-.card-note {
-  margin: 2px 0 0;
+.summary-value {
   color: var(--vscode-descriptionForeground);
+  font-size: 11px;
   overflow-wrap: anywhere;
 }
 
-/* ----------------------------------------------------------------- actions */
+.block-body {
+  padding-top: 8px;
+}
 
-.actions {
+/* ----------------------------------------------------------------- figures */
+
+.metric {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 12px 0;
-  padding: 10px 0;
-  border-top: 1px solid var(--vscode-panel-border, currentColor);
-  border-bottom: 1px solid var(--vscode-panel-border, currentColor);
+  align-items: baseline;
+  gap: 4px;
+  margin: 4px 0 0;
+}
+
+.metric-value {
+  font-size: 26px;
+  line-height: 1.1;
+  font-weight: 600;
+  /* The figure is bounded to four characters by `formatBytes`, so keeping it on
+     one line cannot overflow a 170 px sidebar. */
+  white-space: nowrap;
+}
+
+.metric-unit {
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
+}
+
+.metric-sub,
+.metric-note,
+.viz-note {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  overflow-wrap: anywhere;
 }
 
 /* --------------------------------------------------------------------- viz */
 
 .viz {
-  margin: 16px 0;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--vscode-panel-border, currentColor);
+  margin: 12px 0 0;
 }
 
-.viz-title {
-  margin: 0 0 6px;
-  font-size: 1.05em;
-}
-
-.hint,
-.bars-hint {
-  margin: 0 0 6px;
+.viz-heading {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 600;
   color: var(--vscode-descriptionForeground);
-  overflow-wrap: anywhere;
 }
 
-.bars-hint {
-  margin-top: 16px;
-  font-style: italic;
-}
-
-.empty {
-  margin: 6px 0;
-  padding: 10px;
-  border: 1px dashed;
-  border-color: var(--vscode-panel-border, currentColor);
+.viz-details > .viz-summary {
+  font-size: 11px;
+  font-weight: 600;
   color: var(--vscode-descriptionForeground);
 }
 
@@ -213,15 +186,24 @@ main {
 .viz-bar {
   display: block;
   width: 100%;
-  height: 22px;
+  height: 14px;
   background-color: var(--vscode-input-background);
-  border: 1px solid var(--vscode-panel-border, currentColor);
 }
 
-/* The outline is what keeps a segment visible in high contrast when two theme
-   colours collapse into one; `vector-effect` stops it scaling with the bar. */
+/* §8.1: exactly one 6 px bar in the project block and one for the age spread. */
+.viz-bar-thin {
+  height: 6px;
+}
+
+.project-bar {
+  margin-top: 8px;
+}
+
+/* The outline is what keeps a segment visible in a high-contrast theme, where
+   `--vscode-contrastBorder` exists; everywhere else it stays transparent, so the
+   bars are separated by the track rather than by a heavy border. */
 .viz-bar rect {
-  stroke: var(--vscode-contrastBorder, var(--vscode-panel-border, currentColor));
+  stroke: var(--vscode-contrastBorder, transparent);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
 }
@@ -242,10 +224,12 @@ main {
   fill: var(--vscode-descriptionForeground, currentColor);
 }
 
-[data-viz="composition"] rect[data-segment="legacy"] {
+[data-viz="composition"] rect[data-segment="legacy"],
+.project-bar rect[data-segment="stale"] {
   fill: var(--vscode-mcpp-cacheStaleForeground, var(--vscode-charts-yellow, currentColor));
 }
 
+.project-bar rect[data-segment="current"],
 [data-viz="age"] rect[data-bucket] {
   fill: var(--vscode-mcpp-cacheOkForeground, var(--vscode-charts-green, currentColor));
 }
@@ -256,33 +240,50 @@ main {
 
 /* ------------------------------------------------------------------ legend */
 
+/* §8.1: the legend is one wrapped line separated by `·`, not one row per item. */
 .legend {
-  display: grid;
-  gap: 2px;
-  margin: 8px 0 0;
+  margin: 4px 0 0;
   padding: 0;
   list-style: none;
 }
 
-.legend li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 8px;
-  padding: 2px 0;
-  border-bottom: 1px dotted var(--vscode-panel-border, currentColor);
+.legend-inline {
+  display: block;
+  font-size: 11px;
+}
+
+.legend-inline .legend-item {
+  display: inline;
+  /* No `nowrap`: a long translated caption has to wrap rather than widen the
+     sidebar. Items are short enough that they only break at 200 px. */
+}
+
+.legend-inline .legend-item + .legend-item::before {
+  content: " · ";
+  color: var(--vscode-descriptionForeground);
+}
+
+.legend-label {
+  margin-right: 4px;
+}
+
+.legend-value {
+  color: var(--vscode-descriptionForeground);
 }
 
 .swatch {
-  flex: 0 0 auto;
-  width: 10px;
-  height: 10px;
-  border: 1px solid var(--vscode-contrastBorder, var(--vscode-panel-border, currentColor));
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 4px;
+  vertical-align: middle;
+  border: 1px solid var(--vscode-contrastBorder, transparent);
   background-color: var(--vscode-charts-blue, currentColor);
 }
 
 .swatch[data-kind="pkg"],
-.swatch[data-bucket="recent"] {
+.swatch[data-bucket="recent"],
+.swatch[data-segment="current"] {
   background-color: var(--vscode-mcpp-cacheOkForeground, var(--vscode-charts-green, currentColor));
 }
 
@@ -295,36 +296,27 @@ main {
 }
 
 .swatch[data-kind="legacy"],
-.swatch[data-bucket="oldest"] {
+.swatch[data-bucket="oldest"],
+.swatch[data-segment="stale"] {
   background-color: var(--vscode-mcpp-cacheStaleForeground, var(--vscode-charts-yellow, currentColor));
-}
-
-.legend-label {
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-
-.legend-value {
-  color: var(--vscode-descriptionForeground);
-  overflow-wrap: anywhere;
 }
 
 /* ------------------------------------------------------------- top packages */
 
 .top-table {
   width: 100%;
+  margin-top: 4px;
   border-collapse: collapse;
   table-layout: fixed;
 }
 
 .top-table th,
 .top-table td {
-  padding: 3px 4px;
+  padding: 2px 4px;
   text-align: left;
   vertical-align: top;
-  border-bottom: 1px solid var(--vscode-panel-border, currentColor);
   overflow-wrap: anywhere;
-  font-size: 0.92em;
+  font-size: 11px;
 }
 
 .top-table th {
@@ -332,24 +324,24 @@ main {
   font-weight: 600;
 }
 
+.top-table tbody tr + tr td {
+  border-top: 1px solid var(--vscode-panel-border, transparent);
+}
+
 .top-table th:nth-child(1) {
-  width: 34%;
+  width: 40%;
 }
 
 .top-table th:nth-child(2) {
-  width: 11%;
+  width: 14%;
 }
 
 .top-table th:nth-child(3) {
-  width: 17%;
+  width: 18%;
 }
 
 .top-table th:nth-child(4) {
-  width: 17%;
-}
-
-.top-table th:nth-child(5) {
-  width: 21%;
+  width: 28%;
 }
 
 .top-table time,
@@ -357,66 +349,180 @@ main {
   color: var(--vscode-descriptionForeground);
 }
 
-.top-table button {
-  padding: 1px 6px;
-}
-
-/* ------------------------------------------------------------------ budget */
-
-.estimate {
-  margin: 0 0 6px;
-  padding: 6px 8px;
-  border-left: 3px solid;
-  border-left-color: var(--vscode-charts-blue, currentColor);
-  background-color: var(--vscode-textBlockQuote-background);
+/* A package label is itself the drill-down button. */
+.link {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--vscode-textLink-foreground);
+  background-color: transparent;
+  font: inherit;
+  text-align: left;
   overflow-wrap: anywhere;
 }
 
-.budget-row {
+/* `:not([disabled])` so this keeps beating the generic `button:hover` rule. */
+.link:hover:not([disabled]) {
+  text-decoration: underline;
+  background-color: transparent;
+}
+
+/* ----------------------------------------------------------------- controls */
+
+button,
+input {
+  font-family: inherit;
+  font-size: inherit;
+  border-radius: 2px;
+  padding: 3px 8px;
+}
+
+button {
+  color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+  background-color: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
+  border: 1px solid var(--vscode-button-border, transparent);
+  cursor: pointer;
+}
+
+button:hover:not([disabled]) {
+  background-color: var(--vscode-button-secondaryHoverBackground, var(--vscode-toolbar-hoverBackground));
+}
+
+input {
+  color: var(--vscode-input-foreground);
+  background-color: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, var(--vscode-panel-border, transparent));
+}
+
+button[disabled],
+input[disabled] {
+  /* Dashed plus dimmed: "closed" is visible without relying on colour. */
+  border-style: dashed;
+  opacity: 0.7;
+  cursor: default;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+.actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  margin: 10px 0 0;
 }
 
-.budget-label {
-  font-weight: 600;
-}
-
-.budget-row input {
-  width: 7em;
+.budget {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
   min-width: 0;
 }
 
-.budget-unit {
+.budget input {
+  width: 5em;
+  min-width: 3em;
+  max-width: 100%;
+}
+
+.budget-unit,
+.budget-estimate {
+  font-size: 11px;
   color: var(--vscode-descriptionForeground);
+}
+
+.budget-estimate {
+  flex-basis: 100%;
+}
+
+/* ---------------------------------------------------------------- messages */
+
+.warnings {
+  margin: 0 0 10px;
+}
+
+.warning {
+  margin: 0 0 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--vscode-inputValidation-warningBorder, transparent);
+  background-color: var(--vscode-inputValidation-warningBackground, transparent);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.marker {
+  color: var(--vscode-editorWarning-foreground, currentColor);
+  font-weight: 600;
+}
+
+.empty {
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  border: 1px dashed var(--vscode-panel-border, transparent);
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.boundary {
+  margin: 14px 0 0;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  overflow-wrap: anywhere;
 }
 
 /* -------------------------------------------------------------- narrow view */
 
-@media (max-width: 480px) {
+/*
+ * The sidebar is 170–520 px. At 200 px nothing may overflow sideways: the
+ * buttons and the budget group already wrap, the legend already wraps between
+ * items, the metric keeps its 26 px figure on one line, and the table stops
+ * being a table — each cell is prefixed with the column name it carries in
+ * `data-head`, so no figure is lost and no column is clipped.
+ */
+@media (max-width: 360px) {
   main {
-    padding: 0 10px 12px;
+    padding: 6px 8px 12px;
   }
 
-  .panel-header {
-    padding: 10px;
+  .actions {
+    gap: 5px;
+  }
+}
+
+@media (max-width: 260px) {
+  .top-table thead {
+    display: none;
   }
 
-  .cards {
-    grid-template-columns: 1fr;
-  }
-
-  .top-table th:nth-child(2),
-  .top-table td:nth-child(2) {
-    /* Entry counts are the first thing to fold away at 400 px; the legend for
-       each kind still carries them. */
-    width: 12%;
-  }
-
-  .top-table th,
+  .top-table,
+  .top-table tbody,
+  .top-table tr,
   .top-table td {
-    padding: 3px 2px;
-    font-size: 0.85em;
+    display: block;
+    width: auto;
+  }
+
+  .top-table tr + tr {
+    border-top: 1px solid var(--vscode-panel-border, transparent);
+  }
+
+  .top-table td {
+    padding: 0;
+    border: 0;
+  }
+
+  .top-table td[data-head]::before {
+    content: attr(data-head) " ";
+    color: var(--vscode-descriptionForeground);
+  }
+
+  .top-table .cell-label {
+    font-weight: 600;
   }
 }
