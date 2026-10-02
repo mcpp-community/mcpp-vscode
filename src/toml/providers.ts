@@ -8,10 +8,37 @@
 
 import * as vscode from "vscode";
 
+import { t } from "../i18n/t";
+
 import { computeMcppTomlCompletions } from "./completion";
 import { analyseManifest, type DiagnosticSettings, type Severity } from "./diagnostics";
+import { hoverAt } from "./hover";
+import { definitionAt } from "./navigation";
 
 export const MCPP_TOML_LANGUAGE = "mcpp-toml";
+
+function linesOf(document: vscode.TextDocument): string[] {
+  const lines: string[] = [];
+  for (let line = 0; line < document.lineCount; line += 1) {
+    lines.push(document.lineAt(line).text);
+  }
+  return lines;
+}
+
+/**
+ * The line index of `[package]` in a neighbouring manifest, for `path = "…"`.
+ * The file system belongs to the caller, which is why navigation takes a callback.
+ */
+function packageHeaderLine(uri: vscode.Uri, relative: string): number | undefined {
+  try {
+    const target = vscode.Uri.joinPath(uri, "..", relative, "mcpp.toml");
+    const bytes = require("node:fs").readFileSync(target.fsPath, "utf8") as string;
+    const index = bytes.split(/\r?\n/).findIndex((line) => /^\s*\[\s*package\s*\]\s*$/.test(line));
+    return index === -1 ? undefined : index;
+  } catch {
+    return undefined;
+  }
+}
 
 function completionItemKind(kind: "section" | "template"): vscode.CompletionItemKind {
   return kind === "section" ? vscode.CompletionItemKind.Folder : vscode.CompletionItemKind.Snippet;
@@ -28,6 +55,9 @@ export function registerTomlProviders(
   settings: () => DiagnosticSettings,
   /** `mcpp.toml.diagnostics.enabled`. */
   enabled: () => boolean,
+  /** `mcpp.toml.hover` and `mcpp.toml.navigation`, which are independent switches. */
+  hoverEnabled: () => boolean = () => true,
+  navigationEnabled: () => boolean = () => true,
 ): void {
   context.subscriptions.push(
     vscode.languages.registerCompletionItemProvider(
@@ -62,6 +92,39 @@ export function registerTomlProviders(
       },
       "[",
     ),
+  );
+
+  context.subscriptions.push(
+    vscode.languages.registerHoverProvider({ language: MCPP_TOML_LANGUAGE }, {
+      provideHover(document, position) {
+        if (!hoverEnabled()) {
+          return undefined;
+        }
+        const info = hoverAt(linesOf(document), position.line, position.character);
+        if (info === undefined) {
+          return undefined;
+        }
+        const contents = [new vscode.MarkdownString(`**${info.title}**`), new vscode.MarkdownString(info.body)];
+        if (info.documentation !== undefined) {
+          contents.push(new vscode.MarkdownString(`[${t("Manifest reference")}](${info.documentation})`));
+        }
+        return new vscode.Hover(contents);
+      },
+    }),
+    vscode.languages.registerDefinitionProvider({ language: MCPP_TOML_LANGUAGE }, {
+      provideDefinition(document, position) {
+        if (!navigationEnabled()) {
+          return undefined;
+        }
+        const location = definitionAt(linesOf(document), position.line, position.character, (relative) =>
+          packageHeaderLine(document.uri, relative),
+        );
+        if (location === undefined) {
+          return undefined;
+        }
+        return new vscode.Location(document.uri, new vscode.Position(location.line, location.startCharacter));
+      },
+    }),
   );
 
   const collection = vscode.languages.createDiagnosticCollection("mcpp-manifest");

@@ -251,7 +251,13 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
     if (completion.state === "cancelled") {
       return;
     }
-    const result = await bridge.refreshLanguageServerAfterBuild();
+    const mode = read<string>("mcpp.languageService.refreshAfterBuild");
+    if (mode === "off") {
+      lastRefresh = { at: new Date().toISOString(), state: "skipped (mcpp.languageService.refreshAfterBuild = off)" };
+      return;
+    }
+    const result =
+      mode === "restart" ? await bridge.restartLanguageServer() : await bridge.refreshLanguageServerAfterBuild();
     lastRefresh = { at: new Date().toISOString(), state: result.state, command: result.command };
     resultText(output, result);
     if (completion.state === "succeeded" && result.state === "completed") {
@@ -272,6 +278,18 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
   // Each view owns its own tree provider and its own commands; the project view
   // reads the manifest, the cache view runs mcpp's read-only queries, and the
   // C++ Modules view only forwards to mcppls.
+  const applyViewVisibility = (): void => {
+    for (const [key, setting] of [
+      ["mcpp.views.project", "mcpp.views.project.show"],
+      ["mcpp.views.cache", "mcpp.views.cache.show"],
+      ["mcpp.views.languageServer", "mcpp.views.languageServer.show"],
+    ] as const) {
+      void vscode.commands.executeCommand("setContext", key, read<boolean>(setting));
+    }
+  };
+  applyViewVisibility();
+  extensionContext.subscriptions.push(onConfigurationChanged(applyViewVisibility));
+
   registerProjectView(extensionContext, { currentProject: findCurrentProject });
   registerCacheView(extensionContext, {
     output,
@@ -295,12 +313,15 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
       legacyKeys: read("mcpp.toml.diagnostics.legacyKeys"),
     }),
     () => read<boolean>("mcpp.toml.diagnostics.enabled"),
+    () => read<boolean>("mcpp.toml.hover"),
+    () => read<boolean>("mcpp.toml.navigation"),
   );
-  registerBuildScriptProviders(extensionContext, () =>
-    read<boolean>("mcpp.buildScript.diagnostics")
-      ? read<"warning" | "info" | "off">("mcpp.buildScript.diagnostics.severity")
-      : "off",
-  );
+  registerBuildScriptProviders(extensionContext, () => {
+    if (!read<boolean>("mcpp.buildScript.intelligence") || !read<boolean>("mcpp.buildScript.diagnostics")) {
+      return "off";
+    }
+    return read<"warning" | "info" | "off">("mcpp.buildScript.diagnostics.severity");
+  });
 
   extensionContext.subscriptions.push(
     output,
@@ -329,6 +350,10 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
     vscode.workspace.onDidGrantWorkspaceTrust(() => cliController.refreshStatus()),
   );
 
+  if (read<boolean>("mcpp.diagnostics.selfCheckOnStartup")) {
+    void showSelfCheck(output, cliController, bridge, extensionContext.extension.packageJSON.version);
+  }
+
   extensionContext.subscriptions.push(
     manifestWatcher.onDidCreate(() => cliController.refreshStatus()),
     manifestWatcher.onDidChange(() => cliController.refreshStatus()),
@@ -349,7 +374,10 @@ async function showSelfCheck(
 ): Promise<void> {
   const project = findCurrentProject();
   const executable = cliController.mcppExecutable(project);
-  const probeResult = await runProcess(executable, ["--protocol-version"], project?.root, { timeoutMs: 20_000 });
+  const timeoutSeconds = read<number>("mcpp.runtime.timeoutSeconds");
+  const probeResult = await runProcess(executable, ["--protocol-version"], project?.root, {
+    timeoutMs: timeoutSeconds > 0 ? timeoutSeconds * 1000 : undefined,
+  });
   const info = probeResult.exitCode === 0 ? parseProtocolInfo(probeResult.stdout) : undefined;
   const state = readLanguageServerState();
   const capabilities = CAPABILITIES.map((entry) => ({

@@ -1,17 +1,22 @@
-// mcpp.toml 的代码补全查询层（结构补全版）。
+// mcpp.toml 的代码补全查询层（schema 驱动版）。
 //
-// 范围：段头结构建议 + 开放词汇段的写法模板。每条建议携带显式替换范围。
-// 依赖包名/版本等动态数据补全与静态字段键/枚举补全均不在本版——前者等上游
-// 批量 catalog 接口，后者等版本化 manifest schema（见设计 issue #8 与
-// mcpp RFC #379）。
+// 范围：段头结构建议 + 已知段的键/枚举值补全 + 开放词汇段的写法模板。每条建议
+// 携带显式替换范围。段/键/枚举来自 `data/toml-schema.json`（src/toml/schema.ts），
+// 与诊断共用同一份快照：快照没有的段不会出现在段头表里，快照标记 `openKeys`
+// 的段（键由用户自选）不出键建议。
 //
-// 本模块不依赖 vscode API；上下文来自 mcppTomlParser 的 contextAt（容错解析）。
+// 依赖包名/版本等动态数据补全不在本版：版本候选要么本地已有、要么必须执行
+// `mcpp search`（见 src/cli/search.ts），不在这个纯文本层里做。
+//
+// 本模块不依赖 vscode API；上下文来自 parser 的 contextAt（容错解析）。
 
 import {
   contextAt,
+  parseMcppToml,
+  resolveSection,
   type ReplaceRange,
-  type SectionResolution,
 } from "./parser";
+import { SCHEMA, sectionByName, type TomlKey, type TomlSection } from "./schema";
 
 export type McppTomlSuggestionKind = "section" | "template";
 
@@ -34,8 +39,10 @@ export interface SectionHeaderSpec {
   detail: string;
 }
 
-// 段头结构清单：TOML 结构语法，非字段语义。出处：mcpp 文档 02/03/05/06
-// 与 src/manifest/toml.cppm 的段清单（契约测试用真实 mcpp 逐段验证）。
+// 段头明细表：只补充「写法」（label/snippet/detail），不再是段清单本身。
+// 段清单来自 schema；这里按 group 名匹配，schema 新出现的段用 plane 兜底。
+// 出处：mcpp 文档 02/03/05/06 与 src/manifest/toml.cppm 的段清单（契约测试用
+// 真实 mcpp 逐段验证）。
 export const SECTION_HEADERS: readonly SectionHeaderSpec[] = [
   { group: "package", label: "[package]", header: "[package]", detail: "包元数据" },
   { group: "lib", label: "[lib]", header: "[lib]", detail: "库根模块约定" },
@@ -152,14 +159,71 @@ const TEMPLATES_BY_GROUP: Record<string, readonly TemplateSpec[]> = {
   "tools.overrides": TOOLS_OVERRIDES_TEMPLATES,
 };
 
-function sectionHeaderSuggestions(range: ReplaceRange): McppTomlSuggestion[] {
-  return SECTION_HEADERS.map((section) => ({
-    label: section.label,
-    kind: "section",
-    detail: section.detail,
-    insertSnippet: section.header,
-    range,
-  }));
+/** 手写明细按 group 索引；schema 段只借它取 label/snippet/detail。 */
+const HEADER_SPEC_BY_GROUP: ReadonlyMap<string, SectionHeaderSpec> = new Map(
+  SECTION_HEADERS.map((spec) => [spec.group, spec]),
+);
+
+interface HeaderEntry {
+  label: string;
+  header: string;
+  detail: string;
+  documentation?: string;
+}
+
+/**
+ * 段头清单：以 schema 为准（§3.3.2）。schema 为空（快照未生成）时才退回手写
+ * 清单，保证补全在缺数据时仍可用。手写明细按段名匹配以保留既有 label/snippet/
+ * 文案；schema 新收录的段用平面名兜底。
+ */
+function headerEntries(): HeaderEntry[] {
+  if (SCHEMA.sections.length === 0) {
+    return SECTION_HEADERS.map((spec) => ({
+      label: spec.label,
+      header: spec.header,
+      detail: spec.detail,
+    }));
+  }
+  // The snapshot describes the schema mcpp validates; the curated list also covers
+  // tables mcpp accepts but the snapshot does not model (for example
+  // `[workspace.dependencies]`). Merge them, preferring the curated wording, so
+  // schema-driven detail never costs a writable table its suggestion.
+  const entries: HeaderEntry[] = SCHEMA.sections.map((section) => {
+    const spec = HEADER_SPEC_BY_GROUP.get(section.name);
+    const entry: HeaderEntry = {
+      label: spec?.label ?? section.header,
+      header: spec?.header ?? section.header,
+      detail: spec?.detail ?? `plane: ${section.plane}`,
+    };
+    if (section.deprecatedBy) {
+      entry.documentation = `Deprecated; use \`${section.deprecatedBy}\`.`;
+    }
+    return entry;
+  });
+  const suggested = new Set(entries.map((entry) => entry.header));
+  for (const spec of SECTION_HEADERS) {
+    if (suggested.has(spec.header)) {
+      continue;
+    }
+    entries.push({ label: spec.label, header: spec.header, detail: spec.detail });
+  }
+  return entries;
+}
+
+function headerSuggestions(range: ReplaceRange): McppTomlSuggestion[] {
+  return headerEntries().map((entry) => {
+    const suggestion: McppTomlSuggestion = {
+      label: entry.label,
+      kind: "section",
+      detail: entry.detail,
+      insertSnippet: entry.header,
+      range,
+    };
+    if (entry.documentation !== undefined) {
+      suggestion.documentation = entry.documentation;
+    }
+    return suggestion;
+  });
 }
 
 function templateSuggestions(templates: readonly TemplateSpec[], range: ReplaceRange): McppTomlSuggestion[] {
@@ -173,8 +237,125 @@ function templateSuggestions(templates: readonly TemplateSpec[], range: ReplaceR
   }));
 }
 
+/** 类型的占位值：与 §3.3.2 的键补全约定一致。 */
+function keyPlaceholder(key: TomlKey): string {
+  switch (key.type) {
+    case "boolean":
+      return "true";
+    case "number":
+      return "0";
+    case "array":
+      return "[]";
+    case "enum":
+      return JSON.stringify(key.values?.[0] ?? "");
+    default:
+      return '""';
+  }
+}
+
+/** `detail` 展示类型；枚举展开取值，有默认值再补默认值。 */
+function keyDetail(key: TomlKey): string {
+  let detail = key.type;
+  if (key.values !== undefined && key.values.length > 0) {
+    detail += `: ${key.values.join(" | ")}`;
+  }
+  if (key.default !== undefined) {
+    detail += ` (default: ${JSON.stringify(key.default)})`;
+  }
+  return detail;
+}
+
+function keyDocumentation(key: TomlKey): string | undefined {
+  const lines: string[] = [];
+  if (key.note !== undefined && key.note !== "") {
+    lines.push(key.note);
+  }
+  if (key.since !== undefined) {
+    lines.push(`Since ${key.since}.`);
+  }
+  if (key.legacy === true) {
+    lines.push("Legacy key.");
+  }
+  return lines.length === 0 ? undefined : lines.join(" ");
+}
+
+function keySuggestions(
+  section: TomlSection,
+  used: ReadonlySet<string>,
+  range: ReplaceRange,
+): McppTomlSuggestion[] {
+  const keys = section.keys ?? [];
+  return keys
+    .filter((key) => !used.has(key.key))
+    .map((key) => {
+      const suggestion: McppTomlSuggestion = {
+        label: key.key,
+        kind: "template",
+        detail: keyDetail(key),
+        insertSnippet: `${key.key} = ${keyPlaceholder(key)}`,
+        range,
+      };
+      const documentation = keyDocumentation(key);
+      if (documentation !== undefined) {
+        suggestion.documentation = documentation;
+      }
+      return suggestion;
+    });
+}
+
 /**
- * 计算 mcpp.toml 在指定位置的补全建议（结构补全：段头 + 写法模板）。
+ * 同段中光标之前已出现的顶层键。用容错解析器遍历节点树：`[targets.<n>]` 这类
+ * 行表按 parser 的组归属聚合，因此同组的不同行表会互相剔除已用键。
+ */
+function keysUsedBefore(lines: readonly string[], line: number, group: string): Set<string> {
+  const used = new Set<string>();
+  let current: string | undefined;
+  for (const node of parseMcppToml(lines).nodes) {
+    if (node.type === "section") {
+      const resolution = resolveSection(node.segments.map((segment) => segment.name));
+      current = resolution.kind === "known" ? resolution.group : undefined;
+      continue;
+    }
+    if (current !== group || node.range.startLine >= line) {
+      continue;
+    }
+    const first = node.keyPath[0];
+    if (first !== undefined) {
+      used.add(first.name);
+    }
+  }
+  return used;
+}
+
+/** 值位置的枚举键：点分键按完整路径查，找不到退回首段（与诊断一致）。 */
+function enumKeyOf(section: TomlSection | undefined, keyPath: readonly string[]): TomlKey | undefined {
+  if (section?.keys === undefined || keyPath.length === 0) {
+    return undefined;
+  }
+  const joined = keyPath.join(".");
+  const key =
+    section.keys.find((entry) => entry.key === joined) ??
+    section.keys.find((entry) => entry.key === keyPath[0]);
+  return key?.type === "enum" ? key : undefined;
+}
+
+function enumValueSuggestions(
+  key: TomlKey,
+  insideString: boolean,
+  range: ReplaceRange,
+): McppTomlSuggestion[] {
+  return (key.values ?? []).map((value) => ({
+    label: value,
+    kind: "template",
+    detail: `value of ${key.key}`,
+    // 字符串内只替换内容；裸值位置补上引号，枚举值在 manifest 里都是字符串。
+    insertSnippet: insideString ? value : JSON.stringify(value),
+    range,
+  }));
+}
+
+/**
+ * 计算 mcpp.toml 在指定位置的补全建议（段头 + 键 + 枚举值 + 写法模板）。
  */
 export function computeMcppTomlCompletions(
   lines: readonly string[],
@@ -198,7 +379,7 @@ export function computeMcppTomlCompletions(
     const range = bracket >= 0 && bracket === firstNonWs
       ? { startCharacter: bracket, endCharacter: context.replaceRange.endCharacter }
       : context.replaceRange;
-    return sectionHeaderSuggestions(range);
+    return headerSuggestions(range);
   }
 
   if (context.kind === "key") {
@@ -206,7 +387,7 @@ export function computeMcppTomlCompletions(
     // 文档顶部（尚无段头）：提示段头。未知段：不提供建议
     // （附录 A：不支持包自定义 toml 键）。
     if (section.kind === "top") {
-      return sectionHeaderSuggestions(replaceRange);
+      return headerSuggestions(replaceRange);
     }
     if (section.kind !== "known" || containerPath.length > 0) {
       return [];
@@ -214,10 +395,23 @@ export function computeMcppTomlCompletions(
     if (DEPENDENCY_GROUPS.has(section.group)) {
       return templateSuggestions(DEPENDENCY_TEMPLATES, replaceRange);
     }
+    const schemaSection = sectionByName(section.group);
+    // openKeys 段的键由用户自选（如 [toolchain] 的平台名），不能给固定词表。
+    if (schemaSection?.openKeys !== true && schemaSection?.keys !== undefined) {
+      const used = keysUsedBefore(lines, line, section.group);
+      return keySuggestions(schemaSection, used, replaceRange);
+    }
     const templates = TEMPLATES_BY_GROUP[section.group];
     return templates === undefined ? [] : templateSuggestions(templates, replaceRange);
   }
 
-  // 值位置：自由格式值不瞎猜（版本候选等动态数据层落地后再说）。
+  // 值位置：只有已知枚举键才出候选，其余自由格式值不瞎猜。
+  if (context.section.kind === "known") {
+    const schemaSection = sectionByName(context.section.group);
+    const key = enumKeyOf(schemaSection, context.keyPath);
+    if (key !== undefined) {
+      return enumValueSuggestions(key, context.insideString, context.replaceRange);
+    }
+  }
   return [];
 }

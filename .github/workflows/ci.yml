@@ -13,35 +13,150 @@ concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  NODE_VERSION: 22
+
 jobs:
-  unit-and-package:
+  # The consistency gates plus the unit suite. `npm test` runs them in order, so a
+  # failure here means either the code or one of the generated artefacts is wrong.
+  gates:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Registry, translation and unit gates
+        run: npm test
+
+  # The snapshots are generated from a checkout of mcpp. Without that checkout the
+  # drift gate skips, so this job fetches it and makes the gate real: if mcpp's
+  # directive table or manifest parser moved, this fails and a human refreshes the
+  # snapshot in a reviewable commit.
+  generated-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: mcpp-community/mcpp
+          path: .mcpp-source
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: The committed snapshots match the current mcpp
+        env:
+          MCPP_REPO: ${{ github.workspace }}/.mcpp-source
+        run: npm run check:generated
+      - name: The settings documentation matches the registry
+        run: |
+          npm run gen:docs
+          git diff --exit-code docs/settings.md
+
+  package:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci
-      - run: npm test
       - run: npm run package
-      - name: Verify VSIX archive
+      - name: Verify the VSIX archive
         run: unzip -t mcpp-vscode-*.vsix
-      - name: Verify extension dependency is declared
-        run: node -e 'const p=require("./package.json"); if (p.extensionDependencies?.[0] !== "sunrisepeak.mcpp-language-server") process.exit(1)'
+      - name: The manifest keeps its promises
+        run: |
+          node -e '
+            const p = require("./package.json");
+            const fail = (message) => { console.error(message); process.exit(1); };
+            if (p.extensionDependencies?.[0] !== "sunrisepeak.mcpp-language-server") fail("the dependency moved");
+            if (p.extensionDependencies.some((id) => id.includes("clangd"))) fail("clangd is back in the dependency list");
+            if (p.dependencies?.["vscode-languageclient"] || p.devDependencies?.["vscode-languageclient"]) fail("a second language client crept in");
+            if ((p.activationEvents ?? []).some((event) => event.startsWith("onCommand:"))) fail("onCommand activations are derived since 1.74");
+            if (!p.contributes?.viewsContainers?.activitybar?.length) fail("the view container disappeared");
+            console.log("manifest ok");
+          '
+      - name: The VSIX carries the runtime artefacts
+        run: |
+          set -euo pipefail
+          VSIX=$(ls mcpp-vscode-*.vsix)
+          for entry in \
+            extension/l10n/bundle.l10n.zh-cn.json \
+            extension/package.nls.json \
+            extension/package.nls.zh-cn.json \
+            extension/dist/data/config-registry.json \
+            extension/media/settings.css; do
+            unzip -l "$VSIX" | grep -q "$entry" || { echo "missing from the VSIX: $entry"; exit 1; }
+          done
+          echo "VSIX contents ok"
+      - name: No second language client in the build output
+        run: |
+          test ! -e dist/src/languageClient.js
+          ! grep -rqs "vscode-languageclient" dist/src package.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: mcpp-vscode-*.vsix
+          if-no-files-found: error
 
+  # One Extension Host run per mcppls variant: a full stub, one that only offers the
+  # old restart, one that renamed its command, one that exposes no state API, and one
+  # whose state API throws. The promise is that any of them leaves mcpp usable.
   extension-host-e2e:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci
-      - name: Run Extension Host smoke tests
-        run: xvfb-run -a npm run test:e2e
-      - name: Check packaged extension is not a second language client
+      - run: npm run compile
+      - name: Extension Host smoke tests against every mcppls variant
+        run: xvfb-run -a npm run test:e2e:one
+
+  # The only check that proves the dependency resolves end to end: install the packed
+  # VSIX into a private profile and let VS Code pull the platform build of the
+  # language service.
+  isolated-install:
+    runs-on: ubuntu-latest
+    needs: package
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: vsix
+      - name: Install into a private profile
         run: |
-          test ! -e dist/src/languageClient.js
-          ! rg -n 'vscode-languageclient|mcppls\.serve' dist/src package.json
+          set -euo pipefail
+          code --version
+          code --extensions-dir "$PWD/.ci-extensions" --user-data-dir "$PWD/.ci-user" \
+            --install-extension mcpp-vscode-*.vsix --force
+          code --extensions-dir "$PWD/.ci-extensions" --user-data-dir "$PWD/.ci-user" \
+            --install-extension sunrisepeak.mcpp-language-server
+      - name: The dependency resolved, with a version
+        run: |
+          set -euo pipefail
+          LIST=$(code --extensions-dir "$PWD/.ci-extensions" --user-data-dir "$PWD/.ci-user" \
+            --list-extensions --show-versions)
+          echo "$LIST"
+          echo "$LIST" | grep -q "^mcpp-community.mcpp-vscode@" || { echo "the extension is missing"; exit 1; }
+          echo "$LIST" | grep -q "^sunrisepeak.mcpp-language-server@" || { echo "the dependency did not resolve"; exit 1; }
+          VERSION=$(printf '%s\n' "$LIST" | sed -n 's/^sunrisepeak\.mcpp-language-server@//p')
+          echo "resolved mcppls $VERSION"
+          echo "resolved mcppls \`$VERSION\`" >> "$GITHUB_STEP_SUMMARY"

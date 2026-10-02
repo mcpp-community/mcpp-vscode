@@ -25,11 +25,15 @@ import { formatBytes, projectGc } from "../util/format";
 import { clampOutput } from "../util/text";
 import { buildCacheTree, type CacheTreeInput } from "./models";
 import { registerTreeView } from "./treeProvider";
+import { registerCachePanel, type CachePanelData } from "./cachePanel";
 
 export const CACHE_VIEW_ID = "mcpp.cache";
 
-/** How long a cache query may take before we give up and say so. */
-const QUERY_TIMEOUT_MS = 60_000;
+/** `mcpp.runtime.timeoutSeconds`, or the built-in default when it is 0. */
+function queryTimeoutMs(): number | undefined {
+  const seconds = read<number>("mcpp.runtime.timeoutSeconds");
+  return seconds > 0 ? seconds * 1000 : 60_000;
+}
 const CLEAN_TIMEOUT_MS = 300_000;
 
 export interface CacheViewDeps {
@@ -53,6 +57,15 @@ function workingDirectory(project: McppProjectDiscovery | undefined): string | u
 }
 
 /** Settings that shape the numbers the view shows. */
+/** Unix seconds -> an ISO instant the panel can print; the panel does not do dates. */
+function timestamp(seconds: number | undefined): string | undefined {
+  return seconds === undefined || !Number.isFinite(seconds) ? undefined : new Date(seconds * 1000).toISOString();
+}
+
+function numberFormat(): "binary" | "decimal" {
+  return read<string>("mcpp.ui.numberFormat") === "decimal" ? "decimal" : "binary";
+}
+
 function viewSettings(): { topN: number; ageBoundaries: string[] } {
   return {
     topN: Math.max(1, read<number>("mcpp.views.cache.topN")),
@@ -90,7 +103,7 @@ async function run(
   const executable = deps.mcppExecutable(project);
   const cwd = workingDirectory(project);
   const result = options.quiet === true
-    ? await runProcess(executable, [...argv], cwd, { timeoutMs: options.timeoutMs })
+    ? await runProcess(executable, [...argv], cwd, { timeoutMs: options.timeoutMs, maxBufferMiB: read<number>("mcpp.runtime.maxOutputMiB") })
     : await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: `mcpp ${argv[0]}` },
         () => runProcess(executable, [...argv], cwd, { timeoutMs: options.timeoutMs }),
@@ -179,6 +192,23 @@ export function registerCacheView(context: vscode.ExtensionContext, deps: CacheV
   const view = registerTreeView(CACHE_VIEW_ID, () => buildCacheTree(treeInput()));
   context.subscriptions.push(view.disposable);
 
+  // An optional, second status item. Off by default: the C++ Modules extension
+  // already owns a status item, and the mcpp quick menu owns ours.
+  const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 39);
+  status.command = CACHE_COMMANDS.showPanel;
+  context.subscriptions.push(status);
+
+  const updateStatus = (): void => {
+    if (!read<boolean>("mcpp.cache.statusBar")) {
+      status.hide();
+      return;
+    }
+    const total = state.inventory?.totalBytes;
+    status.text = total === undefined ? "$(database) mcpp" : `$(database) ${formatBytes(total, numberFormat())}`;
+    status.tooltip = t("Shared build cache");
+    status.show();
+  };
+
   const refresh = async (): Promise<void> => {
     const project = deps.currentProject();
     const settings = viewSettings();
@@ -191,7 +221,7 @@ export function registerCacheView(context: vscode.ExtensionContext, deps: CacheV
     }
 
     const listed = await run(deps, project, ["cache", "list", "--format", "json"], {
-      timeoutMs: QUERY_TIMEOUT_MS,
+      timeoutMs: queryTimeoutMs(),
       quiet: true,
     });
     if (listed.exitCode === 0) {
@@ -209,7 +239,7 @@ export function registerCacheView(context: vscode.ExtensionContext, deps: CacheV
       state.error = t("mcpp cache list failed (exit {0})", listed.exitCode);
     }
 
-    const dir = await run(deps, project, ["cache", "dir"], { timeoutMs: QUERY_TIMEOUT_MS, quiet: true });
+    const dir = await run(deps, project, ["cache", "dir"], { timeoutMs: queryTimeoutMs(), quiet: true });
     if (dir.exitCode === 0) {
       const parsed = parseCacheDir(dir.stdout);
       state.legacyPath = parsed.legacyPath;
@@ -220,6 +250,7 @@ export function registerCacheView(context: vscode.ExtensionContext, deps: CacheV
     }
 
     view.provider.refresh();
+    updateStatus();
   };
 
   /** The figures a confirmation dialogue needs, without running anything new. */
@@ -270,10 +301,81 @@ export function registerCacheView(context: vscode.ExtensionContext, deps: CacheV
     await refresh();
   });
 
-  register(CACHE_COMMANDS.showPanel, async () => {
-    if (!requireTrusted()) return;
-    await refresh();
-    await preview(t("Cache statistics"), cacheSummaryText(treeInput()));
+  /** What the panel shows, from the same state the tree uses. */
+  const panelData = async (): Promise<CachePanelData> => {
+    const inventory = state.inventory;
+    const artifacts = state.artifacts;
+    return {
+      project: {
+        available: artifacts !== undefined && artifacts.exists,
+        note:
+          artifacts === undefined
+            ? t("Project artifacts could not be measured.")
+            : artifacts.exists
+              ? undefined
+              : t("No target/ directory"),
+        totalBytes: artifacts?.totalBytes ?? 0,
+        files: artifacts?.files ?? 0,
+        groups: artifacts?.byTopLevel.length ?? 0,
+        truncated: artifacts?.truncated,
+      },
+      shared: {
+        available: inventory !== undefined,
+        note: inventory === undefined ? state.error ?? t("The shared build cache could not be read.") : undefined,
+        root: inventory?.root,
+        totalBytes: inventory?.totalBytes ?? 0,
+        totalEntries: inventory?.totalEntries ?? 0,
+        byKind: inventory?.byKind ?? [],
+        buckets: inventory?.ageBuckets ?? [],
+        top: (inventory?.topLabels ?? []).map((entry) => ({
+          label: entry.label,
+          entries: entry.entries,
+          bytes: entry.bytes,
+          oldestAccessed: entry.oldestAccessed,
+        })),
+        incomplete: inventory?.incomplete.length ?? 0,
+        oldestAccessed: timestamp(inventory?.oldestAccessed),
+        newestAccessed: timestamp(inventory?.newestAccessed),
+      },
+      legacy: state.legacyPath === undefined ? undefined : { bytes: state.legacyBytes ?? 0, path: state.legacyPath },
+    };
+  };
+
+  // `registerCachePanel` owns `mcpp.showCachePanel`; opening it refreshes first so
+  // the panel never shows a stale figure.
+  registerCachePanel(context, {
+    read: async () => {
+      if (deps.isTrusted()) {
+        await refresh();
+      }
+      return panelData();
+    },
+    run: async (message) => {
+      const project = deps.currentProject();
+      switch (message.type) {
+        case "cleanStale":
+          await runPlan(project, planClean("stale", { staleDays: read<number>("mcpp.cache.staleDays") }));
+          return;
+        case "cleanProject":
+          await runPlan(project, planClean("project"));
+          return;
+        case "collect":
+          await runPlan(project, planClean("cacheGc", { budgetGiB: message.budgetGiB }));
+          return;
+        case "prune":
+          await runPlan(project, planClean("cachePrune", { pruneAgeDays: read<number>("mcpp.cache.pruneAgeDays") }));
+          return;
+        case "cleanLegacy":
+          await runPlan(project, planClean("cacheLegacy"));
+          return;
+        default:
+          await run(deps, project, ["cache", "verify"], { timeoutMs: CLEAN_TIMEOUT_MS });
+          return;
+      }
+    },
+    showEntry: async (label) => {
+      await vscode.commands.executeCommand(CACHE_COMMANDS.showEntry, label);
+    },
   });
 
   register(CACHE_COMMANDS.showEntry, async (label) => {
@@ -282,7 +384,7 @@ export function registerCacheView(context: vscode.ExtensionContext, deps: CacheV
       return;
     }
     const project = deps.currentProject();
-    const result = await run(deps, project, ["cache", "info", label], { timeoutMs: QUERY_TIMEOUT_MS, quiet: true });
+    const result = await run(deps, project, ["cache", "info", label], { timeoutMs: queryTimeoutMs(), quiet: true });
     await preview(t("Cache entry {0}", label), result.stdout.length > 0 ? result.stdout : result.stderr);
   });
 
@@ -395,12 +497,14 @@ export function registerCacheView(context: vscode.ExtensionContext, deps: CacheV
     }
   }
   view.provider.refresh();
+  updateStatus();
 
-  // Keep the tree in step with settings that change its shape.
+  // Keep the tree and the status item in step with the settings that shape them.
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration("mcpp.views.cache") || event.affectsConfiguration("mcpp.cache")) {
+      if (event.affectsConfiguration("mcpp.views.cache") || event.affectsConfiguration("mcpp.cache") || event.affectsConfiguration("mcpp.ui.numberFormat")) {
         view.provider.refresh();
+        updateStatus();
       }
     }),
   );

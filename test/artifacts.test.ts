@@ -369,18 +369,29 @@ test("tag release 工作流校验版本并发布 VSIX", () => {
   assert.match(workflow, /gh release upload.*--clobber/s);
 });
 
-test("PR CI 分离单元打包和 Extension Host E2E", () => {
+test("CI runs the gates, the package checks, the drift check and every e2e variant", () => {
   const workflow = readFileSync(path.join(root, ".github/workflows/ci.yml"), "utf8");
   assert.match(workflow, /pull_request:/);
   assert.match(workflow, /push:\s*\n\s+branches:\s*\n\s+- main/);
   assert.match(workflow, /permissions:\s*\n\s+contents: read/);
   assert.match(workflow, /concurrency:[\s\S]*cancel-in-progress: true/);
-  assert.match(workflow, /node-version: 22/);
-  assert.match(workflow, /unit-and-package:/);
+  assert.match(workflow, /node-version: \$\{\{ env.NODE_VERSION \}\}/);
+  assert.match(workflow, /NODE_VERSION: 22/);
+  // Cross-platform confidence: the unit gates run on Linux and macOS ARM64.
+  assert.match(workflow, /os: \[ubuntu-latest, macos-14\]/);
+  assert.match(workflow, /gates:/);
   assert.match(workflow, /extension-host-e2e:/);
+  assert.match(workflow, /package:/);
   assert.match(workflow, /npm ci/);
   assert.match(workflow, /npm test/);
   assert.match(workflow, /npm run package/);
   assert.match(workflow, /unzip -t/);
-  assert.match(workflow, /xvfb-run -a npm run test:e2e/);
+  assert.match(workflow, /xvfb-run -a npm run test:e2e:one/);
+  // The snapshot drift gate only means something with an mcpp checkout present.
+  assert.match(workflow, /generated-drift:/);
+  assert.match(workflow, /repository: mcpp-community\/mcpp/);
+  assert.match(workflow, /MCPP_REPO: \$\{\{ github.workspace \}\}\/\.mcpp-source/);
+  // The end-to-end dependency resolution check.
+  assert.match(workflow, /isolated-install:/);
+  assert.match(workflow, /sunrisepeak.mcpp-language-server@/);
 });

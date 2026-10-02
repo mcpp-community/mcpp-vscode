@@ -19,11 +19,19 @@ const TASK_TITLES: Record<ProjectTaskKind, string> = {
   clean: "mcpp: 清理",
 };
 
-export function projectTaskPlan(kind: ProjectTaskKind): ProjectTaskPlan {
+/** `mcpp.task.<kind>Args`, so a user can pass `-j 4` or `--quiet` without a wrapper. */
+export const TASK_ARGUMENT_SETTINGS: Readonly<Record<ProjectTaskKind, string>> = {
+  build: "mcpp.task.buildArgs",
+  run: "mcpp.task.runArgs",
+  test: "mcpp.task.testArgs",
+  clean: "mcpp.task.cleanArgs",
+};
+
+export function projectTaskPlan(kind: ProjectTaskKind, extraArgs: readonly string[] = []): ProjectTaskPlan {
   return {
     kind,
     title: TASK_TITLES[kind],
-    args: [kind],
+    args: [kind, ...extraArgs],
   };
 }
 

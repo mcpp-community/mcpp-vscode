@@ -20,12 +20,14 @@ import {
   McppOperationRegistry,
   classifyTaskExit,
   projectTaskPlan,
+  TASK_ARGUMENT_SETTINGS,
   shouldRefreshLanguageServerAfterTask,
   type ProjectTaskKind,
   type TaskCompletion,
 } from "./tasks";
 import { CLI_COMMANDS } from "../commands/ids";
 import { QUICK_MENU_GROUPS, quickMenuItems, quickMenuStatusText } from "../commands/menu";
+import { read } from "../config/access";
 import { t } from "../i18n/t";
 import { runNewProjectFlow, validateNewProjectName } from "./newProject";
 
@@ -85,11 +87,17 @@ export class McppCliController {
     this.status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 40);
     this.status.command = CLI_COMMANDS.showMenu;
     this.status.text = quickMenuStatusText;
-    this.status.tooltip = "打开 mcpp 项目和工具链快捷菜单";
+    this.status.tooltip = t("Open the mcpp project and toolchain quick menu");
   }
 
   public register(): vscode.Disposable[] {
+    this.applyStatusBarSetting();
     const disposables: vscode.Disposable[] = [
+      vscode.workspace.onDidChangeConfiguration((event) => {
+        if (event.affectsConfiguration("mcpp.ui.statusBar")) {
+          this.applyStatusBarSetting();
+        }
+      }),
       this.status,
       vscode.commands.registerCommand(CLI_COMMANDS.showMenu, this.guarded(() => this.showMenu())),
       vscode.commands.registerCommand(CLI_COMMANDS.newProject, this.guarded(() => this.newProject())),
@@ -139,8 +147,13 @@ export class McppCliController {
       }
     }
 
+    // `mcpp.runtime.concurrency` picks the mutual-exclusion scope: one task at a
+    // time per project (the default), or one task at a time for the whole window.
+    const globalScope = read<string>("mcpp.runtime.concurrency") === "global";
     const token: OperationToken = {};
-    const active = this.operations.beginProject(project.root, token);
+    const active = globalScope
+      ? this.operations.beginGlobal(token)
+      : this.operations.beginProject(project.root, token);
     if (active !== undefined) {
       const choice = await vscode.window.showWarningMessage(
         `已有 mcpp 操作正在运行，暂不启动 ${kind}。`,
@@ -154,7 +167,7 @@ export class McppCliController {
 
     let completion: TaskCompletion | undefined;
     try {
-      const plan = projectTaskPlan(kind);
+      const plan = projectTaskPlan(kind, read<string[]>(TASK_ARGUMENT_SETTINGS[kind]));
       completion = await this.executeTask(
         project.root,
         this.mcppExecutable(project),
@@ -163,7 +176,11 @@ export class McppCliController {
       );
       this.appendTaskCompletion(project.root, plan.title, plan.args, completion);
     } finally {
-      this.operations.finishProject(project.root, token);
+      if (globalScope) {
+        this.operations.finishGlobal(token);
+      } else {
+        this.operations.finishProject(project.root, token);
+      }
     }
 
     if (options.notify !== false
@@ -494,7 +511,10 @@ export class McppCliController {
 
   private async showMenu(): Promise<void> {
     const groupLabel = new Map(QUICK_MENU_GROUPS.map((group) => [group.id, t(group.labelKey)]));
-    const items = quickMenuItems.map((item) => ({
+    const showLanguageServer = read<boolean>("mcpp.languageService.menuItems");
+    const items = quickMenuItems
+      .filter((item) => showLanguageServer || item.group !== "languageServer")
+      .map((item) => ({
       label: t(item.labelKey),
       description: groupLabel.get(item.group) ?? item.group,
       command: item.command,
@@ -734,6 +754,15 @@ export class McppCliController {
       void vscode.window.showErrorMessage(`${title}失败（退出码 ${completion.exitCode ?? "未知"}）。请查看任务终端。`);
     } else if (completion.state === "cancelled") {
       void vscode.window.showWarningMessage(`${title}已取消。`);
+    }
+  }
+
+  /** `mcpp.ui.statusBar.show`: the quick menu is reachable without it, so it is optional. */
+  private applyStatusBarSetting(): void {
+    if (read<boolean>("mcpp.ui.statusBar.show")) {
+      this.status.show();
+    } else {
+      this.status.hide();
     }
   }
 

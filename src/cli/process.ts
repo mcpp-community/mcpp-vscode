@@ -11,6 +11,8 @@ export interface ProcessResult {
 
 export interface ProcessRunOptions {
   timeoutMs?: number;
+  /** `mcpp.runtime.maxOutputMiB`; the default matches what the extension shipped before it was configurable. */
+  maxBufferMiB?: number;
 }
 
 export type ProcessRunner = (
@@ -30,7 +32,7 @@ export async function runProcess(
     const result = await execFileAsync(executable, args, {
       cwd,
       encoding: "utf8",
-      maxBuffer: 16 * 1024 * 1024,
+      maxBuffer: Math.max(1, options.maxBufferMiB ?? 16) * 1024 * 1024,
       timeout: options.timeoutMs,
     });
     return {

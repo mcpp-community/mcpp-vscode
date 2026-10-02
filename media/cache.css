@@ -1,0 +1,422 @@
+/*
+ * The cache panel's stylesheet.
+ *
+ * Three rules hold this together, and all three come from the plan (§3.4.3,
+ * §3.5):
+ *
+ * 1. **Theme tokens only.** Every colour is a `var(--vscode-*)` reference, so
+ *    the panel follows light, dark and high-contrast themes without a second
+ *    stylesheet. `currentColor` is used for borders that should inherit the
+ *    text colour; there is not a single literal colour value in this file.
+ * 2. **Never colour alone.** Each bar segment is also a labelled row in the
+ *    legend beneath it, every segment is outlined, and state is carried by the
+ *    text of that row. Colour is decoration on top, which is what keeps the
+ *    panel readable when a theme collapses every hue into one.
+ * 3. **No inline styles.** The document sets `data-*` attributes and this file
+ *    turns them into fill and border, so the strict CSP holds.
+ *
+ * `--vscode-mcpp-cacheOkForeground` and `--vscode-mcpp-cacheStaleForeground`
+ * are the two colour ids this extension contributes; the plan's chart tokens
+ * are the fallbacks, so an older rendering host still gets a sensible hue.
+ */
+
+body {
+  margin: 0;
+  padding: 0;
+  color: var(--vscode-foreground);
+  background-color: var(--vscode-editor-background);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  line-height: 1.5;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+button,
+input {
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--vscode-input-foreground);
+  background-color: var(--vscode-input-background);
+  border: 1px solid;
+  border-color: var(--vscode-input-border, currentColor);
+  border-radius: 2px;
+  padding: 3px 8px;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:hover:not([disabled]) {
+  background-color: var(--vscode-button-secondaryHoverBackground, var(--vscode-toolbar-hoverBackground));
+}
+
+button[disabled],
+input[disabled] {
+  /* Dashed plus dimmed: "closed" is visible without relying on colour. */
+  border-style: dashed;
+  opacity: 0.7;
+  cursor: default;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+/* ------------------------------------------------------------------ header */
+
+.panel-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--vscode-panel-border, currentColor);
+}
+
+.panel-title {
+  margin: 0 0 6px;
+  font-size: 1.3em;
+  font-weight: 600;
+}
+
+.boundary {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid;
+  border-color: var(--vscode-inputValidation-infoBorder, currentColor);
+  background-color: var(--vscode-inputValidation-infoBackground);
+}
+
+main {
+  padding: 0 16px 16px;
+}
+
+/* ---------------------------------------------------------------- warnings */
+
+.warnings {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.warning {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid;
+  border-color: var(--vscode-inputValidation-warningBorder, currentColor);
+  background-color: var(--vscode-inputValidation-warningBackground);
+}
+
+.marker {
+  color: var(--vscode-editorWarning-foreground, currentColor);
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------------- cards */
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.card {
+  padding: 10px 12px;
+  border: 1px solid var(--vscode-panel-border, currentColor);
+  border-top-width: 3px;
+  border-radius: 2px;
+  background-color: var(--vscode-sideBar-background);
+}
+
+.card[data-card="shared"] {
+  border-top-color: var(--vscode-mcpp-cacheOkForeground, var(--vscode-charts-green, currentColor));
+}
+
+.card[data-card="project"] {
+  border-top-color: var(--vscode-charts-blue, currentColor);
+}
+
+.card[data-card="legacy"] {
+  border-top-color: var(--vscode-mcpp-cacheStaleForeground, var(--vscode-charts-yellow, currentColor));
+}
+
+.card-title {
+  margin: 0;
+  font-size: 0.9em;
+  font-weight: 600;
+  color: var(--vscode-descriptionForeground);
+}
+
+.card-value {
+  margin: 4px 0;
+  font-size: 1.5em;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.card-note {
+  margin: 2px 0 0;
+  color: var(--vscode-descriptionForeground);
+  overflow-wrap: anywhere;
+}
+
+/* ----------------------------------------------------------------- actions */
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 10px 0;
+  border-top: 1px solid var(--vscode-panel-border, currentColor);
+  border-bottom: 1px solid var(--vscode-panel-border, currentColor);
+}
+
+/* --------------------------------------------------------------------- viz */
+
+.viz {
+  margin: 16px 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--vscode-panel-border, currentColor);
+}
+
+.viz-title {
+  margin: 0 0 6px;
+  font-size: 1.05em;
+}
+
+.hint,
+.bars-hint {
+  margin: 0 0 6px;
+  color: var(--vscode-descriptionForeground);
+  overflow-wrap: anywhere;
+}
+
+.bars-hint {
+  margin-top: 16px;
+  font-style: italic;
+}
+
+.empty {
+  margin: 6px 0;
+  padding: 10px;
+  border: 1px dashed;
+  border-color: var(--vscode-panel-border, currentColor);
+  color: var(--vscode-descriptionForeground);
+}
+
+/* -------------------------------------------------------------------- bars */
+
+.viz-bar {
+  display: block;
+  width: 100%;
+  height: 22px;
+  background-color: var(--vscode-input-background);
+  border: 1px solid var(--vscode-panel-border, currentColor);
+}
+
+/* The outline is what keeps a segment visible in high contrast when two theme
+   colours collapse into one; `vector-effect` stops it scaling with the bar. */
+.viz-bar rect {
+  stroke: var(--vscode-contrastBorder, var(--vscode-panel-border, currentColor));
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+[data-viz="composition"] rect[data-kind] {
+  fill: var(--vscode-charts-blue, currentColor);
+}
+
+[data-viz="composition"] rect[data-kind="pkg"] {
+  fill: var(--vscode-mcpp-cacheOkForeground, var(--vscode-charts-green, currentColor));
+}
+
+[data-viz="composition"] rect[data-kind="std"] {
+  fill: var(--vscode-charts-purple, currentColor);
+}
+
+[data-viz="composition"] rect[data-kind="unknown"] {
+  fill: var(--vscode-descriptionForeground, currentColor);
+}
+
+[data-viz="composition"] rect[data-segment="legacy"] {
+  fill: var(--vscode-mcpp-cacheStaleForeground, var(--vscode-charts-yellow, currentColor));
+}
+
+[data-viz="age"] rect[data-bucket] {
+  fill: var(--vscode-mcpp-cacheOkForeground, var(--vscode-charts-green, currentColor));
+}
+
+[data-viz="age"] rect[data-bucket="oldest"] {
+  fill: var(--vscode-mcpp-cacheStaleForeground, var(--vscode-charts-yellow, currentColor));
+}
+
+/* ------------------------------------------------------------------ legend */
+
+.legend {
+  display: grid;
+  gap: 2px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legend li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 0;
+  border-bottom: 1px dotted var(--vscode-panel-border, currentColor);
+}
+
+.swatch {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--vscode-contrastBorder, var(--vscode-panel-border, currentColor));
+  background-color: var(--vscode-charts-blue, currentColor);
+}
+
+.swatch[data-kind="pkg"],
+.swatch[data-bucket="recent"] {
+  background-color: var(--vscode-mcpp-cacheOkForeground, var(--vscode-charts-green, currentColor));
+}
+
+.swatch[data-kind="std"] {
+  background-color: var(--vscode-charts-purple, currentColor);
+}
+
+.swatch[data-kind="unknown"] {
+  background-color: var(--vscode-descriptionForeground, currentColor);
+}
+
+.swatch[data-kind="legacy"],
+.swatch[data-bucket="oldest"] {
+  background-color: var(--vscode-mcpp-cacheStaleForeground, var(--vscode-charts-yellow, currentColor));
+}
+
+.legend-label {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.legend-value {
+  color: var(--vscode-descriptionForeground);
+  overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------- top packages */
+
+.top-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.top-table th,
+.top-table td {
+  padding: 3px 4px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--vscode-panel-border, currentColor);
+  overflow-wrap: anywhere;
+  font-size: 0.92em;
+}
+
+.top-table th {
+  color: var(--vscode-descriptionForeground);
+  font-weight: 600;
+}
+
+.top-table th:nth-child(1) {
+  width: 34%;
+}
+
+.top-table th:nth-child(2) {
+  width: 11%;
+}
+
+.top-table th:nth-child(3) {
+  width: 17%;
+}
+
+.top-table th:nth-child(4) {
+  width: 17%;
+}
+
+.top-table th:nth-child(5) {
+  width: 21%;
+}
+
+.top-table time,
+.top-table .unknown {
+  color: var(--vscode-descriptionForeground);
+}
+
+.top-table button {
+  padding: 1px 6px;
+}
+
+/* ------------------------------------------------------------------ budget */
+
+.estimate {
+  margin: 0 0 6px;
+  padding: 6px 8px;
+  border-left: 3px solid;
+  border-left-color: var(--vscode-charts-blue, currentColor);
+  background-color: var(--vscode-textBlockQuote-background);
+  overflow-wrap: anywhere;
+}
+
+.budget-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.budget-label {
+  font-weight: 600;
+}
+
+.budget-row input {
+  width: 7em;
+  min-width: 0;
+}
+
+.budget-unit {
+  color: var(--vscode-descriptionForeground);
+}
+
+/* -------------------------------------------------------------- narrow view */
+
+@media (max-width: 480px) {
+  main {
+    padding: 0 10px 12px;
+  }
+
+  .panel-header {
+    padding: 10px;
+  }
+
+  .cards {
+    grid-template-columns: 1fr;
+  }
+
+  .top-table th:nth-child(2),
+  .top-table td:nth-child(2) {
+    /* Entry counts are the first thing to fold away at 400 px; the legend for
+       each kind still carries them. */
+    width: 12%;
+  }
+
+  .top-table th,
+  .top-table td {
+    padding: 3px 2px;
+    font-size: 0.85em;
+  }
+}

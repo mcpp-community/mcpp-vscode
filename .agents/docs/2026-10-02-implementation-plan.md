@@ -268,3 +268,39 @@ VSIX 打包 69 文件 180 KB；本地隔离 profile 已就绪（含 mcppls 0.0.9
 下载中途反复中断；改用已安装的 VS Code（`MCPP_E2E_CODE`，本轮新增）时 Extension Host
 以 0 退出但没有执行套件。因此 **e2e 的结论仍以 CI 为准**（CI 里有 xvfb 与固定版本），
 本地只验证到"编译通过、变体生成正确、命令面完整"。这一条必须在本轮报告里如实说明。
+
+---
+
+## 10. 进展（round 3，2026-10-02）
+
+`npm test` **471 通过**（round 2 为 420）；三个门禁全绿；CI 重写。
+
+| 项 | 状态 | 说明 |
+|---|---|---|
+| G1 `mcpp.toml` hover／跳转 | ✅ | `src/toml/{hover,navigation}.ts` + `providers.ts` 注册，两个开关生效 |
+| G2 键／枚举补全读 schema | ✅ | `completion.ts` 改为快照驱动；快照没有但 mcpp 接受的段（如 `[workspace.dependencies]`）由手写清单补齐 |
+| G3 依赖版本补全 | 🟡 | `src/cli/search.ts` 解析器已写并测试；尚未接进补全（唯一一处解析人类输出，注释已说明） |
+| G4 缓存 webview 面板 | ✅ | `src/views/cachePanel{,Html}.ts` + `media/cache.css`，叠条／年龄分布／TopN／预算模拟器，已替换原来的 Markdown 预览 |
+| G5 快捷键 | ⬜ | 仍未贡献 keybindings |
+| G6 gc 阈值与遗留缓存节点 | 🟡 | `warnAboveGiB` 已在面板生效；`confirmAboveGiB` 与 `legacyBytes` 未接 |
+| G8 设置接线 | 🟡 | 已接：task 参数四键、状态栏开关、菜单开关、并发作用域、超时、输出缓冲、语言服务刷新模式、视图可见性、启动自检、buildscript 总开关、数字格式。其余见下面的例外表 |
+| G11 i18n | 🟡 | 新增一条"硬编码中文不得增长"的门禁（当前 162 行封顶） |
+| G13 数字格式 | ✅ | `mcpp.ui.numberFormat` 已作用于缓存状态栏与面板 |
+| T39 CI | ✅ | 见下 |
+
+### 新增的两条"不得倒退"门禁
+
+- `test/config/wiring.test.ts`：注册表里每个设置必须被代码读取，或在 `EXCEPTIONS` 里
+  写明理由并指向 §8 的缺口编号。例外表当前 **40** 条，只允许变小（有一条测试专门断言这点）。
+  已弃用的 4 个设置反过来断言"绝不被读取"。
+- `test/i18n/hardcoded.test.ts`：`src/` 里未走 `t()` 的中文行数封顶 162，只允许下降。
+
+### CI（`.github/workflows/ci.yml`）
+
+| job | 内容 |
+|---|---|
+| `gates` | ubuntu + macos-14 矩阵跑 `npm test`（注册表／i18n／生成物漂移／单测） |
+| `generated-drift` | 检出 mcpp 仓库并设置 `MCPP_REPO`，让快照漂移门禁真正执行；另断言 `docs/settings.md` 无 diff |
+| `package` | 打包、`unzip -t`、清单承诺校验（依赖未变、无第二个语言客户端、无 `onCommand:*`）、VSIX 必须包含 l10n／nls／registry／css、上传产物 |
+| `extension-host-e2e` | `xvfb-run` 下跑全部五种 mcppls 变体 |
+| `isolated-install` | 把 VSIX 装进私有 profile，让 VS Code 解析依赖并断言 `sunrisepeak.mcpp-language-server@<版本>` 真实存在 |
