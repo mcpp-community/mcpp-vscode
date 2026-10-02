@@ -1,0 +1,822 @@
+{
+  "sourceVersion": "2026.10.1.3",
+  "sourceCommit": "4d81d062",
+  "sections": [
+    {
+      "header": "[build]",
+      "name": "build",
+      "plane": "compile",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md#23-build--build-configuration",
+      "deprecatedBy": null,
+      "keys": [
+        {
+          "key": "accel",
+          "type": "string",
+          "note": "which device backends/architectures this build targets"
+        },
+        {
+          "key": "allow_host_libs",
+          "type": "boolean"
+        },
+        {
+          "key": "bmi_schedule",
+          "type": "enum",
+          "values": [
+            "auto",
+            "on",
+            "off"
+          ],
+          "default": "auto",
+          "note": "module-edge scheduling; \"auto\" currently means off"
+        },
+        {
+          "key": "build_program_timeout",
+          "type": "number",
+          "default": 600,
+          "note": "seconds a build.mcpp may run; 0 = no limit"
+        },
+        {
+          "key": "c_standard",
+          "type": "string",
+          "default": "c11"
+        },
+        {
+          "key": "cache",
+          "type": "enum",
+          "values": [
+            "global",
+            "local",
+            "off"
+          ],
+          "default": "global"
+        },
+        {
+          "key": "cflags",
+          "type": "array"
+        },
+        {
+          "key": "cxx_runtime",
+          "type": "enum",
+          "values": [
+            "self-contained",
+            "toolchain-coupled",
+            "host-coupled"
+          ],
+          "default": "self-contained",
+          "note": "docs/20; static_stdlib is the old spelling"
+        },
+        {
+          "key": "cxxflags",
+          "type": "array"
+        },
+        {
+          "key": "default-profile",
+          "type": "string",
+          "note": "profile name, e.g. \"release\""
+        },
+        {
+          "key": "defines",
+          "type": "array"
+        },
+        {
+          "key": "dependency_linkage",
+          "type": "enum",
+          "values": [
+            "static",
+            "shared"
+          ],
+          "default": "static"
+        },
+        {
+          "key": "dialect_cxxflags",
+          "type": "array",
+          "since": "2026.9.28.1"
+        },
+        {
+          "key": "flags",
+          "type": "array",
+          "note": "array of { glob, cflags, cxxflags, asmflags, defines } tables",
+          "unmodelled": true
+        },
+        {
+          "key": "include_dirs",
+          "type": "array"
+        },
+        {
+          "key": "include_dirs_after",
+          "type": "array"
+        },
+        {
+          "key": "ios_deployment_target",
+          "type": "string"
+        },
+        {
+          "key": "jobs",
+          "type": "enum",
+          "values": [
+            "auto"
+          ],
+          "note": "a positive integer is accepted as well; the type is either",
+          "unmodelled": true
+        },
+        {
+          "key": "ldflags",
+          "type": "array"
+        },
+        {
+          "key": "macos_deployment_target",
+          "type": "string"
+        },
+        {
+          "key": "module_extensions",
+          "type": "array"
+        },
+        {
+          "key": "platform-dependencies",
+          "type": "string",
+          "note": "names a platform"
+        },
+        {
+          "key": "private_include_dirs",
+          "type": "array"
+        },
+        {
+          "key": "profile",
+          "type": "string",
+          "note": "accepted alias of default-profile"
+        },
+        {
+          "key": "sources",
+          "type": "array"
+        },
+        {
+          "key": "static_stdlib",
+          "type": "boolean",
+          "legacy": true,
+          "note": "replaced by [build] cxx_runtime"
+        },
+        {
+          "key": "std-compat-module",
+          "type": "string"
+        },
+        {
+          "key": "std-module",
+          "type": "string"
+        },
+        {
+          "key": "std-module-flags",
+          "type": "array"
+        },
+        {
+          "key": "target",
+          "type": "string",
+          "note": "default target triple when no --target is passed"
+        }
+      ]
+    },
+    {
+      "header": "[build-dependencies]",
+      "name": "build-dependencies",
+      "plane": "dependency",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md#25-dependencies-dev-dependencies-build-dependencies",
+      "deprecatedBy": null
+    },
+    {
+      "header": "[c-abi]",
+      "name": "c-abi",
+      "plane": "unclassified",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md",
+      "deprecatedBy": null
+    },
+    {
+      "header": "[c-abi-absent]",
+      "name": "c-abi-absent",
+      "plane": "unclassified",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md",
+      "deprecatedBy": null
+    },
+    {
+      "header": "[capabilities]",
+      "name": "capabilities",
+      "plane": "unclassified",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md",
+      "deprecatedBy": null
+    },
+    {
+      "header": "[dependencies]",
+      "name": "dependencies",
+      "plane": "dependency",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md#25-dependencies-dev-dependencies-build-dependencies",
+      "deprecatedBy": null
+    },
+    {
+      "header": "[dev-dependencies]",
+      "name": "dev-dependencies",
+      "plane": "dependency",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md#25-dependencies-dev-dependencies-build-dependencies",
+      "deprecatedBy": null
+    },
+    {
+      "header": "[feature-deps]",
+      "name": "feature-deps",
+      "plane": "gate",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md",
+      "deprecatedBy": null
+    },
+    {
+      "header": "[feature-xlings]",
+      "name": "feature-xlings",
+      "plane": "gate",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md",
+      "deprecatedBy": null
+    },
+    {
+      "header": "[features]",
+      "name": "features",
+      "plane": "gate",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md#28-features--features",
+      "deprecatedBy": null
+    },
+    {
+      "header": "[generated_files]",
+      "name": "generated_files",
+      "plane": "unclassified",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md",
+      "deprecatedBy": null
+    },
+    {
+      "header": "[hooks]",
+      "name": "hooks",
+      "plane": "lifecycle",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md#216-hooks--project-build-lifecycle-commands",
+      "deprecatedBy": null
+    },
+    {
+      "header": "[indices]",
+      "name": "indices",
+      "plane": "unclassified",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md",
+      "deprecatedBy": null
+    },
+    {
+      "header": "[kernel-abi]",
+      "name": "kernel-abi",
+      "plane": "unclassified",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md",
+      "deprecatedBy": null
+    },
+    {
+      "header": "[language]",
+      "name": "language",
+      "plane": "unclassified",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md#41-legacy-language-compatibility-layer",
+      "deprecatedBy": "[package].standard",
+      "keys": [
+        {
+          "key": "import_std",
+          "type": "boolean",
+          "legacy": true,
+          "note": "replaced by [package].standard and the module scan"
+        },
+        {
+          "key": "modules",
+          "type": "boolean",
+          "legacy": true,
+          "note": "replaced by the module scan"
+        },
+        {
+          "key": "standard",
+          "type": "enum",
+          "values": [
+            "c++20",
+            "c++23",
+            "c++26",
+            "c++2a",
+            "c++2c",
+            "gnu++20",
+            "gnu++23",
+            "gnu++26",
+            "c++latest",
+            "c++fly"
+          ],
+          "default": "c++23",
+          "legacy": true,
+          "note": "replaced by [package].standard"
+        }
+      ]
+    },
+    {
+      "header": "[lib]",
+      "name": "lib",
+      "plane": "artifact",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md#24-lib--library-root-module-convention",
+      "deprecatedBy": null,
+      "keys": [
+        {
+          "key": "path",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "header": "[modules]",
+      "name": "modules",
+      "plane": "unclassified",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md",
+      "deprecatedBy": null,
+      "keys": [
+        {
+          "key": "exports",
+          "type": "array"
+        },
+        {
+          "key": "sources",
+          "type": "array"
+        },
+        {
+          "key": "strict",
+          "type": "boolean"
+        }
+      ]
+    },
+    {
+      "header": "[pack]",
+      "name": "pack",
+      "plane": "unclassified",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md",
+      "deprecatedBy": null,
+      "keys": [
+        {
+          "key": "bundle-project",
+          "type": "string",
+          "note": "table of fine-grained overrides",
+          "unmodelled": true
+        },
+        {
+          "key": "debug_symbols",
+          "type": "string"
+        },
+        {
+          "key": "default_mode",
+          "type": "enum",
+          "values": [
+            "static",
+            "bundle-project",
+            "bundle-all"
+          ]
+        },
+        {
+          "key": "exclude",
+          "type": "array"
+        },
+        {
+          "key": "include",
+          "type": "array"
+        },
+        {
+          "key": "strip",
+          "type": "boolean"
+        }
+      ]
+    },
+    {
+      "header": "[package]",
+      "name": "package",
+      "plane": "identity",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md#21-package--package-metadata",
+      "deprecatedBy": null,
+      "keys": [
+        {
+          "key": "accelerators",
+          "type": "array",
+          "note": "accelerator backends the package supports (docs/04 §2.12b)"
+        },
+        {
+          "key": "authors",
+          "type": "array"
+        },
+        {
+          "key": "c-environment",
+          "type": "string"
+        },
+        {
+          "key": "description",
+          "type": "string"
+        },
+        {
+          "key": "exclusive",
+          "type": "array"
+        },
+        {
+          "key": "license",
+          "type": "string"
+        },
+        {
+          "key": "mcpp",
+          "type": "string",
+          "since": "2026.9.28.3",
+          "note": "release floor, only the \">=<release>\" form is accepted (docs/04 §2.1)"
+        },
+        {
+          "key": "metadata",
+          "type": "string",
+          "note": "table keyed by tool name; mcpp keeps it and does not interpret it",
+          "unmodelled": true
+        },
+        {
+          "key": "name",
+          "type": "string"
+        },
+        {
+          "key": "namespace",
+          "type": "string"
+        },
+        {
+          "key": "platforms",
+          "type": "enum",
+          "values": [
+            "linux",
+            "macos",
+            "windows",
+            "ios",
+            "android",
+            "emscripten"
+          ],
+          "note": "array of platform names (docs/04 §2.12)"
+        },
+        {
+          "key": "provides",
+          "type": "array"
+        },
+        {
+          "key": "repo",
+          "type": "string"
+        },
+        {
+          "key": "requires",
+          "type": "array"
+        },
+        {
+          "key": "requires_abi",
+          "type": "array"
+        },
+        {
+          "key": "standard",
+          "type": "enum",
+          "values": [
+            "c++20",
+            "c++23",
+            "c++26",
+            "c++2a",
+            "c++2c",
+            "gnu++20",
+            "gnu++23",
+            "gnu++26",
+            "c++latest",
+            "c++fly"
+          ],
+          "default": "c++23",
+          "note": "c++2a/c++2c are aliases; gnu++NN, c++latest and c++fly are documented too"
+        },
+        {
+          "key": "std-compat-module",
+          "type": "string"
+        },
+        {
+          "key": "std-module",
+          "type": "string"
+        },
+        {
+          "key": "std-module-flags",
+          "type": "array"
+        },
+        {
+          "key": "version",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "header": "[profile]",
+      "name": "profile",
+      "plane": "compile",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md#29-profilename--build-profiles",
+      "deprecatedBy": null,
+      "keys": [
+        {
+          "key": "cflags",
+          "type": "array"
+        },
+        {
+          "key": "cxxflags",
+          "type": "array"
+        },
+        {
+          "key": "debug",
+          "type": "boolean",
+          "note": "-g"
+        },
+        {
+          "key": "dependency_linkage",
+          "type": "enum",
+          "values": [
+            "static",
+            "shared"
+          ]
+        },
+        {
+          "key": "ldflags",
+          "type": "array"
+        },
+        {
+          "key": "lto",
+          "type": "boolean",
+          "note": "-flto"
+        },
+        {
+          "key": "opt",
+          "type": "enum",
+          "values": [
+            "s",
+            "z"
+          ],
+          "note": "an -O level: a number, or \"s\"/\"z\"",
+          "unmodelled": true
+        },
+        {
+          "key": "strip",
+          "type": "boolean",
+          "note": "-s at link time"
+        }
+      ]
+    },
+    {
+      "header": "[resources]",
+      "name": "resources",
+      "plane": "metadata",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md#215-resources--metadata-and-assets-embedded-in-the-artifact-2026871",
+      "deprecatedBy": null,
+      "keys": [
+        {
+          "key": "extra-inputs",
+          "type": "array"
+        },
+        {
+          "key": "files",
+          "type": "array"
+        },
+        {
+          "key": "icon",
+          "type": "string"
+        },
+        {
+          "key": "version-info",
+          "type": "boolean"
+        }
+      ]
+    },
+    {
+      "header": "[runtime]",
+      "name": "runtime",
+      "plane": "metadata",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md#211-runtime--provider-neutral-runtime-contract",
+      "deprecatedBy": null
+    },
+    {
+      "header": "[scan_overrides]",
+      "name": "scan_overrides",
+      "plane": "unclassified",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md#283-scan_overridesglob--author-asserted-scan-results",
+      "deprecatedBy": null
+    },
+    {
+      "header": "[target]",
+      "name": "target",
+      "plane": "condition",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md#271-target--platform-conditional-dependencies--flags",
+      "deprecatedBy": null,
+      "keys": [
+        {
+          "key": "cxx_runtime",
+          "type": "enum",
+          "values": [
+            "self-contained",
+            "toolchain-coupled",
+            "host-coupled"
+          ]
+        },
+        {
+          "key": "linkage",
+          "type": "enum",
+          "values": [
+            "static",
+            "shared"
+          ]
+        },
+        {
+          "key": "min_api_level",
+          "type": "number"
+        },
+        {
+          "key": "runner",
+          "type": "array",
+          "note": "argv template for mcpp run/test on this target"
+        },
+        {
+          "key": "sysroot",
+          "type": "string"
+        },
+        {
+          "key": "toolchain",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "header": "[targets]",
+      "name": "targets",
+      "plane": "artifact",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md#22-targetsname--build-targets",
+      "deprecatedBy": null,
+      "keys": [
+        {
+          "key": "cflags",
+          "type": "array"
+        },
+        {
+          "key": "cxxflags",
+          "type": "array"
+        },
+        {
+          "key": "defines",
+          "type": "array"
+        },
+        {
+          "key": "exports",
+          "type": "string",
+          "note": "a path to a symbol-pattern file, or an inline array of patterns (docs/04 §2.2)",
+          "unmodelled": true
+        },
+        {
+          "key": "kind",
+          "type": "enum",
+          "values": [
+            "bin",
+            "lib",
+            "shared",
+            "app"
+          ],
+          "since": "2026.9.12.3",
+          "note": "\"app\" requires mcpp 2026.9.12.3+; library/binary/dylib/so/shlib are accepted aliases"
+        },
+        {
+          "key": "linkage",
+          "type": "enum",
+          "values": [
+            "static",
+            "shared"
+          ],
+          "since": "2026.9.15.2"
+        },
+        {
+          "key": "main",
+          "type": "string"
+        },
+        {
+          "key": "required_features",
+          "type": "array"
+        },
+        {
+          "key": "soname",
+          "type": "string"
+        },
+        {
+          "key": "windows_code_page",
+          "type": "enum",
+          "values": [
+            "utf-8",
+            "legacy"
+          ],
+          "since": "2026.9.26.1"
+        },
+        {
+          "key": "windows_entry",
+          "type": "enum",
+          "values": [
+            "main",
+            "wmain",
+            "WinMain",
+            "wWinMain"
+          ],
+          "since": "2026.9.12.2"
+        },
+        {
+          "key": "windows_subsystem",
+          "type": "enum",
+          "values": [
+            "console",
+            "windows"
+          ],
+          "since": "2026.9.12.2"
+        }
+      ]
+    },
+    {
+      "header": "[test]",
+      "name": "test",
+      "plane": "unclassified",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md#217-test--where-test-programs-are",
+      "deprecatedBy": null,
+      "keys": [
+        {
+          "key": "discover",
+          "type": "array",
+          "note": "globs whose every match is one test program"
+        }
+      ]
+    },
+    {
+      "header": "[toolchain]",
+      "name": "toolchain",
+      "plane": "compile",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md#27-toolchain--toolchain-configuration",
+      "deprecatedBy": null,
+      "openKeys": true,
+      "keys": [
+        {
+          "key": "bootstrap",
+          "type": "string",
+          "note": "managed spec for the toolchain that builds build programs"
+        },
+        {
+          "key": "default",
+          "type": "string",
+          "note": "a platform key: a managed spec or `{ path = ... }`"
+        },
+        {
+          "key": "family",
+          "type": "enum",
+          "values": [
+            "gcc",
+            "llvm",
+            "msvc",
+            "emsdk",
+            "android-ndk"
+          ],
+          "note": "on a `[toolchain.<platform>]` entry table; a table named by `path` accepts only \"gcc\" or \"llvm\""
+        }
+      ]
+    },
+    {
+      "header": "[tools]",
+      "name": "tools",
+      "plane": "unclassified",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md",
+      "deprecatedBy": null
+    },
+    {
+      "header": "[workspace]",
+      "name": "workspace",
+      "plane": "unclassified",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md",
+      "deprecatedBy": null
+    },
+    {
+      "header": "[xlings]",
+      "name": "xlings",
+      "plane": "tool",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md#213-xlings--the-projects-environment",
+      "deprecatedBy": null
+    }
+  ],
+  "rules": [
+    {
+      "id": "syntax",
+      "severity": "error"
+    },
+    {
+      "id": "unknown-section",
+      "severity": "warning"
+    },
+    {
+      "id": "unknown-key",
+      "severity": "warning"
+    },
+    {
+      "id": "plane-separation",
+      "severity": "warning"
+    },
+    {
+      "id": "mcpp-floor",
+      "severity": "error"
+    },
+    {
+      "id": "legacy-key",
+      "severity": "info"
+    },
+    {
+      "id": "array-table",
+      "severity": "error"
+    }
+  ]
+}
