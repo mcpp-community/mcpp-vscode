@@ -337,7 +337,7 @@ CI 漂移 job：用 `mcpp@main` 重新生成 + `git diff --exit-code`。
 |---|---|---|
 | 段头补全 | 已有，改为读 schema（平面分组 + legacy 标记） | `mcpp.toml.completion` |
 | **键补全** | 已知段的键位置 → 该段全部键（类型、默认值、legacy），已存在的键剔除 | 同上 |
-| **枚举值补全** | `standard`、`kind`、`linkage`、`opt_level`、`[profile.*]`、`[target.<cfg>]` selector 词表 | 同上 |
+| **枚举值补全** | `standard`、`kind`、`linkage`、`opt`、`[profile.*]`、`[target.<cfg>]` selector 词表 | 同上 |
 | **悬停** | 段头/键 → 类型、默认值、平面、起始版本、legacy 迁移建议、`docs/04` 章节链接 | `mcpp.toml.hover` |
 | **诊断** | ① TOML 语法错误；② 未知段；③ 已知段的未知键；④ `[dependencies]` 里的 `xim:` / `[xlings]` 里的 mcpp 包（SPEC-004 §2）；⑤ `[package].mcpp` 非 `>=` 形式（SPEC-007 R9.8）；⑥ legacy 键；⑦ `[[...]]` 数组表 | `mcpp.toml.diagnostics.*`（**未知段/未知键默认 warning**） |
 | **跳转** | `workspace = true` → `[workspace.dependencies]` 同名键；`path = "../x"` → 那个 `mcpp.toml` 的 `[package]`；`features = ["a"]` → `[features.a]` | `mcpp.toml.navigation` |
