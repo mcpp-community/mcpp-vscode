@@ -329,3 +329,14 @@ VSIX 打包 69 文件 180 KB；本地隔离 profile 已就绪（含 mcppls 0.0.9
 | 死代码 | ✅ | 除入口 `src/extension.ts` 外，`src/` 已无未被引用的模块 |
 | G11 i18n（162 行硬编码中文） | 🟡 | 后台工作流正在清零，完成后需合并译文并把门禁上限降到实际值 |
 | Windows CI | ⬜ | 仍未覆盖；macOS 也在矩阵里，但同样未经本机验证（本机只有 Linux） |
+
+### round 5 收尾
+
+| 项 | 状态 |
+|---|---|
+| G11 i18n | ✅ **162 → 0**，门禁改为断言 0；`t.ts` 真正变成 vscode-free（import type + 惰性 require） |
+| 架构门禁 | ✅ 新增 `test/architecture.test.ts`：41 个纯模块既不得 `import vscode`，也必须能在无编辑器进程中加载 |
+| 设置文档 | ✅ 64 个设置中英对照 |
+| 发布守卫 | ✅ `release.yml` 与 CI 同样校验体积与目录 |
+| Windows CI | ⬜ 已知缺口（本机只有 Linux，macOS 同样未经本机验证） |
+| e2e / CI 本机运行 | ⬜ 环境限制，结论以 CI 为准 |
