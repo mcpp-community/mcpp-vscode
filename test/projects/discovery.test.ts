@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { findNearestMcppProject } from "../src/discovery";
+import { findNearestMcppProject } from "../../src/projects/discovery";
 
 test("finds the nearest mcpp manifest and project root", () => {
   const root = mkdtempSync(path.join(os.tmpdir(), "mcpp-vscode-discovery-"));

@@ -11,7 +11,7 @@ import {
   contextAt,
   type ReplaceRange,
   type SectionResolution,
-} from "./mcppTomlParser";
+} from "./parser";
 
 export type McppTomlSuggestionKind = "section" | "template";
 

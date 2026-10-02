@@ -7,7 +7,7 @@ import {
   registerInProjectContext,
   updateInProjectContext,
   type InProjectEnvironment,
-} from "../src/inProject";
+} from "../../src/projects/context";
 
 interface FakeState {
   project: unknown | undefined;

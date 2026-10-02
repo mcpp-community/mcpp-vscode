@@ -1,23 +1,23 @@
 import * as vscode from "vscode";
 
-import { McppCliController } from "./cliController";
-import { CLI_COMMANDS, DEPRECATED_COMMANDS } from "./commands";
-import { findNearestMcppProject, type McppProjectDiscovery } from "./discovery";
-import { MCPP_MANIFEST_GLOB, registerInProjectContext } from "./inProject";
+import { McppCliController } from "./cli/controller";
+import { CLI_COMMANDS, DEPRECATED_COMMANDS } from "./commands/ids";
+import { findNearestMcppProject, type McppProjectDiscovery } from "./projects/discovery";
+import { MCPP_MANIFEST_GLOB, registerInProjectContext } from "./projects/context";
 import {
   createLanguageServerBridge,
   type LanguageServerBridge,
   type LanguageServerCommandResult,
-} from "./languageServer";
-import { computeMcppTomlCompletions } from "./mcppTomlCompletion";
+} from "./mcppls/bridge";
+import { computeMcppTomlCompletions } from "./toml/completion";
 import {
   buildModuleSetupPlan,
   executeModuleSetup,
   moduleSetupConfirmation,
   type ModuleSetupDecision,
   type ModuleSetupStepResult,
-} from "./moduleSetup";
-import type { TaskCompletion } from "./tasks";
+} from "./workflows/moduleSetup";
+import type { TaskCompletion } from "./cli/tasks";
 
 function findCurrentProject(): McppProjectDiscovery | undefined {
   const activeEditor = vscode.window.activeTextEditor;

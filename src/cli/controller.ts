@@ -13,8 +13,8 @@ import {
   toolchainSpecTargetHint,
   type ToolchainInventory,
   type ToolchainItem,
-} from "./cli";
-import type { McppProjectDiscovery } from "./discovery";
+} from "./toolchain";
+import type { McppProjectDiscovery } from "../projects/discovery";
 import { runProcess } from "./process";
 import {
   McppOperationRegistry,
@@ -24,7 +24,8 @@ import {
   type ProjectTaskKind,
   type TaskCompletion,
 } from "./tasks";
-import { CLI_COMMANDS, quickMenuItems, quickMenuStatusText } from "./commands";
+import { CLI_COMMANDS } from "../commands/ids";
+import { quickMenuItems, quickMenuStatusText } from "../commands/menu";
 import { runNewProjectFlow, validateNewProjectName } from "./newProject";
 
 export interface McppCliControllerOptions {

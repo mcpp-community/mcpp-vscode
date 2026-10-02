@@ -7,7 +7,7 @@ import {
   resolveSection,
   type TomlKeyValueNode,
   type TomlSectionNode,
-} from "../src/mcppTomlParser";
+} from "../../src/toml/parser";
 
 function sectionAt(lines: string[], index: number): TomlSectionNode {
   const node = parseMcppToml(lines).nodes[index];

@@ -78,7 +78,7 @@ test("declares mcpp-language-server as the C++ modules language service", () => 
 });
 
 test("一键向导只执行普通 build 并在之后刷新 C++ 模块语言服务", () => {
-  const controller = readFileSync(path.join(root, "src/cliController.ts"), "utf8");
+  const controller = readFileSync(path.join(root, "src/cli/controller.ts"), "utf8");
   const source = readFileSync(path.join(root, "src/extension.ts"), "utf8");
   const start = source.indexOf("async function autoConfigureModulesWizard");
   const end = source.indexOf("const mcppTomlCompletionKinds", start);
@@ -220,7 +220,7 @@ test("ships an injection grammar with module-specific scopes", () => {
 });
 
 test("设置全局默认后先释放工具链锁再提供立即构建", () => {
-  const source = readFileSync(path.join(root, "src/cliController.ts"), "utf8");
+  const source = readFileSync(path.join(root, "src/cli/controller.ts"), "utf8");
   const start = source.indexOf("private async selectDefaultToolchainFromInventory");
   const end = source.indexOf("private async pickInstallSpec", start);
   assert.notEqual(start, -1);
@@ -233,7 +233,7 @@ test("设置全局默认后先释放工具链锁再提供立即构建", () => {
 });
 
 test("项目任务结束后先释放项目锁再刷新 C++ 模块语言服务", () => {
-  const source = readFileSync(path.join(root, "src/cliController.ts"), "utf8");
+  const source = readFileSync(path.join(root, "src/cli/controller.ts"), "utf8");
   const start = source.indexOf("public async runProjectTask");
   const end = source.indexOf("public async showToolchains", start);
   assert.notEqual(start, -1);
@@ -246,7 +246,7 @@ test("项目任务结束后先释放项目锁再刷新 C++ 模块语言服务", 
 });
 
 test("安装流程把系统工具链和 target 兼容 spec 交给 mcpp 解析", () => {
-  const source = readFileSync(path.join(root, "src/cliController.ts"), "utf8");
+  const source = readFileSync(path.join(root, "src/cli/controller.ts"), "utf8");
   const start = source.indexOf("public async installToolchain");
   const end = source.indexOf("public async selectDefaultToolchain", start);
   assert.notEqual(start, -1);
@@ -261,7 +261,7 @@ test("安装流程把系统工具链和 target 兼容 spec 交给 mcpp 解析", 
 });
 
 test("泛化 triple 工具链由 mcpp 最终校验", () => {
-  const source = readFileSync(path.join(root, "src/cliController.ts"), "utf8");
+  const source = readFileSync(path.join(root, "src/cli/controller.ts"), "utf8");
   const start = source.indexOf("public async installToolchain");
   const end = source.indexOf("public async selectDefaultToolchain", start);
   const method = source.slice(start, end);
@@ -270,7 +270,7 @@ test("泛化 triple 工具链由 mcpp 最终校验", () => {
 });
 
 test("新建工程先校验目标路径再确认创建，成功后只打开不构建", () => {
-  const source = readFileSync(path.join(root, "src/cliController.ts"), "utf8");
+  const source = readFileSync(path.join(root, "src/cli/controller.ts"), "utf8");
   const start = source.indexOf("public async newProject");
   const end = source.indexOf("private guarded", start);
   assert.notEqual(start, -1);
@@ -292,7 +292,7 @@ test("新建工程先校验目标路径再确认创建，成功后只打开不�
 });
 
 test("新建工程契约是创建并打开，不自动构建", () => {
-  const controller = readFileSync(path.join(root, "src/cliController.ts"), "utf8");
+  const controller = readFileSync(path.join(root, "src/cli/controller.ts"), "utf8");
   const extension = readFileSync(path.join(root, "src/extension.ts"), "utf8");
   assert.doesNotMatch(controller, /globalState|PENDING_NEW_PROJECT/);
   assert.doesNotMatch(extension, /PENDING_NEW_PROJECT/);
@@ -322,7 +322,7 @@ test("README 说明 mcpp 与 mcppls 的职责边界和升级限制", () => {
 });
 
 test("嵌套工程提示不猜测它一定是 mcpp 工作区成员", () => {
-  const source = readFileSync(path.join(root, "src/cliController.ts"), "utf8");
+  const source = readFileSync(path.join(root, "src/cli/controller.ts"), "utf8");
   assert.doesNotMatch(source, /isWorkspaceMember/);
   assert.doesNotMatch(source, /当前是工作区成员/);
 });

@@ -6,7 +6,7 @@ import {
   classifyTaskExit,
   projectTaskPlan,
   shouldRefreshLanguageServerAfterTask,
-} from "../src/tasks";
+} from "../../src/cli/tasks";
 
 test("基础项目任务使用固定的 mcpp 参数数组", () => {
   assert.deepEqual(projectTaskPlan("build"), {

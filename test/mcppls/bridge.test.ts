@@ -5,7 +5,7 @@ import {
   createLanguageServerBridge,
   MCPPLS_COMMANDS,
   MCPPLS_EXTENSION_ID,
-} from "../src/languageServer";
+} from "../../src/mcppls/bridge";
 
 function harness(installed = true) {
   const calls: Array<{ command: string; args: unknown[] }> = [];

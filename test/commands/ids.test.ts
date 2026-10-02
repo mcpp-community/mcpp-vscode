@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { CLI_COMMANDS, DEPRECATED_COMMANDS, quickMenuItems, quickMenuStatusText } from "../src/commands";
+import { CLI_COMMANDS, DEPRECATED_COMMANDS } from "../../src/commands/ids";
+import { quickMenuItems, quickMenuStatusText } from "../../src/commands/menu";
 
 test("状态栏快捷菜单名称与 mcpp 项目状态易于区分", () => {
   assert.equal(quickMenuStatusText, "$(tools) mcpp: 快捷菜单");

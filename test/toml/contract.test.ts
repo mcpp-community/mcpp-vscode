@@ -10,7 +10,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
 
-import { SECTION_HEADERS, type SectionHeaderSpec } from "../src/mcppTomlCompletion";
+import { SECTION_HEADERS, type SectionHeaderSpec } from "../../src/toml/completion";
 
 /** 探测 mcpp 是否可用；不可用则全部跳过。 */
 function detectMcpp(): string | undefined {
@@ -143,7 +143,7 @@ test("[indices] 带 path 条目被接受（项目级索引重定向）", { skip:
   assertClean(run, "[indices] 索引重定向");
 });
 
-// 依赖 spec 的 12 个键：与 src/mcppTomlCompletion.ts 的 DEPENDENCY_TEMPLATES
+// 依赖 spec 的 12 个键：与 src/toml/completion.ts 的 DEPENDENCY_TEMPLATES
 // 保持同步（模板未逐一列出键名，此处按 mcpp manifest schema 硬编码）。
 // 注意：features/backend/tools/host-module/reexport 不是「锚定键」——单独出现
 // 时 mcpp 会把内联表当成嵌套依赖表报错，必须搭配 version/path/git/workspace

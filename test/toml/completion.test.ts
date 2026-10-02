@@ -4,7 +4,7 @@ import test from "node:test";
 import {
   computeMcppTomlCompletions,
   type McppTomlSuggestion,
-} from "../src/mcppTomlCompletion";
+} from "../../src/toml/completion";
 
 function labels(suggestions: McppTomlSuggestion[]): string[] {
   return suggestions.map((suggestion) => suggestion.label);

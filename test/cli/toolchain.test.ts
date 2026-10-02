@@ -9,7 +9,7 @@ import {
   parseToolchainList,
   toolchainInstallKind,
   toolchainSpecTargetHint,
-} from "../src/cli";
+} from "../../src/cli/toolchain";
 
 const plainOutput = [
   "Toolchains:",

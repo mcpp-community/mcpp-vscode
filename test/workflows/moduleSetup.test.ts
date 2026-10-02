@@ -7,7 +7,7 @@ import {
   moduleSetupConfirmation,
   type ModuleSetupOperations,
   type ModuleSetupStepResult,
-} from "../src/moduleSetup";
+} from "../../src/workflows/moduleSetup";
 
 test("只信任且不忙时可开始一键配置", () => {
   assert.deepEqual(buildModuleSetupPlan(true, false), { kind: "ready" });

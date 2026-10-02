@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { validateNewProjectName } from "../src/newProject";
+import { validateNewProjectName } from "../../src/cli/newProject";
 
 test("拒绝空值和纯空白项目名", () => {
   for (const name of ["", "   "]) {
@@ -64,7 +64,7 @@ test("接受常规项目名，前后空白忽略", () => {
     assert.equal(validateNewProjectName(name), undefined, `should accept: ${name}`);
   }
 });
-import { runNewProjectFlow, type NewProjectActions } from "../src/newProject";
+import { runNewProjectFlow, type NewProjectActions } from "../../src/cli/newProject";
 
 function recordingActions(overrides: Partial<NewProjectActions>, calls: string[]): NewProjectActions {
   return {

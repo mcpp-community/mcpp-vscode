@@ -234,7 +234,7 @@
   "scripts": {
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "compile": "tsc -p tsconfig.json",
-    "test": "npm run clean && npm run compile && node --test dist/test/*.test.js",
+    "test": "npm run clean && npm run compile && node --test \"dist/test/**/*.test.js\"",
     "package": "npm run clean && npm run compile && vsce package",
     "test:e2e": "npm run compile && node dist/test/e2e/runTest.js",
     "test:all": "npm test && npm run test:e2e"

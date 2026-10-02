@@ -3,3 +3,6 @@ dist/
 *.vsix
 .DS_Store
 .vscode-test/
+
+# 分析报告与评审记录：本地产物，只保留 .agents/docs
+.agents/reviews/
