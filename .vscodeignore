@@ -2,6 +2,9 @@
 .github/**
 .gitignore
 .agents/**
+# 本地验收 profile（tools/dev-profile.mjs 生成）与 e2e 的 VS Code 缓存都不属于产物
+.dev-profile/**
+.vscode-test/**
 docs/**
 src/**
 test/**

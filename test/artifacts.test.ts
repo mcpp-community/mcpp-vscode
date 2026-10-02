@@ -386,6 +386,9 @@ test("CI runs the gates, the package checks, the drift check and every e2e varia
   assert.match(workflow, /npm test/);
   assert.match(workflow, /npm run package/);
   assert.match(workflow, /unzip -t/);
+  // A local dev profile once leaked into the VSIX (64 MB); the guard is now explicit.
+  assert.match(workflow, /The VSIX stays small and free of local state/);
+  assert.match(workflow, /forbidden in \.dev-profile\/ \.agents\/ test\/ tools\/ src\/ node_modules\//);
   assert.match(workflow, /xvfb-run -a npm run test:e2e:one/);
   // The snapshot drift gate only means something with an mcpp checkout present.
   assert.match(workflow, /generated-drift:/);
