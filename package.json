@@ -853,7 +853,10 @@
     "gen:docs": "node tools/generate-settings-docs.mjs",
     "check:config": "node tools/check-config.mjs",
     "check:l10n": "node tools/l10n-check.mjs",
-    "check": "npm run check:config && npm run check:l10n"
+    "check": "npm run check:config && npm run check:l10n && npm run check:generated",
+    "gen:buildscript": "node tools/generate-buildscript-api.mjs",
+    "gen:toml": "node tools/generate-toml-schema.mjs",
+    "check:generated": "node tools/check-generators.mjs"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
