@@ -21,6 +21,7 @@ import {
   parseDescriptorLua,
   parseOpenkalJson,
   parseSearchOutput,
+  parseSelfEnv,
   searchText,
   stripLuaComments,
   surfaceCounts,
@@ -546,6 +547,39 @@ test("parseSearchOutput reads mcpp search's human output tolerantly", () => {
   ]);
   assert.deepEqual(parseSearchOutput(""), []);
   assert.deepEqual(parseSearchOutput("nothing to see"), []);
+});
+
+test("parseSelfEnv reads only the machine envelope it recognises", () => {
+  // The real answer from `mcpp self env --format json` (abridged).
+  const real = JSON.stringify({
+    data: {
+      buildCache: "/home/u/.mcpp/build-cache/v1",
+      mcppHome: "/home/u/.mcpp",
+      mcppVersion: "2026.10.1.3",
+      registry: "/home/u/.mcpp/registry",
+    },
+    diagnostics: [],
+    effects: [],
+    kind: "mcpp.env",
+    kindVersion: 1,
+    mcpp: { protocol: { max: 1, min: 1 }, version: "2026.10.1.3" },
+    schemaVersion: 1,
+  });
+  assert.deepEqual(parseSelfEnv(real), { mcppHome: "/home/u/.mcpp", registry: "/home/u/.mcpp/registry" });
+
+  // A machine shape that is not this one is refused rather than guessed at.
+  assert.equal(parseSelfEnv('{"data":{"mcppHome":"/x"},"kind":"mcpp.cache","schemaVersion":1}'), undefined);
+  assert.equal(parseSelfEnv('{"kind":"mcpp.env","schemaVersion":1}'), undefined);
+  assert.equal(parseSelfEnv('{"data":{"mcppHome":"/x"},"kind":"mcpp.env"}'), undefined, "no schemaVersion");
+  assert.equal(
+    parseSelfEnv('{"data":{"mcppHome":"/x"},"kind":"mcpp.env","schemaVersion":"1"}'),
+    undefined,
+    "a string schemaVersion is not a document we can trust",
+  );
+  assert.equal(parseSelfEnv("mcpp home is /x"), undefined);
+  assert.equal(parseSelfEnv(""), undefined);
+  // An empty string is not a directory.
+  assert.deepEqual(parseSelfEnv('{"data":{"mcppHome":"  "},"kind":"mcpp.env","schemaVersion":1}'), {});
 });
 
 test("compareVersions orders numbers numerically and aliases last", () => {

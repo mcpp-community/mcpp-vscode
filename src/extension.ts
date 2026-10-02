@@ -38,7 +38,7 @@ import { languagePreference, setLanguagePreference, t, type LanguagePreference }
 import { readCacheSnapshot, registerCacheView } from "./views/cacheView";
 import { registerLanguageServerCommands } from "./views/languageServerView";
 import { createLibraryDetailOpener } from "./library/detailPanel";
-import { locateIndexRoots } from "./library/indexLocator";
+import { loadSnapshot } from "./library/indexLocator";
 import { registerLibraryView } from "./library/libraryView";
 import { registerProjectView } from "./views/projectView";
 
@@ -330,8 +330,8 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
     openDetail: openLibraryDetail,
     output,
   });
-  // `registerLibraryView` registers its own provider; these are only the two entry
-  // points a menu or the project view can name.
+  // `registerLibraryView` registers its own webview provider; these are only the
+  // entry points a menu or the project view can name.
   extensionContext.subscriptions.push(
     vscode.commands.registerCommand(LIBRARY_COMMANDS.search, async () => {
       await vscode.commands.executeCommand("mcpp.library.focus");
@@ -342,21 +342,46 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
       }
     }),
     vscode.commands.registerCommand(LIBRARY_COMMANDS.updateIndex, async () => {
-      const result = await runProcess(cliController.mcppExecutable(findCurrentProject()), ["index", "update"], findCurrentProject()?.root, { timeoutMs: 300_000 });
+      if (!vscode.workspace.isTrusted) {
+        void vscode.window.showWarningMessage(
+          t("This workspace is not trusted. mcpp commands may run external programs named by workspace settings; trust the workspace first."),
+        );
+        return;
+      }
+      const project = findCurrentProject();
+      // A refresh that reaches the network is worth a progress notification, and
+      // a refresh that succeeds has to *say so*: the command produced no visible
+      // change at all before, which reads exactly like a broken button.
+      const result = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: t("Refreshing the mcpp Package Index…") },
+        () =>
+          runProcess(cliController.mcppExecutable(project), ["index", "update"], project?.root, {
+            timeoutMs: 300_000,
+          }),
+      );
       await library.refresh();
-      await markIndexFound();
       if (result.exitCode !== 0) {
         void vscode.window.showErrorMessage(t("mcpp index update failed with exit code {0}", result.exitCode));
+        return;
       }
+      // `library.refresh()` has just filled the snapshot cache, so this second
+      // look is the count the view is showing, not another read of the index.
+      const snapshot = await loadSnapshot(project === undefined ? {} : { projectRoot: project.root });
+      void vscode.window.showInformationMessage(
+        t(
+          "mcpp Package Index refreshed: {0} package(s) from {1} index folder(s).",
+          snapshot.entries.length,
+          snapshot.roots.length,
+        ),
+      );
     }),
   );
-  // The key drives `viewsWelcome`; it has to be recomputed whenever an index may
-  // have appeared, not only at activation.
-  const markIndexFound = async (): Promise<void> => {
-    const roots = await locateIndexRoots();
-    await vscode.commands.executeCommand("setContext", "mcpp.library.indexFound", roots.length > 0);
-  };
-  void markIndexFound();
+  // There is no `mcpp.library.indexFound` context key and no `viewsWelcome`
+  // entry for the library view. `paneview.ts`'s base `ViewPane` answers
+  // `shouldShowWelcome() === false`; only the tree-shaped panes override it, so
+  // welcome content can never render inside a `"type": "webview"` view. The
+  // library view states its own empty case in the document instead, which is the
+  // only place VS Code will show it.
 
   registerCacheView(extensionContext, {
     output,

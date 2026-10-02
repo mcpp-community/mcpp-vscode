@@ -1183,6 +1183,48 @@ export function parseSearchOutput(text: string): SearchHit[] {
   return hits;
 }
 
+// ─────────────────────────────────────────────────────── mcpp self env ──
+
+/** The shape of `mcpp self env --format json`, as far as this extension reads it. */
+export interface SelfEnv {
+  /** `$MCPP_HOME`, the directory everything else hangs off. */
+  mcppHome?: string;
+  /** `<mcppHome>/registry`, when mcpp states it. */
+  registry?: string;
+}
+
+/**
+ * `mcpp self env --format json`, read for the one field that matters.
+ *
+ * This is a **machine** shape, not human text, so it is held to the detection
+ * rule `src/cli/protocol.ts` states — presence *and* type of `schemaVersion`,
+ * plus the `kind` this reader owns — and anything else is refused rather than
+ * guessed at. The library view falls back to its own globs when this returns
+ * `undefined`, so a version of mcpp that renames a field costs a fallback and
+ * never a crash.
+ */
+export function parseSelfEnv(text: string): SelfEnv | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+  if (!isRecord(parsed) || typeof parsed.schemaVersion !== "number" || parsed.kind !== "mcpp.env") {
+    return undefined;
+  }
+  const data = parsed.data;
+  if (!isRecord(data)) {
+    return undefined;
+  }
+  const home = data.mcppHome;
+  const registry = data.registry;
+  return {
+    ...(typeof home === "string" && home.trim().length > 0 ? { mcppHome: home.trim() } : {}),
+    ...(typeof registry === "string" && registry.trim().length > 0 ? { registry: registry.trim() } : {}),
+  };
+}
+
 // ─────────────────────────────────────────────────────────────── filters ──
 
 export type FilterKind = "all" | "namespace" | "added" | "surface";

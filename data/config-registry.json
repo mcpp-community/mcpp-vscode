@@ -783,7 +783,7 @@
       "applies": "immediate",
       "since": "0.6.0",
       "title": "Path to a mcpp package index checkout",
-      "description": "Leave it empty to use the indexes under the mcpp home that `mcpp index update` refreshes.",
+      "description": "Leave it empty to use the indexes under the mcpp home. The home is `$MCPP_HOME`, then `~/.mcpp`; when neither holds an index, the extension asks `mcpp self env --format json` where it is.",
       "order": 8
     },
     {

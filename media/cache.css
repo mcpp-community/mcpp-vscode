@@ -208,33 +208,45 @@ details[open] > .viz-summary::before {
   vector-effect: non-scaling-stroke;
 }
 
-[data-viz="composition"] rect[data-kind] {
+/*
+ * `fill` is set on the **group**, never on the `<rect>`.
+ *
+ * The renderer stamps `data-kind` / `data-segment` / `data-bucket` on the `<g>`
+ * that wraps each segment, and SVG inherits `fill` from the group down into the
+ * rectangle. A rule written as `rect[data-kind]` therefore matches nothing —
+ * the attribute lives one level up — and every bar falls back to the SVG
+ * default fill, which is *black in every theme*. That is what shipped: the
+ * legend swatches were coloured, the bars were solid black, and the data was
+ * plainly there. `test/views/cachePanelHtml.test.ts` now checks the document and
+ * this stylesheet against each other so it cannot happen again.
+ */
+[data-viz="composition"] g[data-kind] {
   fill: var(--vscode-charts-blue, currentColor);
 }
 
-[data-viz="composition"] rect[data-kind="pkg"] {
+[data-viz="composition"] g[data-kind="pkg"] {
   fill: var(--vscode-mcpp-cacheOkForeground, var(--vscode-charts-green, currentColor));
 }
 
-[data-viz="composition"] rect[data-kind="std"] {
+[data-viz="composition"] g[data-kind="std"] {
   fill: var(--vscode-charts-purple, currentColor);
 }
 
-[data-viz="composition"] rect[data-kind="unknown"] {
+[data-viz="composition"] g[data-kind="unknown"] {
   fill: var(--vscode-descriptionForeground, currentColor);
 }
 
-[data-viz="composition"] rect[data-segment="legacy"],
-.project-bar rect[data-segment="stale"] {
+[data-viz="composition"] g[data-segment="legacy"],
+.project-bar g[data-segment="stale"] {
   fill: var(--vscode-mcpp-cacheStaleForeground, var(--vscode-charts-yellow, currentColor));
 }
 
-.project-bar rect[data-segment="current"],
-[data-viz="age"] rect[data-bucket] {
+.project-bar g[data-segment="current"],
+[data-viz="age"] g[data-bucket] {
   fill: var(--vscode-mcpp-cacheOkForeground, var(--vscode-charts-green, currentColor));
 }
 
-[data-viz="age"] rect[data-bucket="oldest"] {
+[data-viz="age"] g[data-bucket="oldest"] {
   fill: var(--vscode-mcpp-cacheStaleForeground, var(--vscode-charts-yellow, currentColor));
 }
 

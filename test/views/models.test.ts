@@ -41,7 +41,7 @@ test("an unreadable manifest is reported instead of half-rendered", () => {
   assert.deepEqual(tree[0].description?.args, ["bad TOML"]);
 });
 
-test("the project view is two labelled, expanded sections", () => {
+test("the project view is two labelled sections: commands open, basics folded", () => {
   const tree = buildProjectTree({
     root: "/w",
     name: "greeter",
@@ -56,7 +56,8 @@ test("the project view is two labelled, expanded sections", () => {
   assert.deepEqual(ids(tree), ["project.section.basic", "project.section.commands"]);
   assert.equal(find(tree, "project.section.basic")?.label.key, "Basics");
   assert.equal(find(tree, "project.section.commands")?.label.key, "Common commands");
-  assert.equal(find(tree, "project.section.basic")?.expanded, true);
+  // The sidebar opens on what can be *done*; 「基本信息」 is one click away.
+  assert.equal(find(tree, "project.section.basic")?.expanded, undefined);
   assert.equal(find(tree, "project.section.commands")?.expanded, true);
 });
 

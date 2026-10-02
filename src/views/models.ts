@@ -11,7 +11,9 @@
  * and **Common commands** (what can be done to it). The C++ Modules block is
  * folded into the first one, with the status line carrying the problem count, so
  * a degraded language service is visible **without expanding anything**. The
- * second section is the only place in the view whose rows are all commands.
+ * second section is the only place in the view whose rows are all commands, and
+ * it is the one that starts open: the sidebar should open on what can be done,
+ * with 「基本信息」 one click away.
  *
  * Everything the project view needs from disk lives here as well — the declared
  * dependencies, `mcpp.lock`'s resolved versions and the source-file count — so
@@ -45,12 +47,21 @@ export interface TreeNode {
   tooltip?: Label;
   /** A codicon id without the `$()`, e.g. `"database"`. */
   icon?: string;
+  /**
+   * A `ThemeColor` id the icon is drawn in, e.g. `"charts.blue"`.
+   *
+   * Only ids the colour registry always carries are used (`charts.*`), and a
+   * theme that omits one leaves the icon in the normal foreground colour rather
+   * than making the row unreadable — colour is a hint here, never the state.
+   */
+  iconColor?: string;
   /** Consumed by `when` clauses in package.json for inline actions. */
   contextValue?: string;
   /**
    * Render expanded on first display. A node with children is collapsed unless
-   * this is set; the two project sections and the dependency group start open,
-   * the folded language-service block deliberately does not.
+   * this is set. 「常用命令」 starts open because it is the part of the view that
+   * gets used; 「基本信息」 starts closed, so the sidebar opens on what can be
+   * *done* rather than on what the project happens to be.
    */
   expanded?: boolean;
   command?: TreeCommand;
@@ -620,7 +631,7 @@ export function buildProjectTree(project: ProjectSummary | undefined, options: P
   ];
 
   return [
-    { id: "project.section.basic", label: plain("Basics"), icon: "info", expanded: true, children: basic },
+    { id: "project.section.basic", label: plain("Basics"), icon: "info", children: basic },
     { id: "project.section.commands", label: plain("Common commands"), icon: "terminal", expanded: true, children: commandNodes(options) },
   ];
 }
@@ -629,19 +640,28 @@ interface CommandRow {
   id: string;
   label: string;
   icon: string;
+  /** See `TreeNode.iconColor`; the palette groups rows by what they act on. */
+  iconColor: string;
   command: string;
 }
 
-/** The eight rows of 「常用命令」, in the order the prototype fixes them. */
+/**
+ * The eight rows of 「常用命令」, in the order the prototype fixes them.
+ *
+ * The colours are a small, explainable palette grouped by **what the row acts
+ * on**, not by decoration: blue builds or adds, green runs or verifies, purple
+ * tests, orange deletes, yellow manages the toolchain, and configuration stays
+ * in the ordinary foreground so it never competes with the actions.
+ */
 const COMMON_COMMANDS: readonly CommandRow[] = [
-  { id: "project.action.build", label: "Build", icon: "tools", command: "mcpp.build" },
-  { id: "project.action.run", label: "Run", icon: "play", command: "mcpp.run" },
-  { id: "project.action.test", label: "Test", icon: "beaker", command: "mcpp.test" },
-  { id: "project.action.clean", label: "Clean", icon: "trash", command: "mcpp.cleanProjectArtifacts" },
-  { id: "project.action.toolchain", label: "Toolchain", icon: "chip", command: "mcpp.showToolchains" },
-  { id: "project.action.librarySearch", label: "Search and add a dependency…", icon: "cloud", command: "mcpp.library.search" },
-  { id: "project.action.selfCheck", label: "Environment self-check", icon: "heart", command: "mcpp.selfCheck" },
-  { id: "project.action.settings", label: "Settings", icon: "settings-gear", command: "mcpp.openSettings" },
+  { id: "project.action.build", label: "Build", icon: "tools", iconColor: "charts.blue", command: "mcpp.build" },
+  { id: "project.action.run", label: "Run", icon: "play", iconColor: "charts.green", command: "mcpp.run" },
+  { id: "project.action.test", label: "Test", icon: "beaker", iconColor: "charts.purple", command: "mcpp.test" },
+  { id: "project.action.clean", label: "Clean", icon: "trash", iconColor: "charts.orange", command: "mcpp.cleanProjectArtifacts" },
+  { id: "project.action.toolchain", label: "Toolchain", icon: "chip", iconColor: "charts.yellow", command: "mcpp.showToolchains" },
+  { id: "project.action.librarySearch", label: "Search and add a dependency…", icon: "cloud", iconColor: "charts.blue", command: "mcpp.library.search" },
+  { id: "project.action.selfCheck", label: "Environment self-check", icon: "heart", iconColor: "charts.green", command: "mcpp.selfCheck" },
+  { id: "project.action.settings", label: "Settings", icon: "settings-gear", iconColor: "", command: "mcpp.openSettings" },
 ];
 
 function commandNodes(options: ProjectTreeOptions): TreeNode[] {
@@ -655,6 +675,9 @@ function commandNodes(options: ProjectTreeOptions): TreeNode[] {
       contextValue: "mcppProjectCommand",
       command: { command: row.command, title: label },
     };
+    if (row.iconColor.length > 0) {
+      node.iconColor = row.iconColor;
+    }
     if (hint !== undefined) {
       node.description = plain(hint);
     }

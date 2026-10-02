@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
@@ -150,6 +150,41 @@ test("each view is gated by its own visibility setting", () => {
     "webview",
   ]);
 });
+
+test("every webview view registers the provider that fills it", () => {
+  const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
+  const webviews = (manifest.contributes?.views?.mcpp ?? []).filter((view) => view.type === "webview");
+  assert.ok(webviews.length > 0, "this gate is pointless without a webview view");
+  for (const view of webviews) {
+    // The view id is declared once, in the module that owns the view (other
+    // modules re-export the constant), and that module must also call
+    // `registerWebviewViewProvider`. Without it VS Code never asks the view for
+    // a document and every `refresh()` silently does nothing — which is exactly
+    // the bug this test exists for: the library view declared its id, exported a
+    // provider, wired its listeners, and never registered.
+    const declaration = new RegExp(`export const \\w*_VIEW_ID = "${view.id}"`);
+    const owners = sourceFiles().filter(([, text]) => declaration.test(text));
+    assert.equal(owners.length, 1, `${view.id} must have exactly one declaring module, found ${owners.length}`);
+    assert.ok(
+      owners[0][1].includes("registerWebviewViewProvider("),
+      `${owners[0][0]} declares ${view.id} but never calls registerWebviewViewProvider`,
+    );
+  }
+});
+
+/** `src/**\/*.ts`, relative path and text, for the source-level gates. */
+function sourceFiles(directory = path.join(root, "src")): Array<[string, string]> {
+  const out: Array<[string, string]> = [];
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const full = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      out.push(...sourceFiles(full));
+    } else if (entry.name.endsWith(".ts")) {
+      out.push([path.relative(root, full), readFileSync(full, "utf8")]);
+    }
+  }
+  return out;
+}
 
 test("shows editor title buttons only inside mcpp projects", () => {
   const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
@@ -360,6 +395,24 @@ test("声明 GitHub 仓库和扩展图标", () => {
 
   const icon = readFileSync(path.join(root, manifest.icon));
   assert.deepEqual([...icon.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+});
+
+test("the activity bar gets the stencil, not the marketplace badge", () => {
+  const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
+  const container = manifest.contributes?.viewsContainers?.activitybar?.[0];
+  // VS Code masks a container icon with the theme's foreground colour
+  // (`mask: url(icon)` at 24 px), so what is painted is the icon's *alpha
+  // channel*. The official badge is an opaque rounded square with the wordmark
+  // on it: as a stencil that is a solid block, which is what shipped. The
+  // marketplace icon keeps the real logo; the activity bar gets its derived
+  // stencil, and `npm run check:icon` proves the derivation is current.
+  assert.equal(manifest.icon, "images/logo.png");
+  assert.equal(container?.icon, "images/activity-bar.png");
+  const stencil = readFileSync(path.join(root, "images", "activity-bar.png"));
+  assert.deepEqual([...stencil.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+  // Read from IHDR: 8-bit RGBA, and wider than tall, because the wordmark is.
+  assert.equal(stencil.readUInt32BE(16), 96);
+  assert.equal(stencil.readUInt32BE(20), 56);
 });
 
 test("the READMEs state the responsibility split, the boundary and the limits", () => {

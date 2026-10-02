@@ -41,7 +41,13 @@ export function toTreeItem(node: TreeNode): vscode.TreeItem {
   item.description = node.description === undefined ? undefined : resolveLabel(node.description);
   item.tooltip = node.tooltip === undefined ? undefined : resolveLabel(node.tooltip);
   if (node.icon !== undefined) {
-    item.iconPath = new vscode.ThemeIcon(node.icon);
+    // A `ThemeColor` id is resolved by the host; an id a theme does not define
+    // leaves the icon in the normal foreground colour, which is why the model
+    // only ever names `charts.*`.
+    item.iconPath =
+      node.iconColor === undefined || node.iconColor.length === 0
+        ? new vscode.ThemeIcon(node.icon)
+        : new vscode.ThemeIcon(node.icon, new vscode.ThemeColor(node.iconColor));
   }
   item.contextValue = node.contextValue;
   if (node.command !== undefined) {

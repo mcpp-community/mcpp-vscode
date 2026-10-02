@@ -98,7 +98,7 @@
   "mcpp.languageService.refreshAfterBuild.title": "Refresh language service after build",
   "mcpp.languageService.stateRefreshSeconds.description": "Re-read the language service state every this many seconds. 0 disables the timer.",
   "mcpp.languageService.stateRefreshSeconds.title": "Set the state refresh interval",
-  "mcpp.library.indexPath.description": "Leave it empty to use the indexes under the mcpp home that `mcpp index update` refreshes.",
+  "mcpp.library.indexPath.description": "Leave it empty to use the indexes under the mcpp home. The home is `$MCPP_HOME`, then `~/.mcpp`; when neither holds an index, the extension asks `mcpp self env --format json` where it is.",
   "mcpp.library.indexPath.title": "Path to a mcpp package index checkout",
   "mcpp.library.networkSearch.description": "The local index already lists every published package, so this is off by default. Turning it on also searches the other registries with `mcpp search`, which may use the network and can only be parsed on a best-effort basis.",
   "mcpp.library.networkSearch.title": "Search every configured registry over the network",

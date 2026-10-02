@@ -74,29 +74,24 @@ export interface LibraryViewDeps {
 }
 
 /**
- * Register the view's subscriptions and hand back its provider.
+ * Register the view: the provider, its settings/save listeners and the
+ * `registerWebviewViewProvider` call that makes VS Code ask it for a document.
  *
- * The provider is **not** registered here, so the caller owns that decision and
- * cannot end up registering the same view id twice. `extension.ts` needs exactly
- * this call:
+ * That last call is the whole point — without it the view has no document at
+ * all, and every `refresh()` below is a no-op against `this.view === undefined`.
+ * It lives here, next to the provider it hands over, exactly like
+ * `registerCachePanel`; `extension.ts` only wires the two entry-point commands.
  *
- * ```ts
- * const library = registerLibraryView(extensionContext, { … });
- * extensionContext.subscriptions.push(
- *   vscode.window.registerWebviewViewProvider(LIBRARY_VIEW_ID, library.provider, {
- *     webviewOptions: { retainContextWhenHidden: false },
- *   }),
- * );
- * ```
- *
- * `retainContextWhenHidden` is not supported by a webview view (and is refused
- * with an error if it is set), which is why the render is idempotent: the
- * document is rebuilt from the snapshot every time the view becomes visible
- * again.
+ * `retainContextWhenHidden` is not supported by a webview view, which is why the
+ * render is idempotent: the document is rebuilt from the snapshot every time the
+ * view becomes visible again.
  */
 export function registerLibraryView(context: vscode.ExtensionContext, deps: LibraryViewDeps): LibraryViewHandle {
   const provider = new LibraryViewProvider(context, deps);
   context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(LIBRARY_VIEW_ID, provider, {
+      webviewOptions: { retainContextWhenHidden: false },
+    }),
     provider,
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("mcpp.library")) {
@@ -111,7 +106,6 @@ export function registerLibraryView(context: vscode.ExtensionContext, deps: Libr
     }),
   );
   return {
-    provider,
     refresh: () => provider.refresh(),
     dispose: () => provider.dispose(),
   };
@@ -121,12 +115,13 @@ export function registerLibraryView(context: vscode.ExtensionContext, deps: Libr
  * What `extension.ts` keeps a reference to.
  *
  * `refresh()` is how a dependency change made **outside the editor** — `mcpp add`
- * run by the detail page — reaches the list, because no document is saved in
- * that path and therefore no save event fires.
+ * run by the detail page, or `mcpp index update` — reaches the list, because no
+ * document is saved in that path and therefore no save event fires. The provider
+ * itself is not handed back: `registerLibraryView` has already registered it,
+ * and a caller that wants to reach into the view would be reaching past the two
+ * methods below.
  */
 export interface LibraryViewHandle {
-  /** Pass to `vscode.window.registerWebviewViewProvider(LIBRARY_VIEW_ID, …)`. */
-  provider: vscode.WebviewViewProvider;
   refresh(): Promise<void>;
   dispose(): void;
 }
@@ -349,7 +344,7 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
       [LIBRARY_UI.unreadable]: t("Descriptor not readable"),
       [LIBRARY_UI.noResults]: t("No package matches this search."),
       [LIBRARY_UI.noIndex]: t(
-        "No mcpp index was found. Run mcpp once so it installs an index, or set mcpp.library.indexPath.",
+        "No mcpp index was found. Run mcpp: Refresh the mcpp Package Index once, or set mcpp.library.indexPath to an index checkout.",
       ),
       [LIBRARY_UI.dataSource]: t("Data source"),
       [LIBRARY_UI.count]: t("{0} of {1} packages"),

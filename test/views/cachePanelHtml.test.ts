@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import test from "node:test";
 
 import {
@@ -226,6 +228,52 @@ test("the composition bar widths are proportional to bytes", () => {
   assert.ok(html.includes('<rect x="0" y="0" width="300"'));
   assert.ok(html.includes('<rect x="300" y="0" width="200"'));
   assert.ok(html.includes('<rect x="500" y="0" width="500"'));
+});
+
+test("the stylesheet paints the groups the document actually marks", () => {
+  const raw = readFileSync(path.join(process.cwd(), "media", "cache.css"), "utf8");
+  // Comments discuss the bug by name, so they are stripped before the check.
+  const css = raw.replace(/\/\*[\s\S]*?\*\//g, "");
+  const html = page({ legacy: { bytes: 500 }, project: { staleBytes: 250 } });
+
+  // The renderer stamps `data-kind` / `data-segment` / `data-bucket` on the `<g>`
+  // around each segment and lets SVG inherit `fill` into the `<rect>`. A rule
+  // that selects the rectangle by one of those attributes matches nothing, and
+  // the segment then takes the SVG default fill — black, in every theme. That is
+  // what shipped, with the legend swatches coloured beside it.
+  assert.doesNotMatch(css, /rect\s*\[data-/, "the bar attributes live on the <g>, never on the <rect>");
+
+  // Half one: the document really does put them there.
+  for (const [name, value] of [
+    ["data-kind", "pkg"],
+    ["data-kind", "std"],
+    ["data-kind", "legacy"],
+    ["data-segment", "legacy"],
+    ["data-segment", "stale"],
+    ["data-segment", "current"],
+    ["data-bucket", "recent"],
+    ["data-bucket", "oldest"],
+  ]) {
+    assert.match(
+      html,
+      new RegExp(`<g[^>]*${name}="${value}"[^>]*>\\s*<rect`),
+      `the document never marks a group with ${name}="${value}"`,
+    );
+  }
+
+  // Half two: the stylesheet really does colour each of them, through the group.
+  for (const selector of [
+    '[data-viz="composition"] g[data-kind="pkg"]',
+    '[data-viz="composition"] g[data-kind="std"]',
+    '[data-viz="composition"] g[data-kind="unknown"]',
+    '[data-viz="composition"] g[data-segment="legacy"]',
+    '.project-bar g[data-segment="stale"]',
+    '.project-bar g[data-segment="current"]',
+    '[data-viz="age"] g[data-bucket="oldest"]',
+    '[data-viz="age"] g[data-bucket]',
+  ]) {
+    assert.match(css, new RegExp(`${selector.replace(/[[\]"]/g, "\\$&")}[^{]*\\{[^}]*fill:`), `no fill rule for ${selector}`);
+  }
 });
 
 test("the composition is empty rather than NaN when nothing is cached", () => {

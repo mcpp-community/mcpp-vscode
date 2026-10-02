@@ -98,7 +98,7 @@
   "mcpp.languageService.refreshAfterBuild.title": "构建后刷新语言服务",
   "mcpp.languageService.stateRefreshSeconds.description": "每隔多少秒重新读取一次语言服务状态。0 表示关闭定时刷新。",
   "mcpp.languageService.stateRefreshSeconds.title": "设置状态刷新间隔",
-  "mcpp.library.indexPath.description": "留空则使用 mcpp 主目录下由 `mcpp index update` 刷新的索引。",
+  "mcpp.library.indexPath.description": "留空则使用 mcpp 主目录下的索引。主目录依次取 `$MCPP_HOME`、`~/.mcpp`；两者都没有索引时，扩展会用 `mcpp self env --format json` 询问 mcpp 主目录在哪。",
   "mcpp.library.indexPath.title": "mcpp 包索引检出的路径",
   "mcpp.library.networkSearch.description": "本地索引已经列出所有已发布的包，所以默认关闭。打开后会额外用 `mcpp search` 搜索其它 registry，可能联网，且只能尽力解析。",
   "mcpp.library.networkSearch.title": "在全部 registry 中联网搜索",

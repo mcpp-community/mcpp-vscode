@@ -707,22 +707,50 @@ export class McppCliController {
     return items;
   }
 
+  /**
+   * The status bar menu: one section per group, one row per command.
+   *
+   * The section titles come from `QUICK_MENU_GROUPS`, so an entry can never be
+   * filed under a heading that does not exist, and the headers are only emitted
+   * where the entries actually change group — a group whose commands are all
+   * filtered out (C++ Modules, when `mcpp.languageService.menuItems` is off)
+   * takes its heading with it.
+   *
+   * The icons are plain codicons: VS Code drops a `ThemeIcon`'s colour in a
+   * quick pick (see `src/commands/menu.ts`), so the menu separates rows by
+   * section and by icon shape rather than by a hue that would never be painted.
+   *
+   * Typing filters by command name only. The group names are separator rows, and
+   * VS Code hides separators as soon as a query is present, so they are not
+   * matchable — the headings are for reading the list, not for searching it.
+   */
   private async showMenu(): Promise<void> {
     const groupLabel = new Map(QUICK_MENU_GROUPS.map((group) => [group.id, t(group.labelKey)]));
     const showLanguageServer = read<boolean>("mcpp.languageService.menuItems");
-    const items = quickMenuItems
-      .filter((item) => showLanguageServer || item.group !== "languageServer")
-      .map((item) => ({
-      label: t(item.labelKey),
-      description: groupLabel.get(item.group) ?? item.group,
-      command: item.command,
-    }));
+    const items: Array<vscode.QuickPickItem & { command?: string }> = [];
+    let section: string | undefined;
+    for (const item of quickMenuItems) {
+      if (!showLanguageServer && item.group === "languageServer") {
+        continue;
+      }
+      if (item.group !== section) {
+        section = item.group;
+        items.push({
+          label: groupLabel.get(item.group) ?? item.group,
+          kind: vscode.QuickPickItemKind.Separator,
+        });
+      }
+      items.push({
+        label: t(item.labelKey),
+        iconPath: new vscode.ThemeIcon(item.icon),
+        command: item.command,
+      });
+    }
     const picked = await vscode.window.showQuickPick(items, {
       title: t("mcpp: quick menu"),
       placeHolder: t("Choose a project, toolchain, cache or C++ Modules action"),
-      matchOnDescription: true,
     });
-    if (picked !== undefined) {
+    if (picked?.command !== undefined) {
       await vscode.commands.executeCommand(picked.command);
     }
   }

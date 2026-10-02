@@ -738,9 +738,9 @@ Age buckets used to group cache entries in the cache view, written as "1d", "7d"
 
 ### `mcpp.library.indexPath` — advanced
 
-Leave it empty to use the indexes under the mcpp home that `mcpp index update` refreshes.
+Leave it empty to use the indexes under the mcpp home. The home is `$MCPP_HOME`, then `~/.mcpp`; when neither holds an index, the extension asks `mcpp self env --format json` where it is.
 
-留空则使用 mcpp 主目录下由 `mcpp index update` 刷新的索引。
+留空则使用 mcpp 主目录下的索引。主目录依次取 `$MCPP_HOME`、`~/.mcpp`；两者都没有索引时，扩展会用 `mcpp self env --format json` 询问 mcpp 主目录在哪。
 
 | | |
 |---|---|

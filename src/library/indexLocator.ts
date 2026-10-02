@@ -7,8 +7,12 @@
  * descriptors, `xim-pkgindex`, `xim-pkgindex-local`), and `mcpp index status`
  * prints a table of them — which is deliberately **not** parsed: `--format json`
  * is an unknown option there, and a second human-output parser is exactly what
- * this project forbids. Globbing the data directory under `<home>/.mcpp/registry/data` gives the
+ * this project forbids. Globbing the data directory under `<home>` gives the
  * same answer without parsing anything.
+ *
+ * `<home>` is `$MCPP_HOME`, then `~/.mcpp` — every one of them that holds a data
+ * directory — and when none does, whatever `mcpp self env --format json`
+ * reports, which is a machine shape and therefore allowed to be read.
  *
  * Two budgets shape this file:
  *
@@ -27,7 +31,9 @@
 import { promises as fs } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import * as vscode from "vscode";
 
+import { runProcess } from "../cli/process";
 import { read } from "../config/access";
 import {
   descriptorEntry,
@@ -37,6 +43,7 @@ import {
   openkalFacetFor,
   parseDescriptorLua,
   parseOpenkalJson,
+  parseSelfEnv,
   platformKey,
   type CodeFile,
   type ExampleInput,
@@ -47,6 +54,12 @@ import {
 
 /** How many descriptor files a walk will read before it says the index is wrong. */
 const MAX_DESCRIPTORS = 20_000;
+
+/**
+ * How long `mcpp self env --format json` may take. It only runs when the cheap
+ * globs found nothing, and a hang there must not hold the view hostage.
+ */
+const SELF_ENV_TIMEOUT_MS = 15_000;
 
 /** The index site of the official C++ library index, and its package pages. */
 export const INDEX_SITE = "https://mcpplibs.github.io/mcpp-index/packages";
@@ -134,7 +147,19 @@ async function rootAt(directory: string): Promise<IndexRoot | undefined> {
  * `mcpp.library.indexPath` wins when the user set it — it may name one index
  * root (a directory with `pkgs/`), a `pkgs` directory itself, or a whole
  * `<home>/.mcpp/registry/data` directory of registries. With no setting, the
- * default glob is the data directory under `<home>/.mcpp/registry/data`.
+ * default glob is the data directory under each known mcpp home.
+ *
+ * **Finding `<home>`.** Two are tried, in order: `$MCPP_HOME` (the variable mcpp
+ * itself honours) and `~/.mcpp`. Both are listed when both hold something, and
+ * the view's footer names the registries it read, so a stale second home shows
+ * up as an extra source rather than as a wrong answer. When *neither* has a
+ * `registry/data` with anything in it, mcpp is asked directly — `mcpp self env
+ * --format json` reports `mcppHome`, which is the only authoritative answer for
+ * an install in a place nothing can guess. That probe costs one process **per
+ * session** and only runs when the cheap globs came up empty, so the ordinary
+ * machine never pays for it; it is also skipped in an untrusted workspace,
+ * because `mcpp.path` is a resource-scoped setting and a workspace must not
+ * choose a binary to run.
  *
  * `[]` means "no index found"; the caller turns that into the message rather
  * than into an error, because a machine without the index is a normal machine.
@@ -162,9 +187,10 @@ export async function readIndexRoots(): Promise<IndexRoot[]> {
       }
     }
   } else {
-    const data = path.join(os.homedir(), ".mcpp", "registry", "data");
-    for (const entry of await readdirSafe(data)) {
-      candidates.push(path.join(data, entry));
+    for (const data of await defaultDataDirectories()) {
+      for (const entry of await readdirSafe(data)) {
+        candidates.push(path.join(data, entry));
+      }
     }
   }
 
@@ -176,6 +202,86 @@ export async function readIndexRoots(): Promise<IndexRoot[]> {
     }
   }
   return roots.sort((a, b) => (a.registry < b.registry ? -1 : a.registry > b.registry ? 1 : 0));
+}
+
+/** Set once per session, so `mcpp self env` runs at most once. */
+let probedHome: string | undefined;
+let probeAttempted = false;
+
+/** The homes mcpp may have used, most specific first, without duplicates. */
+function candidateHomes(): string[] {
+  const homes: string[] = [];
+  const fromEnvironment = process.env.MCPP_HOME?.trim();
+  if (fromEnvironment !== undefined && fromEnvironment.length > 0) {
+    homes.push(fromEnvironment);
+  }
+  homes.push(path.join(os.homedir(), ".mcpp"));
+  if (probedHome !== undefined) {
+    homes.push(probedHome);
+  }
+  return [...new Set(homes)];
+}
+
+/**
+ * The `<home>/registry/data` directories worth listing.
+ *
+ * The cheap answer first: a data directory that already holds something is the
+ * answer, and no process is started. Only when all of them are missing or empty
+ * is `mcpp self env` asked where its home is — and its answer is picked up by
+ * re-reading the candidate list, because the probe is what adds the home to it.
+ */
+async function defaultDataDirectories(): Promise<string[]> {
+  const candidates = (): string[] => candidateHomes().map((home) => path.join(home, "registry", "data"));
+  const present: string[] = [];
+  for (const data of candidates()) {
+    if ((await readdirSafe(data)).length > 0) {
+      present.push(data);
+    }
+  }
+  if (present.length > 0) {
+    return present;
+  }
+  await mcppHomeFromCli();
+  return [...new Set(candidates())];
+}
+
+/**
+ * `mcpp self env --format json`, for the one field that says where the index is.
+ *
+ * It runs at most once per session and never in an untrusted workspace. A
+ * missing or failing mcpp is not an error here: the caller falls back to the
+ * directories it already has, and the view says "no index" the way it does when
+ * there is none.
+ */
+async function mcppHomeFromCli(): Promise<string | undefined> {
+  if (probeAttempted) {
+    return probedHome;
+  }
+  probeAttempted = true;
+  if (!vscode.workspace.isTrusted) {
+    return undefined;
+  }
+  const executable = read<string>("mcpp.path").trim();
+  const result = await runProcess(
+    executable.length === 0 ? "mcpp" : executable,
+    ["self", "env", "--format", "json"],
+    undefined,
+    { timeoutMs: SELF_ENV_TIMEOUT_MS, maxBufferMiB: 1 },
+  );
+  if (result.exitCode !== 0) {
+    return undefined;
+  }
+  const env = parseSelfEnv(result.stdout);
+  if (env === undefined) {
+    return undefined;
+  }
+  if (env.mcppHome !== undefined) {
+    probedHome = env.mcppHome;
+  } else if (env.registry !== undefined) {
+    // `registry` is `<home>/registry`; the home is what the other paths hang off.
+    probedHome = path.dirname(env.registry);
+  }
+  return probedHome;
 }
 
 export { readIndexRoots as locateIndexRoots };

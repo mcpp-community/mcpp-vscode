@@ -614,5 +614,157 @@ README 不做（索引里没有，要联网去上游拉）。
 
 - `mcpp.internal.markIndex` 之前注册了却没人调用，`mcpp.library.updateIndex` 装好索引后
   `viewsWelcome` 不会消失。改成 `markIndexFound()`，在激活时与 `index update` 之后都重算。
+  **（§15.4 更正：这条整段作废——webview 视图根本不支持 `viewsWelcome`，`markIndexFound`
+  已于 round 3 连同 `mcpp.library.indexFound` 一起删除。）**
 - `test/architecture.test.ts` 补上库生态的 4 个纯模块（`indexModel` / `xpkg` / `libraryHtml` /
   `detailHtml`），让"纯模块不得依赖 vscode"这条覆盖到新代码。
+
+## 15. round 3：你在真实实例里给的 6 条反馈
+
+这一轮的每一条都是先在**一手源码**或**本机真实运行**里定位到根因，再改。下面把证据一起留下，
+因为它们决定了改法——其中两条的"根因"和最初看起来的完全不是一回事。
+
+### 15.1 基本信息默认折叠、常用命令默认展开（反馈 1、2 前半）
+
+数据层一行的事：`buildProjectTree` 里 `project.section.basic` 去掉 `expanded: true`，
+`project.section.commands` 保留。测试从「两个 section 都展开」改成
+「命令展开、基本信息 `expanded === undefined`」。
+dev profile 的 `workspaceStorage` 会在重启前清掉，否则 VS Code 会用上次记住的展开状态覆盖默认。
+
+### 15.2 通用命令图标带色（反馈 2 后半）
+
+树**支持**颜色，快捷菜单**不支持**——两者机制不同，所以这里能做的和那里能做的不是一件事。
+
+树的证据（1.132 `workbench.desktop.main.js`，`CustomTreeView` 的渲染分支）：
+
+```js
+this.shouldShowThemeIcon(!!r, n.themeIcon) && (L = j.asClassName(n.themeIcon),
+  n.themeIcon.color ? i.icon.style.color = this.themeService.getColorTheme()
+                        .getColor(n.themeIcon.color.id)?.toString() ?? "" : L = L + " codicon-colored")
+```
+
+所以 `TreeNode` 加了 `iconColor?: string`（`ThemeColor` id），只允许 `charts.*` 这类所有主题都
+会定义的 id；主题没定义时 VS Code 让颜色为空串，图标退回普通前景色，不会变成看不见。
+配色按**这一行作用于什么**分组，不按装饰：蓝=构建/添加、绿=运行/校验、紫=测试、橙=删除、
+黄=工具链、设置保持中性。
+
+### 15.3 快捷菜单：图标 + 分组（反馈 3）
+
+`quickMenuItems` 现在每条带 `icon`，菜单按 `QUICK_MENU_GROUPS` 插 `QuickPickItemKind.Separator`
+做分组；分组标题与条目共用一张表，所以不可能出现"条目的分组没有标题"。
+
+**颜色做不到，这是 API 限制，不是没做。** 1.132 的 `MainThreadQuickOpen.expandIconPath`：
+
+```js
+expandIconPath(o){ let e = o.iconPathDto;
+  if (e)
+    if (j.isThemeIcon(e)) o.iconClass = j.asClassName(e);        // ← color 被丢掉
+    else if (Qh(e)) { let t = P.from(e); o.iconPath = { dark: t, light: t }; }
+    else { … } }
+```
+
+`ThemeIcon` 被压成一个 codicon class，列表渲染只写
+`i.icon.className = "quick-input-list-icon " + r.iconClass`，没有任何一处读颜色。
+所以这一轮**只做了图标形状 + 分组**，没有塞一个"永远画不出来"的颜色。顺带把 5 个分组标题与 20 条
+条目全部补上中文（原来 27 个 labelKey 里 20 个没有译文，中文用户看到的是英文），并加了
+`test/commands/menu.test.ts` 把"每个 labelKey 必须有译文""分组必须连续"钉住——这两件事
+`tools/l10n-check.mjs` 看不见，因为菜单标签是 `t(item.labelKey)` 而不是字面量。
+
+### 15.4 库视图与「刷新 mcpp 包索引」毫无反应（反馈 4）
+
+**根因不是索引定位，是 provider 从来没注册过。** 上一轮我把 `registerWebviewViewProvider`
+从 `libraryView.ts` 里"交代给调用方"，`extension.ts` 的注释却写着"provider 由 registerLibraryView
+自己注册"——两边互相甩锅，结果**整个 `src/library/` 里一次都没有这个调用**
+（`grep -rn registerWebviewViewProvider src/` 当时只有 `cachePanel.ts` 一处）。
+没有注册就没有 document，`refresh()` 永远打在 `this.view === undefined` 上：
+视图是空的，刷新是无声的。修法是在 `registerLibraryView` 内部注册（与 `registerCachePanel`
+同构），并加了一条**能抓住这类错误**的门禁：
+
+```
+test("every webview view registers the provider that fills it")
+  → 每个 "type": "webview" 的视图 id 必须有唯一一个 `export const *_VIEW_ID = "<id>"` 模块，
+    且该模块必须调用 registerWebviewViewProvider
+```
+
+索引定位按你的建议增强了，但放在**最后**，因为它不是这次的根因：
+
+| 顺序 | 找法 | 代价 |
+| --- | --- | --- |
+| 1 | `mcpp.library.indexPath`（用户显式设置） | 0 |
+| 2 | `$MCPP_HOME/registry/data`、`~/.mcpp/registry/data`，**有内容的都列** | 几次 `readdir` |
+| 3 | `mcpp self env --format json` 的 `mcppHome` | 每会话最多 1 个进程，且只在 2 全空时才跑 |
+
+第 3 步走机器协议（`schemaVersion` + `kind`，见 `src/cli/protocol.ts` 的检测规则），
+在**不受信任的工作区跳过**（`mcpp.path` 是 resource 作用域，不能让工作区指定要跑的二进制）。
+本机实测（用 `Module._load` 打桩 `vscode` 后直接跑编译产物）：
+
+| 场景 | 结果 |
+| --- | --- |
+| 设置指向 mcpp-index 检出 | 1 个 root / 238 包 / 146 ms，二次 0 ms（快照缓存命中） |
+| 默认（不设） | 3 个 root / 543 包 / 228 ms |
+| 两个 home 都空 → `mcpp self env` | 3 个 root / 543 包 / 674 ms |
+| mcpp 缺失 | 空 / 5 ms，不抛 |
+
+（写这条时踩了自己的一个 bug：`defaultDataDirectories` 先用探针**之前**的候选列表判断
+"探针给的主目录是不是新的"，而探针恰恰是把它加进列表的那一步，于是永远判定"不新"、
+永远返回旧列表。改成探针后重读候选列表。这个 bug 只有在真的构造出"两个 home 都空"的场景
+才会暴露——上面那张表就是这么写的。）
+
+「刷新 mcpp 包索引」另外两处修：成功后**有反馈**了（进度通知 + 「已刷新：N 个包，来自 M 个索引目录」，
+之前成功时零输出，看起来就是坏的），并且补上不受信任工作区的拦截。
+
+顺手删掉两处**已被证伪的死代码**：`mcpp.library.indexFound` 上下文键与 `viewsWelcome.library`
+文案。1.132 里基类 `ViewPane` 的 `shouldShowWelcome(){return !1}`，只有 tree 类视图覆写它
+（`TreeViewPane` 用 `dataProvider.isTreeEmpty`），所以 `"type": "webview"` 视图**永远不会**
+渲染 welcome 内容；库视图在自己的 document 里说空状态，那是唯一会被显示的地方。
+
+### 15.5 全局构建缓存的分布条是黑的（反馈 5）
+
+根因是 CSS 选择器和渲染出来的 DOM 差了一层：
+
+```
+渲染：  <section data-viz="composition"> … <g data-kind="pkg" …><rect …/></g>
+样式：  [data-viz="composition"] rect[data-kind="pkg"] { fill: … }   ← rect 上没有 data-kind
+```
+
+`rect[data-kind]` 谁都不匹配 → 每个 `<rect>` 落到 SVG 的默认填充（**黑**，任何主题都是黑）。
+图例里的 `.swatch[data-kind="pkg"]` 是打在 `<span>` 上的，所以**图例有颜色、条没有**，
+正好就是你看到的样子。修法：选择器改到 `<g>`（`fill` 是继承属性，会漏到子 `<rect>`），
+并在 `test/views/cachePanelHtml.test.ts` 加了一条**文档与样式表互查**的测试：
+既要求文档真的把属性打在 `<g>` 上，也要求样式表为每个值都有 `fill` 规则，同时**禁止**
+`rect[data-…]` 这种写法再出现。
+
+### 15.6 活动栏的 mcpp logo 是白的 / 不显示（反馈 6）
+
+一手证据在 `ActivityAction.toCompositeBarActionItem`（1.132）：
+
+```js
+let c = kc(i), l = new ab; l.update(c); let u = `activity-${e.replace(/\./g,"-")}-${l.digest()}` …
+Sf(p, `
+  mask: ${c} no-repeat 50% 50%;
+  mask-size: var(--activity-bar-icon-size, ${this.options.iconSize}px);
+  -webkit-mask: ${c} no-repeat 50% 50%; …`)
+```
+
+**自定义容器图标是被当模板（mask）用的**：画出来的是图标的 **alpha 通道**，颜色来自主题
+（`.style-override` 下未选中是 `--vscode-icon-foreground`、选中是 `--vscode-foreground`，
+hover/active 是 `--vscode-activityBar-foreground`）。而官方 logo 是一张
+**377×377 不透明黑色圆角方块**（实测：不透明覆盖率 90%，其中 81.5% 是纯 `#000000`、
+6.7% `#f08c00`、5.7% `#1971c2`）。拿它当模板，自然就是**一整块浅色方块**——你看到的"白色"。
+
+修法：`images/activity-bar.png` 改为**派生资产**——透明底 + 只留字形的白色 alpha
+（96×56，字形 88×48）。由 `tools/generate-activitybar-icon.mjs` 从 `images/logo.png`
+重新生成；覆盖率用「像素 = 覆盖率 × 墨色」反解（两个平涂色的最大通道做分母），
+6% 以下当作徽章边缘抗锯齿丢掉，所以不会在字外留一圈灰晕。白色 + 透明底在 alpha 模板和
+亮度模板下**都对**，不依赖 Chromium 选哪一种。`npm run check:icon` 进了 `npm run check`，
+产物与来源不可能漂移。市场图标（`package.json` 的 `icon`）继续用真 logo。
+
+### 15.7 这一轮的状态与仍然没做到的
+
+- 646 个单元测试通过；`check:config`（68 设置 / 32 public）、`l10n-check`（382 运行串 /
+  201 清单键）、`check:icon`、`check:generators` 全过；VSIX 93 文件 / 343 KiB（两道体积门禁内）。
+- dev profile 重装并重启，扩展主机日志确认激活、无错误。
+- **没做到**：快捷菜单图标没有颜色（15.3 的 API 限制）；活动栏图标在真实主题下的观感只能靠眼睛，
+  我没有截图能力；e2e 仍未在本地跑通（要下载固定版 VS Code，本机大文件下载会中断）；
+  索引定位的三条路径是靠打桩 `vscode` 后直接跑编译产物验证的，不是通过编辑器 UI 验证的。
+
