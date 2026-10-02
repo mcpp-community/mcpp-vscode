@@ -37,18 +37,31 @@ The section-header list is **not** derived from the snapshot below — it is a s
 hand-maintained table. The two can drift; the snapshot is what the diagnostics use.
 
 `mcpp.toml.completion` (default `true`) turns completion off. The old key
-`mcpp.tomlCompletion` still works as a declared alias, but it is **not** read at runtime:
-`src/extension.ts` reads `mcpp.toml.completion` only.
+`mcpp.tomlCompletion` is a **deprecated alias** of `mcpp.toml.completion`: the current key is what
+the extension reads, and the old one is kept so 0.4.x settings keep working.
 
 ## Hover and navigation
 
-`mcpp.toml.hover` (default `true`) and `mcpp.toml.navigation` (default `true`) are declared in
-`data/config-registry.json` and appear in the settings panel, but **this build registers neither
-a hover provider nor a definition provider for `mcpp-toml`**. The only providers registered for
-that language are the completion provider and the diagnostic collection. The intended behaviour
-— hovers with type/default/plane/since and `docs/04` links, and go-to-definition for
-`workspace = true`, `path = "…"` and `features = […]` — is designed but not wired. Do not rely
-on the settings having an effect yet.
+`mcpp.toml.hover` (default `true`) and `mcpp.toml.navigation` (default `true`) each switch off
+their provider independently.
+
+Hovering a **section header** shows its name, plane, whether it is legacy (and what replaces it),
+its key count and a link to the manifest reference. Hovering a **key** shows its type, enum
+values, default and `since`, plus the `note` and `unmodelled` caveats. Hovering an **enum value**
+shows the value and its key's documentation. Everywhere else the hover is empty rather than
+guessed — including on the bare opening `[`, which the tolerant parser reads as a key slot.
+
+Go-to-definition covers three shapes, all of them local to the manifest:
+
+| From | To |
+| --- | --- |
+| `workspace = true` in a dependency | the same key in `[workspace.dependencies]` |
+| `path = "…"` in a dependency | `[package]` in that directory's `mcpp.toml`, when the file exists |
+| an element of `features = […]` | that element's `[features.<name>]` header |
+
+`path` navigation is limited to dependency tables, so `[lib].path` and an `[indices]` `path` are
+ignored. The file system belongs to the caller: `definitionAt` takes a callback that resolves a
+relative path to a line index, so the analysis stays pure and testable.
 
 ## Diagnostics
 

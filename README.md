@@ -84,7 +84,7 @@ ones that matter to it.
 
 `mcpp.toml`: completion on `[` and seven diagnostics (syntax, unknown section, unknown key,
 plane separation, `mcpp` floor, legacy keys, array tables), no formatting. Hover and
-go-to-definition are declared in the registry but not wired in this build —
+go-to-definition are wired and follow their settings —
 [docs/mcpp-toml.md](docs/mcpp-toml.md).
 
 `build.mcpp`: completion for `mcpp::…` and `import`, hovers for known modules, seven SPEC-007

@@ -81,8 +81,10 @@ VS Code 的显示语言，因为 VS Code 在启动时只解析一次 `package.nl
 
 ## 编辑 `mcpp.toml` / `build.mcpp`
 
-`mcpp.toml`：在 `[` 处提供补全，并有七条诊断（语法、未知段、未知键、平面混用、`mcpp` 下限、
-legacy 键、数组表），**不做**格式化。悬停与跳转已在设置注册表中声明，但本版尚未接线——
+`mcpp.toml`：在 `[` 处按 mcpp 的 schema 补全段、键与枚举值，悬停显示类型／默认值／平面／
+`since`，跳转覆盖 `workspace = true`、`path = "…"` 与 `features = […]`，并有七条诊断
+（语法、未知段、未知键、平面混用、`mcpp` 下限、legacy 键、数组表），**不做**格式化。
+悬停与跳转各由 `mcpp.toml.hover` / `mcpp.toml.navigation` 控制——
 [docs/mcpp-toml.md](docs/mcpp-toml.md)。
 
 `build.mcpp`：为 `mcpp::…` 与 `import` 提供补全，为已知模块提供悬停，七条 SPEC-007 诊断。

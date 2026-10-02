@@ -49,7 +49,7 @@ The policy — argv, confirmation level, whether a preview is shown — is a pur
 | Command id | Title key | What it does |
 | --- | --- | --- |
 | `mcpp.refreshCacheStats` | `command.mcpp.refreshCacheStats.title` | Re-runs `mcpp cache list --format json`, `mcpp cache dir` and the `target/` estimate |
-| `mcpp.showCachePanel` | `command.mcpp.showCachePanel.title` | Refreshes, then opens the summary as a **read-only Markdown preview document** (there is no webview panel in this build) |
+| `mcpp.showCachePanel` | `command.mcpp.showCachePanel.title` | Refreshes, then opens the **cache panel** — a webview with the composition and age bars, the largest packages and a budget simulator; every action in it goes through the same confirmed cleanup plans as the tree ([docs/cache.md](cache.md)) |
 | `mcpp.showCacheEntry` | `command.mcpp.showCacheEntry.title` | `mcpp cache info <package>`, shown verbatim in a preview document; never parsed |
 | `mcpp.cleanStaleArtifacts` | `command.mcpp.cleanStaleArtifacts.title` | `mcpp clean --dry-run`, shown as a preview, then `mcpp clean --stale --older-than <mcpp.cache.staleDays>d` |
 | `mcpp.cleanProjectArtifacts` | `command.mcpp.cleanProjectArtifacts.title` | Modal offering `mcpp clean` and, as a second button, "Also empty the shared build cache"; that button escalates to `mcpp clean --bmi-cache` and a second acknowledgement |

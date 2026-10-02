@@ -106,7 +106,8 @@ preview-then-modal treatment as any other gc, not an extra confirmation.
 
 ## What a preview shows
 
-`preview()` in `src/views/cacheView.ts` opens a **read-only Markdown document** — not a webview
+`mcpp.showCachePanel` opens the **webview panel** (`src/views/cachePanel.ts`); its own budget
+simulator is a *local LRU projection*, and the panel says so — mcpp's policy decides in the end
 panel — via `workspace.openTextDocument({ content, language: "markdown" })` and
 `showTextDocument(…, { preview: true, preserveFocus: true })`. The content is a `# title` and a
 fenced block holding the command's raw stdout (or stderr when stdout is empty), trimmed. So:
