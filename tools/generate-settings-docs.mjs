@@ -13,6 +13,9 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const registry = JSON.parse(fs.readFileSync(path.join(root, "data", "config-registry.json"), "utf8"));
+// The Chinese descriptions already exist for the Settings UI (`package.nls.zh-cn.json`);
+// reusing them keeps one source per language instead of a third copy in these docs.
+const zhNls = JSON.parse(fs.readFileSync(path.join(root, "package.nls.zh-cn.json"), "utf8"));
 
 const APPLIES = {
   immediate: "Takes effect immediately",
@@ -57,6 +60,11 @@ for (const group of groups) {
     lines.push(`### \`${entry.key}\`${badges.length > 0 ? ` — ${badges.join(", ")}` : ""}`);
     lines.push("");
     lines.push(entry.description);
+    const zh = zhNls[`${entry.key}.description`];
+    if (typeof zh === "string" && zh.length > 0) {
+      lines.push("");
+      lines.push(zh);
+    }
     lines.push("");
     lines.push("| | |");
     lines.push("|---|---|");

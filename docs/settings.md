@@ -18,6 +18,8 @@ written by this one; the configuration panel says so on every screen.
 
 Path to the mcpp CLI used for every mcpp command. Leave it empty to look up mcpp on the PATH of the VS Code process.
 
+供扩展执行全部 mcpp CLI 命令使用的 mcpp 路径。留空时从 VS Code 进程的 PATH 中查找 mcpp。
+
 | | |
 |---|---|
 | Type | `string` |
@@ -29,6 +31,8 @@ Path to the mcpp CLI used for every mcpp command. Leave it empty to look up mcpp
 ### `mcpp.project.discoveryBoundary` — advanced
 
 How far the extension walks to find mcpp.toml. "filesystem" also searches outside the workspace folder; it costs more I/O and can reach unrelated trees.
+
+扩展为查找 mcpp.toml 而向上搜索的范围。设为 “filesystem” 时还会搜索工作区文件夹之外，磁盘开销更大，且可能触及无关目录树。
 
 | | |
 |---|---|
@@ -44,6 +48,8 @@ How far the extension walks to find mcpp.toml. "filesystem" also searches outsid
 
 Clear the terminal before an mcpp task starts, so the last build's output is not mistaken for this one's.
 
+在 mcpp 任务开始前清空终端，避免把上一次构建的输出误当成这一次的。
+
 | | |
 |---|---|
 | Type | `boolean` |
@@ -55,6 +61,8 @@ Clear the terminal before an mcpp task starts, so the last build's output is not
 ### `mcpp.task.buildArgs`
 
 Extra arguments appended to the mcpp build task. Applied on the next build.
+
+追加到 mcpp build 任务的额外参数。下次构建时生效。
 
 | | |
 |---|---|
@@ -68,6 +76,8 @@ Extra arguments appended to the mcpp build task. Applied on the next build.
 
 Extra arguments appended to the mcpp run task. Applied on the next run.
 
+追加到 mcpp run 任务的额外参数。下次运行时生效。
+
 | | |
 |---|---|
 | Type | `array` |
@@ -79,6 +89,8 @@ Extra arguments appended to the mcpp run task. Applied on the next run.
 ### `mcpp.task.testArgs`
 
 Extra arguments appended to the mcpp test task. Applied on the next test run.
+
+追加到 mcpp test 任务的额外参数。下次测试时生效。
 
 | | |
 |---|---|
@@ -92,6 +104,8 @@ Extra arguments appended to the mcpp test task. Applied on the next test run.
 
 Extra arguments appended to the mcpp clean task. Applied on the next clean.
 
+追加到 mcpp clean 任务的额外参数。下次清理时生效。
+
 | | |
 |---|---|
 | Type | `array` |
@@ -103,6 +117,8 @@ Extra arguments appended to the mcpp clean task. Applied on the next clean.
 ### `mcpp.task.confirmClean`
 
 Ask for confirmation before a clean task deletes the target directory of the project.
+
+清理任务删除工程 target 目录前先请求确认。
 
 | | |
 |---|---|
@@ -116,6 +132,8 @@ Ask for confirmation before a clean task deletes the target directory of the pro
 
 When an mcpp task brings the terminal panel to the front: always, only when the task fails, or never.
 
+mcpp 任务何时把终端面板带到前台：始终显示、仅在失败时显示，或从不显示。
+
 | | |
 |---|---|
 | Type | `string`: `always` \| `onFailure` \| `never` |
@@ -127,6 +145,8 @@ When an mcpp task brings the terminal panel to the front: always, only when the 
 ### `mcpp.task.focusTerminal`
 
 Move keyboard focus to the terminal while an mcpp task runs. Off by default so editor focus is not taken away.
+
+任务运行时把键盘焦点移到终端。默认关闭，以免抢走编辑器焦点。
 
 | | |
 |---|---|
@@ -140,6 +160,8 @@ Move keyboard focus to the terminal while an mcpp task runs. Off by default so e
 
 Parse compiler output of the mcpp build and test tasks into the Problems panel.
 
+把 mcpp build 与 test 任务的编译器输出解析到「问题」面板。
+
 | | |
 |---|---|
 | Type | `boolean` |
@@ -151,6 +173,8 @@ Parse compiler output of the mcpp build and test tasks into the Problems panel.
 ### `mcpp.task.editorTitleButtons`
 
 Show the Run and Test buttons in the editor title bar while the file belongs to an mcpp project.
+
+当文件属于 mcpp 工程时，在编辑器标题栏显示运行与测试按钮。
 
 | | |
 |---|---|
@@ -166,6 +190,8 @@ Show the Run and Test buttons in the editor title bar while the file belongs to 
 
 Keep the C++ Modules actions in the mcpp quick menu. Turn off to leave the menu to mcpp's own commands.
 
+在 mcpp 快捷菜单中保留 C++ Modules 操作。关闭后菜单只留 mcpp 自己的命令。
+
 | | |
 |---|---|
 | Type | `boolean` |
@@ -177,6 +203,8 @@ Keep the C++ Modules actions in the mcpp quick menu. Turn off to leave the menu 
 ### `mcpp.languageService.confirmResetCache` — advanced
 
 Ask before running the C++ Modules reset, which discards this workspace's model cache and prepares it again. Turning this off removes the only warning before that happens.
+
+在执行 C++ Modules 的重置前询问——该操作会丢弃本工作区的模型缓存并重新准备。关闭后这一步不再有提示。
 
 | | |
 |---|---|
@@ -190,6 +218,8 @@ Ask before running the C++ Modules reset, which discards this workspace's model 
 
 How mcpp-vscode tells the C++ Modules extension about a finished build: auto, a lightweight reload, a full restart, or nothing.
 
+mcpp-vscode 以何种方式把构建结果告知 C++ Modules 扩展：auto、轻量重载、完整重启，或不做处理。
+
 | | |
 |---|---|
 | Type | `string`: `auto` \| `reload` \| `restart` \| `off` |
@@ -201,6 +231,8 @@ How mcpp-vscode tells the C++ Modules extension about a finished build: auto, a 
 ### `mcpp.languageService.notifyOnDegraded` — advanced
 
 Show a notification when the C++ Modules language service reports a degraded state.
+
+C++ Modules 语言服务报告降级状态时显示通知。
 
 | | |
 |---|---|
@@ -214,6 +246,8 @@ Show a notification when the C++ Modules language service reports a degraded sta
 
 Read status from the C++ Modules extension through the API it exposes for tests. Turning this off only hides status; it never changes mcppls itself.
 
+通过 C++ Modules 扩展对外暴露的测试 API 读取其状态。关闭只会隐藏状态，不会改动 mcppls 本身。
+
 | | |
 |---|---|
 | Type | `boolean` |
@@ -225,6 +259,8 @@ Read status from the C++ Modules extension through the API it exposes for tests.
 ### `mcpp.languageService.stateRefreshSeconds` — advanced
 
 Re-read the language service state every this many seconds. 0 disables the timer.
+
+每隔多少秒重新读取一次语言服务状态。0 表示关闭定时刷新。
 
 | | |
 |---|---|
@@ -241,6 +277,8 @@ Re-read the language service state every this many seconds. 0 disables the timer
 
 Offer section, key and value completion while editing mcpp.toml. The old mcpp.tomlCompletion key still works as an alias.
 
+编辑 mcpp.toml 时提供段、键与值补全。旧键 mcpp.tomlCompletion 仍作为别名生效。
+
 | | |
 |---|---|
 | Type | `boolean` |
@@ -254,6 +292,8 @@ Offer section, key and value completion while editing mcpp.toml. The old mcpp.to
 
 Show documentation for sections and keys when hovering in mcpp.toml.
 
+在 mcpp.toml 中悬停时显示段与键的说明。
+
 | | |
 |---|---|
 | Type | `boolean` |
@@ -265,6 +305,8 @@ Show documentation for sections and keys when hovering in mcpp.toml.
 ### `mcpp.toml.navigation`
 
 Enable go-to-definition for workspace, path and feature references in mcpp.toml.
+
+为 mcpp.toml 中的 workspace、path 与 features 引用启用跳转定义。
 
 | | |
 |---|---|
@@ -278,6 +320,8 @@ Enable go-to-definition for workspace, path and feature references in mcpp.toml.
 
 Turn all mcpp.toml validation on or off. Every rule keeps its own severity setting.
 
+统一开关 mcpp.toml 的校验。各条规则仍保留各自的严重度设置。
+
 | | |
 |---|---|
 | Type | `boolean` |
@@ -289,6 +333,8 @@ Turn all mcpp.toml validation on or off. Every rule keeps its own severity setti
 ### `mcpp.toml.diagnostics.syntax` — advanced
 
 Severity used for mcpp.toml syntax errors.
+
+mcpp.toml 语法错误的严重度。
 
 | | |
 |---|---|
@@ -302,6 +348,8 @@ Severity used for mcpp.toml syntax errors.
 
 Severity used for sections that mcpp does not recognise.
 
+mcpp 无法识别的段的严重度。
+
 | | |
 |---|---|
 | Type | `string`: `error` \| `warning` \| `info` \| `off` |
@@ -313,6 +361,8 @@ Severity used for sections that mcpp does not recognise.
 ### `mcpp.toml.diagnostics.unknownKey`
 
 Severity used for keys that mcpp does not recognise.
+
+mcpp 无法识别的键的严重度。
 
 | | |
 |---|---|
@@ -326,6 +376,8 @@ Severity used for keys that mcpp does not recognise.
 
 Severity used when a key is written in the wrong mcpp.toml plane, such as a build key in the library plane.
 
+在 mcpp.toml 中把键写错层面（例如把构建层面的键写进库层面）时的严重度。
+
 | | |
 |---|---|
 | Type | `string`: `error` \| `warning` \| `info` \| `off` |
@@ -337,6 +389,8 @@ Severity used when a key is written in the wrong mcpp.toml plane, such as a buil
 ### `mcpp.toml.diagnostics.legacyKeys` — advanced
 
 Severity used for pre-0.5 mcpp.toml keys that still work but should be migrated.
+
+0.5 之前仍可用、但建议迁移的 mcpp.toml 旧键的严重度。
 
 | | |
 |---|---|
@@ -350,6 +404,8 @@ Severity used for pre-0.5 mcpp.toml keys that still work but should be migrated.
 
 Query the package index to complete dependency versions. Off by default because it needs network access.
 
+查询包索引以补全依赖版本。默认关闭，因为需要网络访问。
+
 | | |
 |---|---|
 | Type | `boolean` |
@@ -361,6 +417,8 @@ Query the package index to complete dependency versions. Off by default because 
 ### `mcpp.toml.indexCompletionTimeoutSeconds` — advanced
 
 How long one package index query may run before it is abandoned and completion falls back to local data, in seconds.
+
+单次包索引查询的最长等待秒数；超时后回退到本地数据补全。
 
 | | |
 |---|---|
@@ -377,6 +435,8 @@ How long one package index query may run before it is abandoned and completion f
 
 Turn completion and hover support for build.mcpp on or off.
 
+统一开关 build.mcpp 的补全与悬停支持。
+
 | | |
 |---|---|
 | Type | `boolean` |
@@ -388,6 +448,8 @@ Turn completion and hover support for build.mcpp on or off.
 ### `mcpp.buildScript.diagnostics`
 
 Validate build.mcpp against the build API mcpp actually ships.
+
+按 mcpp 实际提供的构建 API 校验 build.mcpp。
 
 | | |
 |---|---|
@@ -401,6 +463,8 @@ Validate build.mcpp against the build API mcpp actually ships.
 
 Severity used for build.mcpp diagnostics.
 
+build.mcpp 诊断使用的严重度。
+
 | | |
 |---|---|
 | Type | `string`: `warning` \| `info` \| `off` |
@@ -413,6 +477,8 @@ Severity used for build.mcpp diagnostics.
 
 Offer mcpp's own modules (std, std.compat, mcpp.*) in import completion. Hover still recognises them, and no import is ever reported missing, whichever way this is set.
 
+在 import 补全中列出 mcpp 自带的模块（std、std.compat、mcpp.*）。无论此设置如何，悬停仍会识别它们，也不会把任何 import 报为缺失。
+
 | | |
 |---|---|
 | Type | `boolean` |
@@ -424,6 +490,8 @@ Offer mcpp's own modules (std, std.compat, mcpp.*) in import completion. Hover s
 ### `mcpp.buildScript.snippets` — advanced
 
 Offer snippet completions for the mcpp build script API.
+
+为 mcpp 构建脚本 API 提供片段补全。
 
 | | |
 |---|---|
@@ -439,6 +507,8 @@ Offer snippet completions for the mcpp build script API.
 
 Show the size of the mcpp global cache in the status bar. Off by default to keep the status bar quiet.
 
+在状态栏显示 mcpp 全局缓存的大小。默认关闭，以保持状态栏清爽。
+
 | | |
 |---|---|
 | Type | `boolean` |
@@ -450,6 +520,8 @@ Show the size of the mcpp global cache in the status bar. Off by default to keep
 ### `mcpp.cache.warnAboveGiB`
 
 Warn when the mcpp global cache grows past this many GiB. 0 disables the warning.
+
+mcpp 全局缓存超过该 GiB 数时发出警告。0 表示关闭警告。
 
 | | |
 |---|---|
@@ -464,6 +536,8 @@ Warn when the mcpp global cache grows past this many GiB. 0 disables the warning
 
 Treat cache entries that were not accessed for this many days as stale. 0 disables the age rule.
 
+超过该天数未被访问的缓存条目视为过期。0 表示关闭该时间规则。
+
 | | |
 |---|---|
 | Type | `number` |
@@ -476,6 +550,8 @@ Treat cache entries that were not accessed for this many days as stale. 0 disabl
 ### `mcpp.cache.autoRefreshSeconds` — advanced
 
 Re-read the cache statistics every this many seconds. 0 disables automatic refreshing.
+
+每隔多少秒重新读取一次缓存统计。0 表示关闭自动刷新。
 
 | | |
 |---|---|
@@ -490,6 +566,8 @@ Re-read the cache statistics every this many seconds. 0 disables automatic refre
 
 Measure the target directory of the current project so the cache view can show its size.
 
+统计当前工程 target 目录的体积，供缓存视图显示。
+
 | | |
 |---|---|
 | Type | `boolean` |
@@ -502,6 +580,8 @@ Measure the target directory of the current project so the cache view can show i
 
 Include cache entries written by older mcpp versions in the cache view and in cleaning.
 
+在缓存视图与清理中包含旧版 mcpp 写入的缓存条目。
+
 | | |
 |---|---|
 | Type | `boolean` |
@@ -513,6 +593,8 @@ Include cache entries written by older mcpp versions in the cache view and in cl
 ### `mcpp.cache.gc.defaultBudgetGiB`
 
 Default size budget for cache cleanup, in GiB. 0 asks for a budget on every run.
+
+缓存清理的默认体积预算（GiB）。0 表示每次清理都询问预算。
 
 | | |
 |---|---|
@@ -527,6 +609,8 @@ Default size budget for cache cleanup, in GiB. 0 asks for a budget on every run.
 
 Require an extra confirmation when a cleanup would free more than this many GiB. 0 confirms every cleanup.
 
+单次清理预计释放超过该 GiB 数时追加一次确认。0 表示每次清理都确认。
+
 | | |
 |---|---|
 | Type | `number` |
@@ -539,6 +623,8 @@ Require an extra confirmation when a cleanup would free more than this many GiB.
 ### `mcpp.cache.pruneAgeDays` — advanced
 
 Default age in days used when pruning cache entries older than a threshold.
+
+清理缓存条目时默认使用的天数阈值。
 
 | | |
 |---|---|
@@ -555,6 +641,8 @@ Default age in days used when pruning cache entries older than a threshold.
 
 Show the mcpp project view in the activity bar. Takes effect after the view container reloads.
 
+在活动栏显示 mcpp 工程视图。视图容器重载后生效。
+
 | | |
 |---|---|
 | Type | `boolean` |
@@ -566,6 +654,8 @@ Show the mcpp project view in the activity bar. Takes effect after the view cont
 ### `mcpp.views.cache.show`
 
 Show the mcpp cache view in the activity bar. Takes effect after the view container reloads.
+
+在活动栏显示 mcpp 缓存视图。视图容器重载后生效。
 
 | | |
 |---|---|
@@ -579,6 +669,8 @@ Show the mcpp cache view in the activity bar. Takes effect after the view contai
 
 Show the C++ Modules status view that mcpp-vscode fills in. Takes effect after the view container reloads.
 
+显示由 mcpp-vscode 填充内容的 C++ Modules 状态视图。视图容器重载后生效。
+
 | | |
 |---|---|
 | Type | `boolean` |
@@ -590,6 +682,8 @@ Show the C++ Modules status view that mcpp-vscode fills in. Takes effect after t
 ### `mcpp.views.cache.topN` — advanced
 
 How many entries the cache view lists per group.
+
+缓存视图每组最多列出多少条。
 
 | | |
 |---|---|
@@ -603,6 +697,8 @@ How many entries the cache view lists per group.
 ### `mcpp.views.cache.ageBuckets` — advanced
 
 Age buckets used to group cache entries in the cache view, written as "1d", "7d" and so on.
+
+缓存视图中用于分组缓存条目的时间桶，写作 “1d”、“7d” 等。
 
 | | |
 |---|---|
@@ -618,6 +714,8 @@ Age buckets used to group cache entries in the cache view, written as "1d", "7d"
 
 Use a modal dialogue only for actions that cannot be undone. Turning this off asks for confirmation more often, never less.
 
+只在无法撤销的操作上使用模态对话框。关闭后只会问得更多，不会更少。
+
 | | |
 |---|---|
 | Type | `boolean` |
@@ -629,6 +727,8 @@ Use a modal dialogue only for actions that cannot be undone. Turning this off as
 ### `mcpp.ui.language`
 
 Language for extension messages and panels. "auto" follows VS Code; command titles and settings labels always follow the VS Code display language.
+
+扩展提示与面板使用的语言。“auto” 跟随 VS Code；命令面板标题与设置项名称始终跟随 VS Code 显示语言。
 
 | | |
 |---|---|
@@ -642,6 +742,8 @@ Language for extension messages and panels. "auto" follows VS Code; command titl
 
 Show the main mcpp status bar item.
 
+显示 mcpp 的主状态栏项。
+
 | | |
 |---|---|
 | Type | `boolean` |
@@ -653,6 +755,8 @@ Show the main mcpp status bar item.
 ### `mcpp.ui.statusBar.showLanguageServer` — advanced
 
 Show the C++ Modules language service state in the mcpp status bar item. Off by default because mcppls already has its own status item.
+
+在 mcpp 状态栏项中显示 C++ Modules 语言服务状态。默认关闭，因为 mcppls 已有自己的状态项。
 
 | | |
 |---|---|
@@ -666,6 +770,8 @@ Show the C++ Modules language service state in the mcpp status bar item. Off by 
 
 How successful mcpp operations are reported: in the status bar only, as a toast, or not at all.
 
+mcpp 操作成功时的提示方式：只在状态栏显示、弹出 toast，或完全静默。
+
 | | |
 |---|---|
 | Type | `string`: `silent` \| `statusBar` \| `toast` |
@@ -677,6 +783,8 @@ How successful mcpp operations are reported: in the status bar only, as a toast,
 ### `mcpp.ui.notifications.dedupeMinutes` — advanced
 
 Suppress a repeated notification for this many minutes. 0 shows every notification.
+
+同一条通知在该分钟数内只显示一次。0 表示每次都显示。
 
 | | |
 |---|---|
@@ -690,6 +798,8 @@ Suppress a repeated notification for this many minutes. 0 shows every notificati
 ### `mcpp.ui.numberFormat`
 
 Format byte sizes with binary units (KiB, MiB) or decimal units (KB, MB).
+
+字节大小使用二进制单位（KiB、MiB）还是十进制单位（KB、MB）。
 
 | | |
 |---|---|
@@ -705,6 +815,8 @@ Format byte sizes with binary units (KiB, MiB) or decimal units (KB, MB).
 
 Amount of detail written to the mcpp output channel. Debug output is verbose.
 
+写入 mcpp 输出频道的详细程度。debug 输出较为冗长。
+
 | | |
 |---|---|
 | Type | `string`: `error` \| `warn` \| `info` \| `debug` |
@@ -716,6 +828,8 @@ Amount of detail written to the mcpp output channel. Debug output is verbose.
 ### `mcpp.diagnostics.selfCheckOnStartup` — advanced
 
 Run the environment self check on activation and write problems to the output channel. Off by default because it starts mcpp.
+
+激活时运行环境自检，并把发现的问题写入输出频道。默认关闭，因为会启动 mcpp。
 
 | | |
 |---|---|
@@ -731,6 +845,8 @@ Run the environment self check on activation and write problems to the output ch
 
 How long one mcpp CLI command may run before it is terminated, in seconds. 0 disables the timeout.
 
+单条 mcpp CLI 命令的最长运行秒数，超时后终止。0 表示不限时。
+
 | | |
 |---|---|
 | Type | `number` |
@@ -743,6 +859,8 @@ How long one mcpp CLI command may run before it is terminated, in seconds. 0 dis
 ### `mcpp.runtime.maxOutputMiB` — advanced
 
 Maximum output captured for one mcpp command, in MiB. When output is truncated the tail is kept.
+
+单条 mcpp 命令最多捕获的输出（MiB）。输出被截断时保留尾部。
 
 | | |
 |---|---|
@@ -757,6 +875,8 @@ Maximum output captured for one mcpp command, in MiB. When output is truncated t
 
 Whether the one-command-at-a-time rule applies to each project separately or to the whole window.
 
+「同一时刻只运行一条命令」的限制作用于单个工程，还是整个窗口。
+
 | | |
 |---|---|
 | Type | `string`: `perProject` \| `global` |
@@ -768,6 +888,8 @@ Whether the one-command-at-a-time rule applies to each project separately or to 
 ### `mcpp.clangd.path` — **deprecated**, advanced
 
 Deprecated: The C++ module language service moved to sunrisepeak.mcpp-language-server; mcpp-vscode no longer reads this setting.
+
+已弃用：mcpp-vscode 不再读取此设置；C++ 模块语言服务已迁移到 sunrisepeak.mcpp-language-server。
 
 | | |
 |---|---|
@@ -782,6 +904,8 @@ Deprecated: The C++ module language service moved to sunrisepeak.mcpp-language-s
 
 Deprecated: The C++ module language service moved to sunrisepeak.mcpp-language-server; mcpp-vscode no longer reads this setting.
 
+已弃用：mcpp-vscode 不再读取此设置；C++ 模块语言服务已迁移到 sunrisepeak.mcpp-language-server。
+
 | | |
 |---|---|
 | Type | `string`: `auto` \| `on` \| `off` |
@@ -795,6 +919,8 @@ Deprecated: The C++ module language service moved to sunrisepeak.mcpp-language-s
 
 Deprecated: Language service conflicts are managed by sunrisepeak.mcpp-language-server; mcpp-vscode no longer reads this setting.
 
+已弃用：mcpp-vscode 不再读取此设置；语言服务冲突现由 sunrisepeak.mcpp-language-server 管理。
+
 | | |
 |---|---|
 | Type | `boolean` |
@@ -807,6 +933,8 @@ Deprecated: Language service conflicts are managed by sunrisepeak.mcpp-language-
 ### `mcpp.tomlCompletion` — **deprecated**, advanced
 
 Deprecated: mcpp-vscode no longer reads this setting; use mcpp.toml.completion instead.
+
+已弃用：mcpp-vscode 不再读取此设置；请改用 mcpp.toml.completion。
 
 | | |
 |---|---|
