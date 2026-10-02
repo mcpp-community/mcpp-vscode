@@ -22,25 +22,8 @@
   ],
   "activationEvents": [
     "workspaceContains:mcpp.toml",
-    "onLanguage:cpp",
-    "onLanguage:mcpp-build",
     "onLanguage:mcpp-toml",
-    "onCommand:mcpp.configureLanguageServer",
-    "onCommand:mcpp.configureClangd",
-    "onCommand:mcpp.refreshCompilationDatabase",
-    "onCommand:mcpp.checkModuleSupport",
-    "onCommand:mcpp.showMenu",
-    "onCommand:mcpp.newProject",
-    "onCommand:mcpp.build",
-    "onCommand:mcpp.run",
-    "onCommand:mcpp.test",
-    "onCommand:mcpp.clean",
-    "onCommand:mcpp.showToolchains",
-    "onCommand:mcpp.installToolchain",
-    "onCommand:mcpp.selectDefaultToolchain",
-    "onCommand:mcpp.autoConfigureModules",
-    "onCommand:mcpp.showModuleGraph",
-    "onCommand:mcpp.showLanguageServerLogs"
+    "onLanguage:mcpp-build"
   ],
   "categories": [
     "Programming Languages",
@@ -66,9 +49,52 @@
           "group": "navigation@2",
           "when": "mcpp.inProject"
         }
+      ],
+      "view/title": [
+        {
+          "command": "mcpp.refreshCacheStats",
+          "when": "view == mcpp.cache",
+          "group": "navigation@2"
+        },
+        {
+          "command": "mcpp.showCachePanel",
+          "when": "view == mcpp.cache",
+          "group": "navigation@3"
+        },
+        {
+          "command": "mcpp.languageServer.refreshState",
+          "when": "view == mcpp.languageServer",
+          "group": "navigation@2"
+        },
+        {
+          "command": "mcpp.languageServer.restart",
+          "when": "view == mcpp.languageServer",
+          "group": "navigation@3"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "mcpp.openMcpplsSettings",
+          "when": "false"
+        }
       ]
     },
     "commands": [
+      {
+        "command": "mcpp.openSettings",
+        "title": "%command.mcpp.openSettings.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.openMcpplsSettings",
+        "title": "%command.mcpp.openMcpplsSettings.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.selfCheck",
+        "title": "%command.mcpp.selfCheck.title%",
+        "category": "%category%"
+      },
       {
         "command": "mcpp.showMenu",
         "title": "%command.mcpp.showMenu.title%",
@@ -87,14 +113,14 @@
       {
         "command": "mcpp.run",
         "title": "%command.mcpp.run.title%",
-        "icon": "$(play)",
-        "category": "%category%"
+        "category": "%category%",
+        "icon": "$(play)"
       },
       {
         "command": "mcpp.test",
         "title": "%command.mcpp.test.title%",
-        "icon": "$(beaker)",
-        "category": "%category%"
+        "category": "%category%",
+        "icon": "$(beaker)"
       },
       {
         "command": "mcpp.clean",
@@ -117,6 +143,126 @@
         "category": "%category%"
       },
       {
+        "command": "mcpp.autoConfigureModules",
+        "title": "%command.mcpp.autoConfigureModules.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.showCachePanel",
+        "title": "%command.mcpp.showCachePanel.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.refreshCacheStats",
+        "title": "%command.mcpp.refreshCacheStats.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.showCacheEntry",
+        "title": "%command.mcpp.showCacheEntry.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.cleanStaleArtifacts",
+        "title": "%command.mcpp.cleanStaleArtifacts.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.cleanProjectArtifacts",
+        "title": "%command.mcpp.cleanProjectArtifacts.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.gcGlobalCache",
+        "title": "%command.mcpp.gcGlobalCache.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.pruneGlobalCache",
+        "title": "%command.mcpp.pruneGlobalCache.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.verifyGlobalCache",
+        "title": "%command.mcpp.verifyGlobalCache.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.cleanLegacyCache",
+        "title": "%command.mcpp.cleanLegacyCache.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.languageServer.refreshState",
+        "title": "%command.mcpp.languageServer.refreshState.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.languageServer.restart",
+        "title": "%command.mcpp.languageServer.restart.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.languageServer.restartEngine",
+        "title": "%command.mcpp.languageServer.restartEngine.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.languageServer.resetWorkspaceCache",
+        "title": "%command.mcpp.languageServer.resetWorkspaceCache.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.languageServer.selectContext",
+        "title": "%command.mcpp.languageServer.selectContext.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.languageServer.showModuleGraph",
+        "title": "%command.mcpp.languageServer.showModuleGraph.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.languageServer.showLogs",
+        "title": "%command.mcpp.languageServer.showLogs.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.languageServer.collectReport",
+        "title": "%command.mcpp.languageServer.collectReport.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.languageServer.exportDiagnosticBundle",
+        "title": "%command.mcpp.languageServer.exportDiagnosticBundle.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.languageServer.runBuildToolInTerminal",
+        "title": "%command.mcpp.languageServer.runBuildToolInTerminal.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.languageServer.manageConflicts",
+        "title": "%command.mcpp.languageServer.manageConflicts.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.languageServer.toggleInWorkspace",
+        "title": "%command.mcpp.languageServer.toggleInWorkspace.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.languageServer.installTools",
+        "title": "%command.mcpp.languageServer.installTools.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.languageServer.reviewChanges",
+        "title": "%command.mcpp.languageServer.reviewChanges.title%",
+        "category": "%category%"
+      },
+      {
         "command": "mcpp.configureLanguageServer",
         "title": "%command.mcpp.configureLanguageServer.title%",
         "category": "%category%"
@@ -134,11 +280,6 @@
       {
         "command": "mcpp.checkModuleSupport",
         "title": "%command.mcpp.checkModuleSupport.title%",
-        "category": "%category%"
-      },
-      {
-        "command": "mcpp.autoConfigureModules",
-        "title": "%command.mcpp.autoConfigureModules.title%",
         "category": "%category%"
       },
       {
@@ -839,6 +980,54 @@
           "source.mcpp-build"
         ],
         "path": "./syntaxes/mcpp-modules.tmLanguage.json"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "mcpp",
+          "title": "%viewsContainer.mcpp.title%",
+          "icon": "images/logo.png"
+        }
+      ]
+    },
+    "views": {
+      "mcpp": [
+        {
+          "id": "mcpp.project",
+          "name": "%view.mcpp.project.name%",
+          "contextualTitle": "%view.mcpp.project.name%"
+        },
+        {
+          "id": "mcpp.cache",
+          "name": "%view.mcpp.cache.name%",
+          "contextualTitle": "%view.mcpp.cache.name%"
+        },
+        {
+          "id": "mcpp.languageServer",
+          "name": "%view.mcpp.languageServer.name%",
+          "description": "%view.mcpp.languageServer.description%"
+        }
+      ]
+    },
+    "colors": [
+      {
+        "id": "mcpp.cacheOkForeground",
+        "description": "%colors.mcpp.cacheOkForeground%",
+        "defaults": {
+          "dark": "#89d185",
+          "light": "#388a34",
+          "highContrast": "#00ff00"
+        }
+      },
+      {
+        "id": "mcpp.cacheStaleForeground",
+        "description": "%colors.mcpp.cacheStaleForeground%",
+        "defaults": {
+          "dark": "#e2c08d",
+          "light": "#bf8803",
+          "highContrast": "#ffff00"
+        }
       }
     ]
   },

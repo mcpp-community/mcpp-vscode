@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
+import { contributedCommandIds } from "../src/commands/ids";
+
 interface PackageManifest {
   version?: string;
   displayName?: string;
@@ -23,6 +25,9 @@ interface PackageManifest {
     configuration?: { title?: string; properties?: Record<string, unknown> };
     configurationDefaults?: Record<string, unknown>;
     languages?: Array<{ id: string; aliases?: string[]; filenames?: string[]; configuration?: string }>;
+    viewsContainers?: { activitybar?: Array<{ id: string; title?: string; icon?: string }> };
+    views?: Record<string, Array<{ id: string; name?: string; description?: string }>>;
+    colors?: Array<{ id: string; description?: string }>;
     grammars?: Array<{ language?: string; scopeName: string; injectTo?: string[]; path: string }>;
   };
 }
@@ -38,32 +43,32 @@ test("declares mcpp-language-server as the C++ modules language service", () => 
   assert.equal(manifest.engines?.vscode, "^1.91.0");
   assert.deepEqual(manifest.extensionDependencies, ["sunrisepeak.mcpp-language-server"]);
   assert.ok(!manifest.extensionDependencies?.includes("llvm-vs-code-extensions.vscode-clangd"));
-  assert.ok(manifest.activationEvents?.includes("workspaceContains:mcpp.toml"));
-  assert.ok(manifest.activationEvents?.includes("onCommand:mcpp.run"));
-  assert.ok(manifest.activationEvents?.includes("onCommand:mcpp.configureLanguageServer"));
-  assert.ok(manifest.activationEvents?.includes("onCommand:mcpp.configureClangd")); // deprecated alias
+  // Since VS Code 1.74 every contributes.commands entry implies its own
+  // onCommand activation, so only the file- and folder-based triggers remain.
+  assert.deepEqual(manifest.activationEvents, [
+    "workspaceContains:mcpp.toml",
+    "onLanguage:mcpp-toml",
+    "onLanguage:mcpp-build",
+  ]);
   assert.equal(manifest.capabilities?.untrustedWorkspaces?.supported, "limited");
   assert.equal(manifest.capabilities?.untrustedWorkspaces?.description, "%untrustedWorkspaces.description%");
+  // Same set, not necessarily the same order: the manifest's order is the
+  // palette's presentation order, which `ids.ts` has no business dictating.
   assert.deepEqual(
-    manifest.contributes?.commands?.map((command) => command.command),
-    [
-      "mcpp.showMenu",
-      "mcpp.newProject",
-      "mcpp.build",
-      "mcpp.run",
-      "mcpp.test",
-      "mcpp.clean",
-      "mcpp.showToolchains",
-      "mcpp.installToolchain",
-      "mcpp.selectDefaultToolchain",
-      "mcpp.configureLanguageServer",
-      "mcpp.configureClangd",
-      "mcpp.refreshCompilationDatabase",
-      "mcpp.checkModuleSupport",
-      "mcpp.autoConfigureModules",
-      "mcpp.showModuleGraph",
-      "mcpp.showLanguageServerLogs",
-    ],
+    (manifest.contributes?.commands?.map((command) => command.command) ?? []).slice().sort(),
+    contributedCommandIds().slice().sort(),
+  );
+  assert.deepEqual(
+    manifest.contributes?.viewsContainers?.activitybar?.map((container) => container.id),
+    ["mcpp"],
+  );
+  assert.deepEqual(
+    manifest.contributes?.views?.mcpp?.map((view) => view.id),
+    ["mcpp.project", "mcpp.cache", "mcpp.languageServer"],
+  );
+  assert.deepEqual(
+    manifest.contributes?.colors?.map((color) => color.id),
+    ["mcpp.cacheOkForeground", "mcpp.cacheStaleForeground"],
   );
   assert.ok(manifest.contributes?.configuration?.properties?.["mcpp.path"]);
   assert.ok(manifest.contributes?.configuration?.properties?.["mcpp.tomlCompletion"]);
@@ -85,8 +90,10 @@ test("declares mcpp-language-server as the C++ modules language service", () => 
 test("一键向导只执行普通 build 并在之后刷新 C++ 模块语言服务", () => {
   const controller = readFileSync(path.join(root, "src/cli/controller.ts"), "utf8");
   const source = readFileSync(path.join(root, "src/extension.ts"), "utf8");
+  // Slice up to a marker that exists for its own sake, not as a test hook: the
+  // wizard is the last function before `activate`.
   const start = source.indexOf("async function autoConfigureModulesWizard");
-  const end = source.indexOf("const mcppTomlCompletionKinds", start);
+  const end = source.indexOf("export async function activate(", start);
   assert.notEqual(start, -1);
   assert.notEqual(end, -1);
   const wizard = source.slice(start, end);

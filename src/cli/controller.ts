@@ -25,7 +25,8 @@ import {
   type TaskCompletion,
 } from "./tasks";
 import { CLI_COMMANDS } from "../commands/ids";
-import { quickMenuItems, quickMenuStatusText } from "../commands/menu";
+import { QUICK_MENU_GROUPS, quickMenuItems, quickMenuStatusText } from "../commands/menu";
+import { t } from "../i18n/t";
 import { runNewProjectFlow, validateNewProjectName } from "./newProject";
 
 export interface McppCliControllerOptions {
@@ -492,16 +493,15 @@ export class McppCliController {
   }
 
   private async showMenu(): Promise<void> {
+    const groupLabel = new Map(QUICK_MENU_GROUPS.map((group) => [group.id, t(group.labelKey)]));
     const items = quickMenuItems.map((item) => ({
-      label: item.label,
-      description: item.group === "project"
-        ? "当前 mcpp 工程"
-        : item.group === "toolchain" ? "mcpp 工具链管理" : "C++ Modules 语言服务",
+      label: t(item.labelKey),
+      description: groupLabel.get(item.group) ?? item.group,
       command: item.command,
     }));
     const picked = await vscode.window.showQuickPick(items, {
-      title: "mcpp 快捷菜单",
-      placeHolder: "选择项目、工具链或 IDE 操作",
+      title: t("mcpp: quick menu"),
+      placeHolder: t("Choose a project, toolchain, cache or C++ Modules action"),
       matchOnDescription: true,
     });
     if (picked !== undefined) {

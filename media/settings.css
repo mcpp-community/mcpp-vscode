@@ -1,0 +1,318 @@
+/*
+ * The configuration panel's stylesheet.
+ *
+ * Two rules hold this together, and both come from the plan (§3.5, §4.3):
+ *
+ * 1. **Theme tokens only.** Every colour is a `var(--vscode-*)` reference, so
+ *    the panel follows light, dark and high-contrast themes without a second
+ *    stylesheet. `currentColor` is used for borders that should inherit the
+ *    text colour; there is not a single literal colour value in this file.
+ * 2. **Never colour alone.** State (default / user / workspace / folder /
+ *    invalid, deprecated, modified) is carried by the badges' *text* and by the
+ *    shape of the row's left border — solid, dashed, or double. Colour is
+ *    decoration on top, which is what keeps the panel readable when a theme
+ *    collapses every hue into one.
+ *
+ * The client only toggles `hidden` and `data-*` attributes, so all behaviour is
+ * expressed here as attribute selectors rather than inline styles.
+ */
+
+body {
+  margin: 0;
+  padding: 0;
+  color: var(--vscode-foreground);
+  background-color: var(--vscode-editor-background);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  line-height: 1.5;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--vscode-input-foreground);
+  background-color: var(--vscode-input-background);
+  border: 1px solid;
+  border-color: var(--vscode-input-border, currentColor);
+  border-radius: 2px;
+  padding: 2px 6px;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+input[type="checkbox"] {
+  padding: 0;
+  background: none;
+  border: 0;
+  accent-color: var(--vscode-checkbox-background, var(--vscode-focusBorder));
+}
+
+/* ------------------------------------------------------------------ header */
+
+.panel-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--vscode-panel-border, currentColor);
+}
+
+.panel-title {
+  margin: 0 0 6px;
+  font-size: 1.3em;
+  font-weight: 600;
+}
+
+.boundary {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid;
+  border-color: var(--vscode-inputValidation-infoBorder, currentColor);
+  background-color: var(--vscode-inputValidation-infoBackground);
+}
+
+.resource-label {
+  margin: 6px 0 0;
+  color: var(--vscode-descriptionForeground);
+}
+
+/* ----------------------------------------------------------------- toolbar */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--vscode-panel-border, currentColor);
+}
+
+.search {
+  flex: 1 1 220px;
+  min-width: 160px;
+}
+
+.toggle,
+.target {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+/* ----------------------------------------------------------------- presets */
+
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--vscode-panel-border, currentColor);
+}
+
+.presets-title {
+  font-weight: 600;
+}
+
+.preset-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.preset {
+  color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
+  background-color: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
+  border: 1px solid;
+  border-color: var(--vscode-contrastBorder, currentColor);
+  padding: 3px 10px;
+}
+
+.preset:hover {
+  background-color: var(--vscode-button-secondaryHoverBackground, var(--vscode-button-hoverBackground));
+}
+
+.link-button {
+  color: var(--vscode-textLink-foreground);
+  background: none;
+  border: 1px solid;
+  border-color: currentColor;
+  padding: 2px 8px;
+}
+
+.link-button:hover {
+  color: var(--vscode-textLink-activeForeground);
+  background-color: var(--vscode-toolbar-hoverBackground);
+}
+
+/* ---------------------------------------------------------------- sections */
+
+.section {
+  border-bottom: 1px solid var(--vscode-panel-border, currentColor);
+}
+
+.section-head {
+  margin: 0;
+  font-size: 1em;
+}
+
+.section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 16px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--vscode-sideBarSectionHeader-foreground, var(--vscode-foreground));
+  background-color: var(--vscode-sideBarSectionHeader-background);
+  border: 0;
+  border-radius: 0;
+}
+
+/* The caret is a text glyph so the collapsed state is visible without colour. */
+.section-toggle::before {
+  content: "\25BE";
+}
+
+.section[data-collapsed="true"] .section-toggle::before {
+  content: "\25B8";
+}
+
+.section[data-collapsed="true"] .rows {
+  display: none;
+}
+
+/* -------------------------------------------------------------------- rows */
+
+.row {
+  display: grid;
+  gap: 6px;
+  padding: 10px 16px;
+  border-left: 3px solid;
+  border-left-color: var(--vscode-panel-border, currentColor);
+}
+
+.row[data-deprecated="true"] {
+  border-left-style: dashed;
+  border-left-color: var(--vscode-editorWarning-foreground);
+}
+
+.row[data-source="invalid"] {
+  border-left-style: double;
+  border-left-width: 5px;
+  border-left-color: var(--vscode-errorForeground);
+}
+
+.row-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.row-title {
+  font-weight: 600;
+}
+
+.row-description {
+  margin: 0;
+  color: var(--vscode-descriptionForeground);
+}
+
+.row-deprecation {
+  margin: 0;
+  color: var(--vscode-editorWarning-foreground);
+}
+
+.row-applies {
+  margin: 0;
+  color: var(--vscode-descriptionForeground);
+  font-style: italic;
+}
+
+.row-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.row-control input[type="text"],
+.row-control input[type="number"],
+.row-control select {
+  min-width: 180px;
+}
+
+.row-control textarea {
+  width: 100%;
+  min-height: 3em;
+  resize: vertical;
+}
+
+.control-hint {
+  margin: 0;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.9em;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.empty {
+  margin: 0;
+  padding: 16px;
+  color: var(--vscode-descriptionForeground);
+}
+
+/* ------------------------------------------------------------------ badges */
+
+.badge {
+  border: 1px solid;
+  border-color: currentColor;
+  border-radius: 999px;
+  padding: 0 6px;
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.badge-modified {
+  color: var(--vscode-charts-blue, var(--vscode-foreground));
+}
+
+.badge-deprecated {
+  color: var(--vscode-editorWarning-foreground, var(--vscode-foreground));
+}
+
+.badge-invalid {
+  color: var(--vscode-errorForeground, var(--vscode-foreground));
+}
+
+.badge-source {
+  color: var(--vscode-descriptionForeground);
+}
+
+/* A hand-edited value the registry rejects: the control is visible but closed,
+   and the dashed border says "not editable here" without relying on colour. */
+[data-control][disabled] {
+  border-style: dashed;
+  opacity: 0.85;
+}

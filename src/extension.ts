@@ -1,7 +1,10 @@
 import * as vscode from "vscode";
 
 import { McppCliController } from "./cli/controller";
-import { CLI_COMMANDS, DEPRECATED_COMMANDS } from "./commands/ids";
+import { runProcess } from "./cli/process";
+import { parseProtocolInfo } from "./cli/protocol";
+import { buildSelfCheckText } from "./cli/selfCheck";
+import { CLI_COMMANDS, LEGACY_LANGUAGE_SERVER_COMMANDS, TOOL_COMMANDS } from "./commands/ids";
 import { findNearestMcppProject, type McppProjectDiscovery } from "./projects/discovery";
 import { MCPP_MANIFEST_GLOB, registerInProjectContext } from "./projects/context";
 import {
@@ -9,9 +12,17 @@ import {
   type LanguageServerBridge,
   type LanguageServerCommandResult,
 } from "./mcppls/bridge";
-import { MCPPLS_EXTENSION_ID } from "./mcppls/contract";
+import { CAPABILITIES, MCPPLS_EXTENSION_ID } from "./mcppls/contract";
 import { formatResult } from "./mcppls/messages";
-import { computeMcppTomlCompletions } from "./toml/completion";
+import { describeState } from "./mcppls/state";
+import {
+  languageServerEnabled,
+  languageServerInstalled,
+  languageServerVersion,
+  readLanguageServerState,
+} from "./mcppls/stateSource";
+import { registerBuildScriptProviders } from "./buildscript/providers";
+import { registerTomlProviders } from "./toml/providers";
 import {
   buildModuleSetupPlan,
   executeModuleSetup,
@@ -20,8 +31,12 @@ import {
   type ModuleSetupStepResult,
 } from "./workflows/moduleSetup";
 import type { TaskCompletion } from "./cli/tasks";
-import { onDidChange as onConfigurationChanged, read } from "./config/access";
-import { setLanguagePreference, t, type LanguagePreference } from "./i18n/t";
+import { changedSettings, onDidChange as onConfigurationChanged, read } from "./config/access";
+import { registerSettingsPanel } from "./config/panel";
+import { languagePreference, setLanguagePreference, t, type LanguagePreference } from "./i18n/t";
+import { registerCacheView } from "./views/cacheView";
+import { registerLanguageServerView } from "./views/languageServerView";
+import { registerProjectView } from "./views/projectView";
 
 /**
  * The commands an extension declares in its own `package.json`, read without
@@ -39,6 +54,9 @@ function declaredCommandsOf(id: string): readonly string[] | undefined {
     .map((entry) => entry.command)
     .filter((command): command is string => typeof command === "string");
 }
+
+/** When the language service was last asked to reload, for the self-check. */
+let lastRefresh: { at: string; state: string; command?: string } | undefined;
 
 /** `mcpp.ui.language` decides which of our strings the user sees. */
 function applyLanguagePreference(): void {
@@ -183,45 +201,6 @@ async function autoConfigureModulesWizard(
   }
 }
 
-// mcpp.toml structural completion is deliberately local text analysis. It never executes mcpp or
-// the language server, so it remains available in restricted workspaces.
-const mcppTomlCompletionKinds = {
-  section: vscode.CompletionItemKind.Folder,
-  template: vscode.CompletionItemKind.Snippet,
-} as const;
-
-const mcppTomlCompletionProvider: vscode.CompletionItemProvider = {
-  provideCompletionItems(document, position) {
-    if (!vscode.workspace.getConfiguration("mcpp", document.uri).get<boolean>("tomlCompletion", true)) {
-      return undefined;
-    }
-    const lines: string[] = [];
-    for (let line = 0; line <= position.line; line += 1) {
-      lines.push(document.lineAt(line).text);
-    }
-    return computeMcppTomlCompletions(lines, position.line, position.character).map((suggestion) => {
-      const item = new vscode.CompletionItem(
-        suggestion.label,
-        mcppTomlCompletionKinds[suggestion.kind],
-      );
-      item.detail = suggestion.detail;
-      if (suggestion.documentation !== undefined) {
-        item.documentation = new vscode.MarkdownString(suggestion.documentation);
-      }
-      if (suggestion.insertSnippet !== undefined) {
-        item.insertText = new vscode.SnippetString(suggestion.insertSnippet);
-      }
-      item.range = new vscode.Range(
-        position.line,
-        suggestion.range.startCharacter,
-        position.line,
-        suggestion.range.endCharacter,
-      );
-      return item;
-    });
-  },
-};
-
 export async function activate(extensionContext: vscode.ExtensionContext): Promise<void> {
   const output = vscode.window.createOutputChannel("mcpp");
 
@@ -273,6 +252,7 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
       return;
     }
     const result = await bridge.refreshLanguageServerAfterBuild();
+    lastRefresh = { at: new Date().toISOString(), state: result.state, command: result.command };
     resultText(output, result);
     if (completion.state === "succeeded" && result.state === "completed") {
       await vscode.window.showInformationMessage(taskCompletionText(completion));
@@ -288,42 +268,64 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
     isTrusted: () => vscode.workspace.isTrusted,
   });
 
+  // ── views ────────────────────────────────────────────────────────────────
+  // Each view owns its own tree provider and its own commands; the project view
+  // reads the manifest, the cache view runs mcpp's read-only queries, and the
+  // C++ Modules view only forwards to mcppls.
+  registerProjectView(extensionContext, { currentProject: findCurrentProject });
+  registerCacheView(extensionContext, {
+    output,
+    currentProject: findCurrentProject,
+    mcppExecutable: (project) => cliController.mcppExecutable(project),
+    isTrusted: () => vscode.workspace.isTrusted,
+  });
+  registerLanguageServerView(extensionContext, { bridge, output });
+  registerSettingsPanel(extensionContext);
+
+  // Text analysis only: no mcpp process, so both stay available in a restricted
+  // workspace, which is exactly what the `limited` capability promises.
+  registerTomlProviders(
+    extensionContext,
+    () => read<boolean>("mcpp.toml.completion"),
+    () => ({
+      syntax: read("mcpp.toml.diagnostics.syntax"),
+      unknownSection: read("mcpp.toml.diagnostics.unknownSection"),
+      unknownKey: read("mcpp.toml.diagnostics.unknownKey"),
+      planeSeparation: read("mcpp.toml.diagnostics.planeSeparation"),
+      legacyKeys: read("mcpp.toml.diagnostics.legacyKeys"),
+    }),
+    () => read<boolean>("mcpp.toml.diagnostics.enabled"),
+  );
+  registerBuildScriptProviders(extensionContext, () =>
+    read<boolean>("mcpp.buildScript.diagnostics")
+      ? read<"warning" | "info" | "off">("mcpp.buildScript.diagnostics.severity")
+      : "off",
+  );
+
   extensionContext.subscriptions.push(
     output,
     manifestWatcher,
     inProjectContext,
     ...cliController.register(),
-    vscode.languages.registerCompletionItemProvider(
-      { language: "mcpp-toml" },
-      mcppTomlCompletionProvider,
-      "[",
-    ),
-    vscode.commands.registerCommand(CLI_COMMANDS.configureLanguageServer, invokeLanguageServer(
-      () => bridge.selectContext(),
-    )),
-    vscode.commands.registerCommand(DEPRECATED_COMMANDS.configureClangd, invokeLanguageServer(
-      () => bridge.selectContext(),
-    )),
-    vscode.commands.registerCommand(CLI_COMMANDS.refreshCompilationDatabase, runGuarded(async () => {
-      await cliController.runProjectTask("build");
-    })),
-    vscode.commands.registerCommand(CLI_COMMANDS.checkModuleSupport, invokeLanguageServer(
-      () => bridge.restartLanguageServer(),
-    )),
-    vscode.commands.registerCommand(CLI_COMMANDS.showModuleGraph, invokeLanguageServer(
-      () => bridge.showModuleGraph(),
-    )),
-    vscode.commands.registerCommand(CLI_COMMANDS.showLanguageServerLogs, invokeLanguageServer(
-      () => bridge.showLanguageServerLogs(),
-    )),
+
+    // The ids from 0.4.x keep working.
     vscode.commands.registerCommand(CLI_COMMANDS.autoConfigureModules, runGuarded(async () => {
       const project = findCurrentProject();
       if (project === undefined) {
-        await vscode.window.showWarningMessage("当前工作区没有找到 mcpp.toml。");
+        await vscode.window.showWarningMessage(t("This workspace has no mcpp.toml."));
         return;
       }
       await autoConfigureModulesWizard(bridge, cliController, output);
     })),
+    vscode.commands.registerCommand(LEGACY_LANGUAGE_SERVER_COMMANDS.refreshCompilationDatabase, runGuarded(async () => {
+      await cliController.runProjectTask("build");
+    })),
+
+    // Environment self-check: one copyable snapshot of everything a bug report needs.
+    vscode.commands.registerCommand(TOOL_COMMANDS.selfCheck, runGuarded(async () => {
+      await showSelfCheck(output, cliController, bridge, extensionContext.extension.packageJSON.version);
+    })),
+
     vscode.workspace.onDidGrantWorkspaceTrust(() => cliController.refreshStatus()),
   );
 
@@ -332,6 +334,56 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
     manifestWatcher.onDidChange(() => cliController.refreshStatus()),
     manifestWatcher.onDidDelete(() => cliController.refreshStatus()),
   );
+}
+
+/**
+ * The self-check gathers, never guesses: anything it cannot read is reported as
+ * unknown rather than left blank. It is the first thing to ask for in a bug
+ * report, and it writes to the `mcpp` channel so it can be copied in one go.
+ */
+async function showSelfCheck(
+  output: vscode.OutputChannel,
+  cliController: McppCliController,
+  bridge: LanguageServerBridge,
+  extensionVersion: unknown,
+): Promise<void> {
+  const project = findCurrentProject();
+  const executable = cliController.mcppExecutable(project);
+  const probeResult = await runProcess(executable, ["--protocol-version"], project?.root, { timeoutMs: 20_000 });
+  const info = probeResult.exitCode === 0 ? parseProtocolInfo(probeResult.stdout) : undefined;
+  const state = readLanguageServerState();
+  const capabilities = CAPABILITIES.map((entry) => ({
+    key: entry.key,
+    state: bridge.isGone(entry.key) ? "missing" : bridge.isUnconfirmed(entry.key) ? "unconfirmed" : "available",
+  }));
+  const text = buildSelfCheckText({
+    extensionVersion: typeof extensionVersion === "string" ? extensionVersion : "unknown",
+    vscodeVersion: vscode.version,
+    platform: `${process.platform}-${process.arch}`,
+    languagePreference: languagePreference(),
+    trusted: vscode.workspace.isTrusted,
+    workspaceRoots: (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath),
+    projectRoot: project?.root,
+    mcppPath: executable,
+    mcppProbe:
+      info === undefined
+        ? undefined
+        : { version: info.mcppVersion, envelopeMax: info.envelopeMax, kinds: Object.keys(info.kinds) },
+    mcppls: {
+      installed: languageServerInstalled(),
+      version: languageServerVersion(),
+      enabled: languageServerEnabled(),
+      state: describeState(state),
+      capabilities,
+    },
+    changedSettings: changedSettings(project === undefined ? undefined : vscode.Uri.file(project.root)),
+    lastRefresh: lastRefresh,
+  });
+  output.appendLine("");
+  output.appendLine("===== mcpp: environment self-check =====");
+  output.appendLine(text);
+  output.appendLine("========================================");
+  output.show(true);
 }
 
 export function deactivate(): void {
