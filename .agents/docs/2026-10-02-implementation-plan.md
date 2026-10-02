@@ -191,3 +191,31 @@ T01 ─┬─ T02 ─┬─ T11 ─┬─ T12 ─┐
 - [ ] `build` 之后的行为与 0.4.x 一致（刷新语言服务），只是优先用轻量重载
 - [ ] 未受信任工作区的行为不放松
 - [ ] CHANGELOG 写清"什么变了 / 什么没变 / 需要手动做什么"
+
+---
+
+## 7. 进展（round 1，2026-10-02）
+
+分支 `feat/plugin-optimisation-v0.5.0`，`npm test` 390 通过，三个生成物/一致性门禁全绿。
+
+| 任务 | 状态 | 产物 |
+|---|---|---|
+| T01 目录重构 | ✅ | `9 个提交之一`；179→390 测试 |
+| T02 i18n 机制 | ✅ | `data/i18n/zh-cn.json`、`l10n/`（生成）、`package.nls*.json`、`src/i18n/{t,translate}.ts`、`tools/{generate-l10n,l10n-check}.mjs`；`package.json` 用户可见字符串全部 `%key%` |
+| T03 配置模块 | ✅ | `data/config-registry.json`（64 项/10 组/29 公开）、`src/config/{registry,validate,access,migrate,presets}.ts`、`tools/{check-config,generate-settings-docs}.mjs`、`docs/settings.md`（生成） |
+| T05 协议探测 | ✅ | `src/cli/protocol.ts`（已对真实 mcpp 2026.9.30.2 交叉验证） |
+| T08 错误分层 | ✅ | `src/cli/errors.ts`（SPEC-003，含 101 仅 mcpp run / 4 / 127） |
+| T11–T14 mcppls | ✅ | `src/mcppls/{contract,capabilities,state,bridge,messages}.ts`；15 项能力、候选链、惰性分类、状态白名单、结构化结果 |
+| T18/T19 缓存聚合 | ✅ | `src/cli/{cache,artifacts}.ts` |
+| T22 清理计划 | ✅（表） | `src/cli/clean.ts`（五级危险、预演、二次确认）；命令接线待做 |
+| T24/T27 TOML | ✅ | `data/toml-schema.json`（30 段/97 键）、`src/toml/{schema,diagnostics}.ts`、`tools/generate-toml-schema.mjs` |
+| T30–T32 buildscript | ✅（分析层） | `data/buildscript-api.json`（31 指令/5 role/协议 15）、`src/buildscript/{api,modules,analysis,providers}.ts` |
+| T33 格式化 | ✅ | `src/util/{format,text}.ts` |
+| 视图模型 | ✅（模型层） | `src/views/models.ts`（三棵树，标签即 key）、`src/projects/summary.ts` |
+
+**下一轮的起点**：`package.json` 的 contributions（commands / viewsContainers / views / colors /
+menus / activationEvents）、`src/views/` 的 provider 与命令实现、`src/extension.ts` 接线、
+`tools/dev-profile.mjs`、CI 工作流、README 双语与 `docs/*`、0.5.0 版本与 CHANGELOG。
+
+**上游反馈已记录**：生成脚本对照 mcpp 源码时发现方案文档里两个不存在的键名
+（`[profile.<n>].opt_level` 实为 `opt`；`bidi_schedule` 实为 `bmi_schedule`），已修正。
