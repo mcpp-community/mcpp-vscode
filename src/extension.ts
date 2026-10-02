@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 
-import { McppCliController } from "./cli/controller";
+import { McppCliController, discoveryBoundaryFromSettings } from "./cli/controller";
 import { runProcess } from "./cli/process";
 import { parseProtocolInfo } from "./cli/protocol";
 import { buildSelfCheckText } from "./cli/selfCheck";
@@ -35,7 +35,7 @@ import { changedSettings, onDidChange as onConfigurationChanged, read } from "./
 import { applyRenames, pendingRenames, renamePrompt } from "./config/migrate";
 import { registerSettingsPanel } from "./config/panel";
 import { languagePreference, setLanguagePreference, t, type LanguagePreference } from "./i18n/t";
-import { registerCacheView } from "./views/cacheView";
+import { readCacheSnapshot, registerCacheView } from "./views/cacheView";
 import { registerLanguageServerView } from "./views/languageServerView";
 import { registerProjectView } from "./views/projectView";
 
@@ -76,11 +76,19 @@ function findCurrentProject(): McppProjectDiscovery | undefined {
     if (workspaceFolder === undefined) {
       return undefined;
     }
-    return findNearestMcppProject(activeUri.fsPath, workspaceFolder.uri.fsPath);
+    return findNearestMcppProject(
+      activeUri.fsPath,
+      workspaceFolder.uri.fsPath,
+      discoveryBoundaryFromSettings(workspaceFolder.uri),
+    );
   }
 
   for (const workspaceFolder of vscode.workspace.workspaceFolders ?? []) {
-    const project = findNearestMcppProject(workspaceFolder.uri.fsPath);
+    const project = findNearestMcppProject(
+      workspaceFolder.uri.fsPath,
+      workspaceFolder.uri.fsPath,
+      discoveryBoundaryFromSettings(workspaceFolder.uri),
+    );
     if (project !== undefined) {
       return project;
     }
@@ -273,6 +281,10 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
     currentProject: findCurrentProject,
     afterProjectTask,
     isTrusted: () => vscode.workspace.isTrusted,
+    languageServerSummary: () => {
+      const view = readLanguageServerState();
+      return view.available ? view.state : undefined;
+    },
   });
 
   // ── views ────────────────────────────────────────────────────────────────
@@ -280,13 +292,10 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
   // reads the manifest, the cache view runs mcpp's read-only queries, and the
   // C++ Modules view only forwards to mcppls.
   const applyViewVisibility = (): void => {
-    for (const [key, setting] of [
-      ["mcpp.views.project", "mcpp.views.project.show"],
-      ["mcpp.views.cache", "mcpp.views.cache.show"],
-      ["mcpp.views.languageServer", "mcpp.views.languageServer.show"],
-    ] as const) {
-      void vscode.commands.executeCommand("setContext", key, read<boolean>(setting));
-    }
+    // Literal keys, so the wiring gate can see them.
+    void vscode.commands.executeCommand("setContext", "mcpp.views.project", read<boolean>("mcpp.views.project.show"));
+    void vscode.commands.executeCommand("setContext", "mcpp.views.cache", read<boolean>("mcpp.views.cache.show"));
+    void vscode.commands.executeCommand("setContext", "mcpp.views.languageServer", read<boolean>("mcpp.views.languageServer.show"));
   };
   applyViewVisibility();
   extensionContext.subscriptions.push(onConfigurationChanged(applyViewVisibility));
@@ -452,6 +461,7 @@ async function showSelfCheck(
     },
     changedSettings: changedSettings(project === undefined ? undefined : vscode.Uri.file(project.root)),
     lastRefresh: lastRefresh,
+    cache: await readCacheSnapshot(),
   });
   output.appendLine("");
   output.appendLine("===== mcpp: environment self-check =====");

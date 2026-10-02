@@ -50,7 +50,7 @@
   "mcpp.buildScript.diagnostics.severity.description": "build.mcpp 诊断使用的严重度。",
   "mcpp.buildScript.diagnostics.severity.title": "设置 build.mcpp 诊断严重度",
   "mcpp.buildScript.diagnostics.title": "启用 build.mcpp 诊断",
-  "mcpp.buildScript.imports.knownModules.description": "标记 build.mcpp 中既不是标准模块、也不是已知 mcpp 模块的导入。",
+  "mcpp.buildScript.imports.knownModules.description": "在 import 补全中列出 mcpp 自带的模块（std、std.compat、mcpp.*）。无论此设置如何，悬停仍会识别它们，也不会把任何 import 报为缺失。",
   "mcpp.buildScript.imports.knownModules.title": "检查导入的模块",
   "mcpp.buildScript.intelligence.description": "统一开关 build.mcpp 的补全与悬停支持。",
   "mcpp.buildScript.intelligence.title": "启用 build.mcpp 智能",

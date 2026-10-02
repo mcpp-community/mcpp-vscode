@@ -3,20 +3,37 @@
  *
  * `src/extension.ts` stays the only assembly point: it calls this function with
  * its real context and a severity reader, and gets completion, hover and
- * diagnostics for the `mcpp-build` language id in return. Nothing here reads a
- * setting or knows a configuration key — severity arrives as a function, so the
- * wiring step decides where it comes from.
+ * diagnostics for the `mcpp-build` language id in return. The severity reader is
+ * the one switch `src/extension.ts` already owns; the four boolean switches
+ * (`mcpp.buildScript.{intelligence,diagnostics,snippets,imports.knownModules}`)
+ * are resolved here through `settings.ts`, because that file is the only place
+ * this extension can be told about them.
  *
- * Everything shown comes from `api.ts` (the generated snapshot) or `modules.ts`;
- * nothing invokes a compiler, and no provider ever says "module not found". The
- * signature is deliberately narrow so the pure modules stay testable and this
- * file stays the only one that touches the `vscode` API.
+ * So `mcpp.buildScript.intelligence = false` means **no** build.mcpp
+ * intelligence — completion and hover return nothing, and diagnostics stop —
+ * rather than merely skipping provider registration. `snippets` and
+ * `imports.knownModules` each narrow one contribution of that layer and never
+ * touch another: with `snippets` off, diagnostics and hover stay; with
+ * `imports.knownModules` off, only the *completion list* of shipped modules
+ * disappears, while hover keeps recognising `std`/`std.compat`/`mcpp.*` and
+ * diagnostics never report any import as missing.
+ *
+ * This build registers no document-symbol provider for `mcpp-build`, so there is
+ * nothing there to suppress; if one is added it must consult `intelligence` too.
+ *
+ * Everything shown comes from `api.ts` (the generated snapshot), `modules.ts` or
+ * `snippets.ts`; nothing invokes a compiler, and no provider ever says "module
+ * not found". The pure modules stay testable and this file stays the only one in
+ * the slice that touches the `vscode` API.
  */
 import type * as vscode from "vscode";
 
+import { read } from "../config/access";
 import { analyseBuildScript } from "./analysis";
 import { API, directive } from "./api";
 import { knownModule, knownModules, scanImports } from "./modules";
+import { buildScriptContributions } from "./settings";
+import { snippetsForScope } from "./snippets";
 
 // The deliverable for this file is typed against `import type * as vscode`; the
 // extension host is the only environment it runs in, so the value is required
@@ -74,25 +91,35 @@ export function registerBuildScriptProviders(
 ): void {
   const selector: vscode.DocumentSelector = { language: LANGUAGE };
   const collection = vscodeApi.languages.createDiagnosticCollection(LANGUAGE);
+  const contributions = () => buildScriptContributions(read, severity);
 
   const refresh = (document: vscode.TextDocument): void => {
     if (document.languageId !== LANGUAGE) {
       return;
     }
-    const level = severity();
-    if (level === "off") {
+    const { diagnosticSeverity } = contributions();
+    if (diagnosticSeverity === undefined) {
       collection.delete(document.uri);
       return;
     }
-    collection.set(document.uri, toVscodeDiagnostics(document, level));
+    collection.set(document.uri, toVscodeDiagnostics(document, diagnosticSeverity));
   };
 
   const completion = vscodeApi.languages.registerCompletionItemProvider(selector, {
     provideCompletionItems(document, position) {
+      const { intelligence, snippets, knownModules: completesKnownModules } = contributions();
+      if (!intelligence) {
+        return undefined;
+      }
       const before = document.lineAt(position.line).text.slice(0, position.character);
 
       const afterImport = /\b(?:export\s+)?import\s+([A-Za-z0-9_.]*)$/.exec(before);
       if (afterImport !== null) {
+        // Only the *list* is optional. Recognition itself (`knownModule`, hover,
+        // the no-diagnostic rule) is unconditional.
+        if (!completesKnownModules) {
+          return undefined;
+        }
         return knownModules()
           .filter((entry) => !entry.name.endsWith(".*") && entry.name.startsWith(afterImport[1]))
           .map((entry) => {
@@ -110,13 +137,29 @@ export function registerBuildScriptProviders(
       if (afterScope !== null) {
         const typed = afterScope[1] ?? "";
         const names = API.directives.map((entry) => entry.wire.replace(/-/g, "_"));
-        return names
+        const items: vscode.CompletionItem[] = names
           .filter((name, index) => names.indexOf(name) === index && name.startsWith(typed))
           .map((name) => {
             const item = new vscodeApi.CompletionItem(name, vscodeApi.CompletionItemKind.Function);
             item.detail = "mcpp build-script API";
             return item;
           });
+        if (snippets) {
+          for (const snippet of snippetsForScope(typed)) {
+            const item = new vscodeApi.CompletionItem(
+              snippet.label,
+              vscodeApi.CompletionItemKind.Snippet,
+            );
+            item.filterText = snippet.filterText;
+            item.detail = snippet.detail;
+            if (snippet.documentation !== undefined) {
+              item.documentation = markdown([snippet.documentation]);
+            }
+            item.insertText = new vscodeApi.SnippetString(snippet.insertText);
+            items.push(item);
+          }
+        }
+        return items;
       }
 
       return undefined;
@@ -125,6 +168,9 @@ export function registerBuildScriptProviders(
 
   const hover = vscodeApi.languages.registerHoverProvider(selector, {
     provideHover(document, position) {
+      if (!contributions().intelligence) {
+        return undefined;
+      }
       const lines = document.getText().split(/\r?\n/);
 
       for (const site of scanImports(lines)) {

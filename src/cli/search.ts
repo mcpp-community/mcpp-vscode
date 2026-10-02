@@ -121,3 +121,55 @@ export function shouldSearch(
 ): boolean {
   return options.enabled && options.trusted && !options.offline;
 }
+
+/** `mcpp.toml.indexCompletionTimeoutSeconds` 的注册表默认值。 */
+const DEFAULT_INDEX_TIMEOUT_SECONDS = 20;
+
+/** 一次索引查询的完整描述：argv 与硬超时。 */
+export interface IndexSearchRequest {
+  name: string;
+  args: string[];
+  timeoutMs: number;
+}
+
+/**
+ * 把设置解析成"要跑什么"，或者 `undefined` 表示不跑。
+ *
+ * 纯函数：进程、会话缓存、vscode 判定都在调用方（`src/toml/providers.ts`）。
+ * 超时从 `mcpp.toml.indexCompletionTimeoutSeconds` 来，至少 1 秒；非有限值
+ * 回落到注册表默认的 20 秒。这样"绝不超过设置的超时"有一个可单测的落点。
+ */
+export function indexCompletionRequest(
+  name: string,
+  options: { enabled: boolean; trusted: boolean; offline: boolean; timeoutSeconds: number },
+): IndexSearchRequest | undefined {
+  if (!shouldSearch(name, options)) {
+    return undefined;
+  }
+  const seconds = Number.isFinite(options.timeoutSeconds)
+    ? Math.max(1, Math.floor(options.timeoutSeconds))
+    : DEFAULT_INDEX_TIMEOUT_SECONDS;
+  return { name, args: searchArguments(name), timeoutMs: seconds * 1000 };
+}
+
+/**
+ * 等 `work`，但最多等 `timeoutMs`；超时得到 `undefined`。
+ *
+ * 调用方自己的进程超时（`execFile` 的 `timeout`）才是第一道闸；这是第二道：
+ * 即便进程卡住不退出，补全也必须在超时后返回，绝不把编辑器挂住。
+ */
+export async function withDeadline<T>(work: Promise<T>, timeoutMs: number): Promise<T | undefined> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<undefined>((resolve) => {
+        timer = setTimeout(() => resolve(undefined), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+  }
+}

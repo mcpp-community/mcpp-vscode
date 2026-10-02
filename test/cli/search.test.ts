@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  indexCompletionRequest,
   parseSearchOutput,
   searchArguments,
   shouldSearch,
+  withDeadline,
 } from "../../src/cli/search";
 
 /**
@@ -105,4 +107,35 @@ test("shouldSearch is enabled && trusted && !offline", () => {
   assert.equal(shouldSearch("zlib", { enabled: true, trusted: false, offline: false }), false);
   assert.equal(shouldSearch("zlib", { enabled: true, trusted: true, offline: true }), false);
   assert.equal(shouldSearch("zlib", { enabled: false, trusted: true, offline: false }), false);
+});
+
+test("indexCompletionRequest carries the switches into argv and the timeout", () => {
+  const on = { enabled: true, trusted: true, offline: false, timeoutSeconds: 5 };
+  assert.deepEqual(indexCompletionRequest("zlib", on), {
+    name: "zlib",
+    args: ["search", "zlib", "--all-versions"],
+    timeoutMs: 5000,
+  });
+
+  // The default is off, and every one of the three switches alone withholds the
+  // request — no argv, no process.
+  assert.equal(indexCompletionRequest("zlib", { ...on, enabled: false }), undefined);
+  assert.equal(indexCompletionRequest("zlib", { ...on, trusted: false }), undefined);
+  assert.equal(indexCompletionRequest("zlib", { ...on, offline: true }), undefined);
+
+  // The registry's minimum is 1 second; a hand-edited non-number falls back to
+  // the declared default of 20 seconds rather than to "no timeout".
+  assert.equal(indexCompletionRequest("zlib", { ...on, timeoutSeconds: 0 })?.timeoutMs, 1000);
+  assert.equal(indexCompletionRequest("zlib", { ...on, timeoutSeconds: -3 })?.timeoutMs, 1000);
+  assert.equal(indexCompletionRequest("zlib", { ...on, timeoutSeconds: 20 })?.timeoutMs, 20_000);
+  assert.equal(
+    indexCompletionRequest("zlib", { ...on, timeoutSeconds: Number.NaN })?.timeoutMs,
+    20_000,
+  );
+});
+
+test("withDeadline returns the work's value and gives up when work never settles", async () => {
+  assert.equal(await withDeadline(Promise.resolve("done"), 1000), "done");
+  const neverSettles = new Promise<string>(() => undefined);
+  assert.equal(await withDeadline(neverSettles, 20), undefined);
 });

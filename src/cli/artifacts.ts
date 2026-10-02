@@ -54,7 +54,22 @@ export function estimateArtifacts(
   projectRoot: string,
   options: { maxEntries?: number; maxDepth?: number } = {},
 ): ArtifactEstimate {
-  const root = path.join(projectRoot, "target");
+  return measureDirectory(path.join(projectRoot, "target"), options);
+}
+
+/**
+ * The same bounded walk, for a directory that is already known by path.
+ *
+ * The cache view needs it for the pre-v1 cache path `mcpp cache dir` reports
+ * (plan §3.4 / §8 G6): that directory lives outside the workspace, so it cannot
+ * be reached through {@link estimateArtifacts}. The same rules apply — bounded,
+ * never followed through symlinks, and it reports a floor instead of throwing
+ * when the walk stops early.
+ */
+export function measureDirectory(
+  root: string,
+  options: { maxEntries?: number; maxDepth?: number } = {},
+): ArtifactEstimate {
   const maxEntries = budget(options.maxEntries, DEFAULT_MAX_ENTRIES);
   const maxDepth = budget(options.maxDepth, DEFAULT_MAX_DEPTH);
 

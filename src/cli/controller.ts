@@ -14,7 +14,13 @@ import {
   type ToolchainInventory,
   type ToolchainItem,
 } from "./toolchain";
-import type { McppProjectDiscovery } from "../projects/discovery";
+import {
+  discoveryBoundaryOf,
+  type DiscoveryBoundary,
+  type McppProjectDiscovery,
+} from "../projects/discovery";
+import { updateEditorTitleButtonsContext } from "../projects/context";
+import { createLogger, type Logger } from "../util/log";
 import { runProcess } from "./process";
 import {
   McppOperationRegistry,
@@ -25,6 +31,7 @@ import {
   type ProjectTaskKind,
   type TaskCompletion,
 } from "./tasks";
+import { classifyExit, explainHint, type McppFailureKind, type McppOutcome } from "./errors";
 import { CLI_COMMANDS } from "../commands/ids";
 import { QUICK_MENU_GROUPS, quickMenuItems, quickMenuStatusText } from "../commands/menu";
 import { read } from "../config/access";
@@ -40,6 +47,13 @@ export interface McppCliControllerOptions {
     completion: TaskCompletion,
   ) => Promise<void>;
   isTrusted: () => boolean;
+  /**
+   * `mcpp.ui.statusBar.showLanguageServer`: one short line describing the C++
+   * Modules state, or `undefined` when there is nothing to show. A callback
+   * instead of an import so this controller never depends on `src/mcppls/**`;
+   * the extension layer owns the bridge and passes it in.
+   */
+  languageServerSummary?: () => string | undefined;
 }
 
 interface ToolchainPickItem extends vscode.QuickPickItem {
@@ -78,24 +92,201 @@ function commandLine(executable: string, args: string[]): string {
   return [executable, ...args].join(" ");
 }
 
+// ─── pure policy ────────────────────────────────────────────────────────────
+//
+// Every decision a setting makes is computed by a pure function in this block,
+// so `test/cli/controller.*.test.ts` can assert the decision without an editor.
+// The class below only executes what these functions decide.
+
+export type TaskRevealSetting = "always" | "onFailure" | "never";
+
+export interface TaskTerminalUi {
+  /** `mcpp.task.revealTerminal`. */
+  reveal: TaskRevealSetting;
+  /** `mcpp.task.focusTerminal`: hand keyboard focus to the task terminal. */
+  focus: boolean;
+  /** `mcpp.task.clearTerminal`: clear the panel before the command runs. */
+  clearBeforeRun: boolean;
+}
+
+export function taskTerminalUi(
+  revealTerminal: unknown,
+  focusTerminal: unknown,
+  clearTerminal: unknown,
+): TaskTerminalUi {
+  return {
+    reveal:
+      revealTerminal === "never" || revealTerminal === "onFailure" ? revealTerminal : "always",
+    focus: focusTerminal === true,
+    clearBeforeRun: clearTerminal !== false,
+  };
+}
+
+/** `workbench.action.terminal.*` commands to run once the task has finished. */
+export function terminalCommandsAfterTask(ui: TaskTerminalUi, failed: boolean): readonly string[] {
+  // VS Code has no "reveal without focusing" command, so the one command below
+  // is both the reveal and the focus for the failure-only setting.
+  return failed && ui.reveal === "onFailure" ? ["workbench.action.terminal.focus"] : [];
+}
+
+/** The problem matcher `package.json` must contribute under `contributes.problemMatchers`. */
+export const PROBLEM_MATCHER_NAME = "$mcpp";
+
+export function problemMatchersFor(enabled: unknown): readonly string[] {
+  return enabled === false ? [] : [PROBLEM_MATCHER_NAME];
+}
+
+/**
+ * `mcpp.task.confirmClean`: this decides only the controller's own prompt for
+ * `mcpp.clean`. The cleanup plan (`src/cli/clean.ts`) keeps its own level-2/3
+ * confirmations, which this setting can never remove.
+ */
+export function cleanConfirmationRequired(confirmClean: unknown): boolean {
+  return confirmClean !== false;
+}
+
+export type ConfirmationStrength = "notice" | "modal";
+
+export interface ConfirmationPolicy {
+  installToolchain: ConfirmationStrength;
+  globalDefault: ConfirmationStrength;
+}
+
+/**
+ * `mcpp.ui.confirmDestructiveOnly` (default true) reserves a modal for actions
+ * that cannot be undone. Turning it off escalates these two undoable prompts
+ * from a dismissible notification to a modal — the prompt, its text and its
+ * buttons are identical in both modes, so the setting can only ask *more*
+ * insistently, never less often.
+ */
+export function confirmationPolicy(confirmDestructiveOnly: unknown): ConfirmationPolicy {
+  const strength: ConfirmationStrength = confirmDestructiveOnly === false ? "modal" : "notice";
+  return { installToolchain: strength, globalDefault: strength };
+}
+
+/** `mcpp.ui.statusBar.showLanguageServer`: the suffix the status item gains. */
+export function languageServerStatusSuffix(show: unknown, summary: string | undefined): string | undefined {
+  if (show !== true) {
+    return undefined;
+  }
+  const text = summary?.trim();
+  return text === undefined || text.length === 0 ? undefined : text;
+}
+
+export type SuccessReport = "silent" | "statusBar" | "toast";
+
+/** `mcpp.ui.notifications.success`; only a *successful* result consults this. */
+export function successReportOf(value: unknown): SuccessReport {
+  return value === "silent" || value === "toast" ? value : "statusBar";
+}
+
+/**
+ * `mcpp.ui.notifications.dedupeMinutes`: true when the same message may be
+ * shown again. `0` (or an unusable value) shows every notification.
+ */
+export function dedupeAllows(lastAt: number | undefined, now: number, dedupeMinutes: unknown): boolean {
+  if (typeof dedupeMinutes !== "number" || !Number.isFinite(dedupeMinutes) || dedupeMinutes <= 0) {
+    return true;
+  }
+  if (typeof lastAt !== "number" || !Number.isFinite(lastAt)) {
+    return true;
+  }
+  return now - lastAt >= dedupeMinutes * 60_000;
+}
+
+export const STATUS_BAR_SUCCESS_MAX = 60;
+
+/** A status bar item is a label, not a paragraph. */
+export function statusBarSuccessText(message: string): string {
+  const single = message.replace(/\s+/g, " ").trim();
+  return single.length <= STATUS_BAR_SUCCESS_MAX
+    ? single
+    : `${single.slice(0, STATUS_BAR_SUCCESS_MAX - 1)}…`;
+}
+
+export interface FailureAdvice {
+  kind: McppFailureKind;
+  exitCode: number;
+  /** `mcpp self explain <CODE>`, when the output or code names a diagnostic. */
+  hint?: string;
+}
+
+/**
+ * `src/cli/errors.ts` (SPEC-003) applied to a failed run: the failure kind that
+ * picks the guidance, plus the `mcpp self explain` follow-up when there is a
+ * diagnostic code to explain.
+ */
+export function failureAdvice(args: readonly string[], exitCode: number, output: string): FailureAdvice {
+  const outcome: McppOutcome = { ...classifyExit(exitCode, args), detail: output };
+  return { kind: outcome.kind, exitCode: outcome.exitCode, hint: explainHint(outcome) };
+}
+
+/** The exit-code-specific next step, or `undefined` to keep the caller's message. */
+function failureGuidanceText(kind: McppFailureKind): string | undefined {
+  switch (kind) {
+    case "usage":
+      return t("mcpp rejected the command line; check the arguments and run it from the project root.");
+    case "environment":
+      return t("mcpp is installed but the environment is not ready; run `mcpp self doctor` to see what is missing.");
+    case "internal":
+      return t("mcpp reported an internal error; re-run with the mcpp output channel open and report it.");
+    case "unknown-command":
+      return t("This mcpp build does not recognise that command; update mcpp or check the spelling.");
+    case "build-failed":
+      return t("The program did not build; see the task terminal for the compiler output.");
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * The `vscode`-side read of `mcpp.project.discoveryBoundary`. `extension.ts`
+ * passes the result into `findNearestMcppProject`, whose walk stays pure. The
+ * resource is the workspace folder, because the setting is resource-scoped.
+ */
+export function discoveryBoundaryFromSettings(resource?: vscode.Uri): DiscoveryBoundary {
+  return discoveryBoundaryOf(read<string>("mcpp.project.discoveryBoundary", resource));
+}
+
+const SUCCESS_STATUS_MS = 6000;
+
 export class McppCliController {
   private readonly status: vscode.StatusBarItem;
 
   private readonly operations = new McppOperationRegistry<OperationToken>();
 
+  /** `mcpp.log.level` decides what reaches the `mcpp` channel; see `src/util/log.ts`. */
+  private readonly logger: Logger;
+
+  /** `mcpp.ui.notifications.dedupeMinutes`: message signature -> last shown (ms). */
+  private readonly lastNotified = new Map<string, number>();
+
+  /** Reverts the transient success text in the status item. */
+  private statusRevert: ReturnType<typeof setTimeout> | undefined;
+
   public constructor(private readonly options: McppCliControllerOptions) {
     this.status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 40);
     this.status.command = CLI_COMMANDS.showMenu;
-    this.status.text = quickMenuStatusText;
-    this.status.tooltip = t("Open the mcpp project and toolchain quick menu");
+    this.logger = createLogger(this.options.output, () => read<unknown>("mcpp.log.level"));
+    this.applyStatusBar();
   }
 
   public register(): vscode.Disposable[] {
-    this.applyStatusBarSetting();
+    this.applyStatusBar();
+    const applyEditorTitleButtons = (): void => {
+      void updateEditorTitleButtonsContext({
+        enabled: () => read<boolean>("mcpp.task.editorTitleButtons"),
+        setContextValue: (key, value) => vscode.commands.executeCommand("setContext", key, value),
+      }).catch(() => undefined);
+    };
+    applyEditorTitleButtons();
     const disposables: vscode.Disposable[] = [
       vscode.workspace.onDidChangeConfiguration((event) => {
         if (event.affectsConfiguration("mcpp.ui.statusBar")) {
-          this.applyStatusBarSetting();
+          this.applyStatusBar();
+        }
+        if (event.affectsConfiguration("mcpp.task.editorTitleButtons")) {
+          applyEditorTitleButtons();
         }
       }),
       this.status,
@@ -120,7 +311,7 @@ export class McppCliController {
       this.status.hide();
       return;
     }
-    this.status.show();
+    this.applyStatusBar();
   }
 
   public isBusy(): boolean {
@@ -136,7 +327,9 @@ export class McppCliController {
       return undefined;
     }
 
-    if (kind === "clean") {
+    // `mcpp.task.confirmClean`: one prompt for this entry point; the cleanup
+    // plan's own level-2/3 confirmations are untouched by it.
+    if (kind === "clean" && cleanConfirmationRequired(read<boolean>("mcpp.task.confirmClean", vscode.Uri.file(project.root)))) {
       const choice = await vscode.window.showWarningMessage(
         `将删除当前工程的 target 目录：${project.root}/target`,
         { modal: true, detail: "此操作不会清理全局 BMI 缓存。" },
@@ -244,9 +437,10 @@ export class McppCliController {
           ? "mcpp 会规范化兼容写法，并可能下载对应 target 的较大工具链包。"
           : "安装可能下载较大的工具链包，并修改 mcpp 全局缓存。";
 
+    const policy = confirmationPolicy(read<boolean>("mcpp.ui.confirmDestructiveOnly"));
     const choice = await vscode.window.showWarningMessage(
       confirmation,
-      { modal: true, detail },
+      this.warningOptions(policy.installToolchain, detail),
       confirmLabel,
     );
     if (choice !== confirmLabel) {
@@ -291,9 +485,7 @@ export class McppCliController {
     }
 
     if (installKind === "managed-target") {
-      await vscode.window.showInformationMessage(
-        `mcpp 已完成 ${spec}。首版插件不修改 target 默认；如需设为默认，请使用带 --target 的 mcpp CLI。`,
-      );
+      this.reportSuccess(`mcpp 已完成 ${spec}。首版插件不修改 target 默认；如需设为默认，请使用带 --target 的 mcpp CLI。`);
       return;
     }
 
@@ -353,9 +545,13 @@ export class McppCliController {
       return;
     }
 
+    const defaultPolicy = confirmationPolicy(read<boolean>("mcpp.ui.confirmDestructiveOnly"));
     const choice = await vscode.window.showWarningMessage(
       `将把全局默认对设为 ${picked.spec} + host target。当前项目的 mcpp.toml/target 配置仍可能覆盖它。`,
-      { modal: true, detail: "mcpp 会同时清空全局 default_target；配置文件位置由当前 mcpp 安装及 MCPP_HOME 决定。" },
+      this.warningOptions(
+        defaultPolicy.globalDefault,
+        "mcpp 会同时清空全局 default_target；配置文件位置由当前 mcpp 安装及 MCPP_HOME 决定。",
+      ),
       CONFIRM_DEFAULT,
     );
     if (choice !== CONFIRM_DEFAULT) {
@@ -378,7 +574,10 @@ export class McppCliController {
       );
       this.appendShortCommand("设置全局默认工具链", this.mcppExecutable(project), args, result);
       if (result.exitCode !== 0) {
-        await vscode.window.showErrorMessage(
+        this.reportCommandFailure(
+          args,
+          result.exitCode,
+          `${result.stdout}\n${result.stderr}`,
           `设置全局默认工具链失败（退出码 ${result.exitCode}）。请查看 mcpp 输出频道。`,
         );
         return;
@@ -586,11 +785,7 @@ export class McppCliController {
         await operation();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        try {
-          this.options.output.appendLine(`mcpp CLI 操作失败：${message}`);
-        } catch {
-          // 输出频道可能已经在窗口重载时释放。
-        }
+        this.logger.error(`mcpp CLI 操作失败：${message}`);
         await vscode.window.showErrorMessage(`mcpp：${message}`);
       }
     };
@@ -638,7 +833,10 @@ export class McppCliController {
     const result = await runProcess(executable, args, workingDirectory(project));
     this.appendShortCommand("查看工具链", executable, args, result);
     if (result.exitCode !== 0) {
-      await vscode.window.showErrorMessage(
+      this.reportCommandFailure(
+        args,
+        result.exitCode,
+        `${result.stdout}\n${result.stderr}`,
         `mcpp toolchain list 失败（退出码 ${result.exitCode}）。请查看 mcpp 输出频道。`,
       );
       return undefined;
@@ -660,18 +858,27 @@ export class McppCliController {
     title: string,
     args: string[],
   ): Promise<TaskCompletion> {
+    // `mcpp.task.revealTerminal` / `focusTerminal` / `clearTerminal` and
+    // `mcpp.task.problemMatcher` are read here, where the task object is
+    // assembled; the completion path re-reads them for the failure-only reveal.
+    const ui = this.terminalUi(root);
     const task = new vscode.Task(
       { type: "mcpp", command: args[0] ?? "mcpp", projectRoot: root },
       taskScope(root),
       title,
       "mcpp",
       new vscode.ProcessExecution(executable, args, { cwd: root }),
+      [...problemMatchersFor(read<boolean>("mcpp.task.problemMatcher", vscode.Uri.file(root)))],
     );
     task.presentationOptions = {
-      reveal: vscode.TaskRevealKind.Always,
+      reveal: ui.reveal === "always"
+        ? vscode.TaskRevealKind.Always
+        : ui.reveal === "never"
+          ? vscode.TaskRevealKind.Never
+          : vscode.TaskRevealKind.Silent,
       panel: vscode.TaskPanelKind.Dedicated,
-      focus: true,
-      clear: true,
+      focus: ui.focus,
+      clear: ui.clearBeforeRun,
       showReuseMessage: false,
     };
 
@@ -742,23 +949,134 @@ export class McppCliController {
       : completion.state === "cancelled"
         ? "已取消"
         : `失败，退出码 ${completion.exitCode ?? "未知"}`;
-    try {
-      this.options.output.appendLine(`\n[${new Date().toISOString()}] ${title}`);
-      this.options.output.appendLine(`工作目录：${root}`);
-      this.options.output.appendLine(`任务参数：${args.join(" ")}`);
-      this.options.output.appendLine(`结果：${suffix}`);
-    } catch {
-      // 窗口重载时输出频道可能早于任务事件被释放。
-    }
+    // `mcpp.log.level` gates the verbose lines; the failed result is an error
+    // and is therefore never suppressed.
+    this.logger.info(`\n[${new Date().toISOString()}] ${title}`);
+    this.logger.debug(`工作目录：${root}`);
+    this.logger.debug(`任务参数：${args.join(" ")}`);
+    const resultLine = `结果：${suffix}`;
     if (completion.state === "failed") {
-      void vscode.window.showErrorMessage(`${title}失败（退出码 ${completion.exitCode ?? "未知"}）。请查看任务终端。`);
+      this.logger.error(resultLine);
+    } else if (completion.state === "cancelled") {
+      this.logger.warn(resultLine);
+    } else {
+      this.logger.info(resultLine);
+    }
+
+    for (const command of terminalCommandsAfterTask(this.terminalUi(root), completion.state === "failed")) {
+      void vscode.commands.executeCommand(command);
+    }
+
+    if (completion.state === "failed") {
+      this.reportCommandFailure(
+        args,
+        completion.exitCode ?? 1,
+        "",
+        `${title}失败（退出码 ${completion.exitCode ?? "未知"}）。请查看任务终端。`,
+      );
     } else if (completion.state === "cancelled") {
       void vscode.window.showWarningMessage(`${title}已取消。`);
+    } else {
+      this.reportSuccess(t("{0} finished.", title));
     }
   }
 
-  /** `mcpp.ui.statusBar.show`: the quick menu is reachable without it, so it is optional. */
-  private applyStatusBarSetting(): void {
+  /** The task-terminal settings, read together so every site agrees. */
+  private terminalUi(root: string): TaskTerminalUi {
+    const resource = vscode.Uri.file(root);
+    return taskTerminalUi(
+      read<string>("mcpp.task.revealTerminal", resource),
+      read<boolean>("mcpp.task.focusTerminal", resource),
+      read<boolean>("mcpp.task.clearTerminal", resource),
+    );
+  }
+
+  /**
+   * A *successful* result only; failures and cancellations never consult
+   * `mcpp.ui.notifications.success`. `mcpp.ui.notifications.dedupeMinutes`
+   * suppresses a repeated identical message inside its window.
+   */
+  private reportSuccess(message: string): void {
+    const mode = successReportOf(read<string>("mcpp.ui.notifications.success"));
+    if (mode === "silent") {
+      return;
+    }
+    const now = Date.now();
+    if (!dedupeAllows(this.lastNotified.get(message), now, read<number>("mcpp.ui.notifications.dedupeMinutes"))) {
+      return;
+    }
+    this.lastNotified.set(message, now);
+    if (mode === "toast") {
+      void vscode.window.showInformationMessage(message);
+      return;
+    }
+    this.showStatusSuccess(message);
+  }
+
+  /** `mcpp.ui.notifications.success = statusBar`: a transient, non-blocking label. */
+  private showStatusSuccess(message: string): void {
+    if (this.options.currentProject() === undefined || !read<boolean>("mcpp.ui.statusBar.show")) {
+      return;
+    }
+    this.status.text = `$(check) ${statusBarSuccessText(message)}`;
+    this.status.show();
+    if (this.statusRevert !== undefined) {
+      clearTimeout(this.statusRevert);
+    }
+    this.statusRevert = setTimeout(() => {
+      this.statusRevert = undefined;
+      try {
+        this.applyStatusBar();
+      } catch {
+        // The status item can already be disposed during a window reload.
+      }
+    }, SUCCESS_STATUS_MS);
+  }
+
+  /**
+   * A failed `mcpp` run: the exit-code-specific next step from
+   * `src/cli/errors.ts`, the caller's own message as the fallback, and the
+   * `mcpp self explain` hint whenever the output names a diagnostic code.
+   */
+  private reportCommandFailure(
+    args: readonly string[],
+    exitCode: number,
+    output: string,
+    fallback: string,
+  ): void {
+    const advice = failureAdvice(args, exitCode, output);
+    const parts: string[] = [failureGuidanceText(advice.kind) ?? fallback];
+    if (advice.hint !== undefined) {
+      parts.push(t("Explain this code with: {0}", advice.hint));
+    }
+    void vscode.window.showErrorMessage(parts.join(" "));
+  }
+
+  private warningOptions(strength: ConfirmationStrength, detail: string): vscode.MessageOptions {
+    return strength === "modal" ? { modal: true, detail } : { detail };
+  }
+
+  /**
+   * `mcpp.ui.statusBar.show` plus `mcpp.ui.statusBar.showLanguageServer`; the
+   * C++ Modules line comes from the host callback, so this controller never
+   * imports the mcppls bridge.
+   */
+  private applyStatusBar(): void {
+    if (this.statusRevert !== undefined) {
+      clearTimeout(this.statusRevert);
+      this.statusRevert = undefined;
+    }
+    const tooltip = t("Open the mcpp project and toolchain quick menu");
+    const languageServer = languageServerStatusSuffix(
+      read<boolean>("mcpp.ui.statusBar.showLanguageServer"),
+      this.options.languageServerSummary?.(),
+    );
+    this.status.text = languageServer === undefined
+      ? quickMenuStatusText
+      : `${quickMenuStatusText} · ${t("C++ Modules: {0}", languageServer)}`;
+    this.status.tooltip = languageServer === undefined
+      ? tooltip
+      : `${tooltip}\n${t("C++ Modules (provided by the mcpp language server extension): {0}", languageServer)}`;
     if (read<boolean>("mcpp.ui.statusBar.show")) {
       this.status.show();
     } else {
@@ -772,18 +1090,18 @@ export class McppCliController {
     args: string[],
     result: { exitCode: number; stdout: string; stderr: string },
   ): void {
-    try {
-      this.options.output.appendLine(`\n[${new Date().toISOString()}] ${title}`);
-      this.options.output.appendLine(`$ ${commandLine(executable, args)}`);
-      if (result.stdout.length > 0) {
-        this.options.output.appendLine(result.stdout.trimEnd());
-      }
-      if (result.stderr.length > 0) {
-        this.options.output.appendLine(result.stderr.trimEnd());
-      }
-      this.options.output.appendLine(`[exit ${result.exitCode}]`);
-    } catch {
-      // 窗口重载时输出频道可能早于短命令结束被释放。
+    // The command echo and the output of a successful command are the verbose
+    // lines `mcpp.log.level` gates. A failed command's raw stdout/stderr is
+    // written at `error`, which no configured level may suppress.
+    const failed = result.exitCode !== 0;
+    this.logger.info(`\n[${new Date().toISOString()}] ${title}`);
+    this.logger.debug(`$ ${commandLine(executable, args)}`);
+    if (result.stdout.length > 0) {
+      (failed ? this.logger.error : this.logger.info)(result.stdout.trimEnd());
     }
+    if (result.stderr.length > 0) {
+      (failed ? this.logger.error : this.logger.info)(result.stderr.trimEnd());
+    }
+    (failed ? this.logger.error : this.logger.info)(`[exit ${result.exitCode}]`);
   }
 }

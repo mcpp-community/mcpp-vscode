@@ -48,8 +48,11 @@ export function toTreeItem(node: TreeNode): vscode.TreeItem {
 /**
  * A provider over a snapshot the caller recomputes whenever something changes.
  * `refresh()` re-asks for the root nodes and fires the tree event.
+ *
+ * It is disposable so it can be handed straight to `createTreeView`'s
+ * `context.subscriptions.push`, next to the view it feeds.
  */
-export class StaticTreeProvider implements vscode.TreeDataProvider<TreeNode> {
+export class StaticTreeProvider implements vscode.TreeDataProvider<TreeNode>, vscode.Disposable {
   private readonly changed = new vscode.EventEmitter<TreeNode | undefined>();
 
   public readonly onDidChangeTreeData = this.changed.event;
@@ -58,6 +61,10 @@ export class StaticTreeProvider implements vscode.TreeDataProvider<TreeNode> {
 
   public refresh(): void {
     this.changed.fire(undefined);
+  }
+
+  public dispose(): void {
+    this.changed.dispose();
   }
 
   public getTreeItem(element: TreeNode): vscode.TreeItem {

@@ -126,12 +126,12 @@ committed; `npm run check:generated` fails on drift.
 
 ## Settings that shape this page
 
-| Key | Default | Read by this build |
+| Key | Default | What it does |
 | --- | --- | --- |
-| `mcpp.buildScript.diagnostics` | `true` | yes — `src/extension.ts` |
-| `mcpp.buildScript.diagnostics.severity` | `warning` | yes |
-| `mcpp.buildScript.intelligence` | `true` | **no** — there is no separate switch; completion and hover are always registered |
-| `mcpp.buildScript.snippets` | `true` | **no** — no snippet provider is registered |
-| `mcpp.buildScript.imports.knownModules` | `true` | **no** — the analyser never reports a missing module regardless of this key |
+| `mcpp.buildScript.intelligence` | `true` | the master switch: off means no completion, hover or snippets for `build.mcpp`, and diagnostics stop too |
+| `mcpp.buildScript.diagnostics` | `true` | the seven SPEC-007 diagnostics |
+| `mcpp.buildScript.diagnostics.severity` | `warning` | `warning`, `info`, or `off` |
+| `mcpp.buildScript.snippets` | `true` | the `mcpp::…` snippet catalogue; independent of completion and hover |
+| `mcpp.buildScript.imports.knownModules` | `true` | whether `std`, `std.compat` and `mcpp.*` appear in **import completion**. Hover still recognises them and no import is ever reported missing, whichever way this is set |
 
 Full descriptions, scopes and "when it applies": [settings.md](settings.md).

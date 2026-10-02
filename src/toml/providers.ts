@@ -4,18 +4,99 @@
  * Both are pure text analysis — no mcpp process, no language server — so they
  * keep working in a restricted workspace, which is what
  * `capabilities.untrustedWorkspaces: limited` promises.
+ *
+ * The one exception is dependency-version completion
+ * (`mcpp.toml.indexCompletion`, off by default): it runs `mcpp search`, which may
+ * use the network. Everything about *that* decision lives here — the two
+ * settings, workspace trust, the timeout and the session cache — while
+ * `./completion` stays pure and `../cli/search` stays the one place that parses
+ * mcpp's human-readable output.
  */
 
 import * as vscode from "vscode";
 
+import { runProcess } from "../cli/process";
+import {
+  indexCompletionRequest,
+  parseSearchOutput,
+  withDeadline,
+  type PackageVersion,
+} from "../cli/search";
+import { read } from "../config/access";
 import { t } from "../i18n/t";
 
-import { computeMcppTomlCompletions } from "./completion";
+import { computeMcppTomlCompletionsWithIndex } from "./completion";
 import { analyseManifest, type DiagnosticSettings, type Severity } from "./diagnostics";
 import { hoverAt } from "./hover";
 import { definitionAt } from "./navigation";
 
 export const MCPP_TOML_LANGUAGE = "mcpp-toml";
+
+/**
+ * The session cache §3.3.2 asks for: at most one `mcpp search <name>
+ * --all-versions` per package per session. Empty results are cached too — a
+ * package the index does not know must not be queried on every keystroke.
+ */
+const indexVersions = new Map<string, readonly PackageVersion[]>();
+
+let indexNoticeShown = false;
+
+/** The plan's one-time notice: this feature runs mcpp and may use the network. */
+function noticeIndexQuery(): void {
+  if (indexNoticeShown) {
+    return;
+  }
+  indexNoticeShown = true;
+  void vscode.window.showInformationMessage(
+    t("Completing dependency versions runs `mcpp search`, which may use the network."),
+  );
+}
+
+/**
+ * Versions for one dependency, or none. Every failure mode — the setting off, an
+ * untrusted workspace, a non-zero exit, a timeout, output the parser does not
+ * recognise — degrades to an empty list; nothing here surfaces an error.
+ */
+async function resolveIndexVersions(
+  document: vscode.TextDocument,
+  name: string,
+): Promise<readonly PackageVersion[]> {
+  const request = indexCompletionRequest(name, {
+    enabled: read<boolean>("mcpp.toml.indexCompletion"),
+    trusted: vscode.workspace.isTrusted,
+    // VS Code exposes no offline flag and this extension never probes the
+    // network, so "offline" is discovered the only honest way: the query fails
+    // and degrades to no candidates. The term stays in `shouldSearch`'s contract
+    // (and its tests) so a future signal can fill it in without a shape change.
+    offline: false,
+    timeoutSeconds: read<number>("mcpp.toml.indexCompletionTimeoutSeconds"),
+  });
+  if (request === undefined) {
+    return [];
+  }
+
+  // The cache is consulted *after* the switches, so turning the setting off (or
+  // losing trust) stops suggestions immediately instead of serving a hit.
+  const cached = indexVersions.get(name);
+  if (cached !== undefined) {
+    return cached;
+  }
+  noticeIndexQuery();
+
+  const folder = vscode.workspace.getWorkspaceFolder(document.uri);
+  const cwd = folder?.uri.fsPath ?? vscode.Uri.joinPath(document.uri, "..").fsPath;
+  const executable = (read<string>("mcpp.path") ?? "").trim() || "mcpp";
+  // The process gets the setting's timeout and the promise a short grace period,
+  // so a process that refuses to die still cannot hold the editor past it.
+  const result = await withDeadline(
+    runProcess(executable, request.args, cwd, { timeoutMs: request.timeoutMs }),
+    request.timeoutMs + 250,
+  );
+  const versions =
+    result === undefined || result.exitCode !== 0 ? [] : parseSearchOutput(result.stdout);
+  indexVersions.set(name, versions);
+  return versions;
+}
 
 function linesOf(document: vscode.TextDocument): string[] {
   const lines: string[] = [];
@@ -40,8 +121,15 @@ function packageHeaderLine(uri: vscode.Uri, relative: string): number | undefine
   }
 }
 
-function completionItemKind(kind: "section" | "template"): vscode.CompletionItemKind {
-  return kind === "section" ? vscode.CompletionItemKind.Folder : vscode.CompletionItemKind.Snippet;
+function completionItemKind(kind: "section" | "template" | "version"): vscode.CompletionItemKind {
+  switch (kind) {
+    case "section":
+      return vscode.CompletionItemKind.Folder;
+    case "version":
+      return vscode.CompletionItemKind.Value;
+    default:
+      return vscode.CompletionItemKind.Snippet;
+  }
 }
 
 function severityOf(value: Severity | undefined, fallback: Severity): Severity {
@@ -63,7 +151,7 @@ export function registerTomlProviders(
     vscode.languages.registerCompletionItemProvider(
       { language: MCPP_TOML_LANGUAGE },
       {
-        provideCompletionItems(document, position) {
+        async provideCompletionItems(document, position) {
           if (!completionEnabled()) {
             return undefined;
           }
@@ -71,7 +159,13 @@ export function registerTomlProviders(
           for (let line = 0; line <= position.line; line += 1) {
             lines.push(document.lineAt(line).text);
           }
-          return computeMcppTomlCompletions(lines, position.line, position.character).map((suggestion) => {
+          const suggestions = await computeMcppTomlCompletionsWithIndex(
+            lines,
+            position.line,
+            position.character,
+            (name) => resolveIndexVersions(document, name),
+          );
+          return suggestions.map((suggestion) => {
             const item = new vscode.CompletionItem(suggestion.label, completionItemKind(suggestion.kind));
             item.detail = suggestion.detail;
             if (suggestion.documentation !== undefined) {
@@ -90,7 +184,10 @@ export function registerTomlProviders(
           });
         },
       },
+      // `"` so a dependency version value is discoverable without Ctrl+Space;
+      // every other trigger position falls straight through to no suggestions.
       "[",
+      '"',
     ),
   );
 

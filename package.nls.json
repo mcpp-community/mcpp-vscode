@@ -50,7 +50,7 @@
   "mcpp.buildScript.diagnostics.severity.description": "Severity used for build.mcpp diagnostics.",
   "mcpp.buildScript.diagnostics.severity.title": "Set build.mcpp diagnostic severity",
   "mcpp.buildScript.diagnostics.title": "Enable build.mcpp diagnostics",
-  "mcpp.buildScript.imports.knownModules.description": "Flag imports in build.mcpp that are neither standard modules nor known mcpp modules.",
+  "mcpp.buildScript.imports.knownModules.description": "Offer mcpp's own modules (std, std.compat, mcpp.*) in import completion. Hover still recognises them, and no import is ever reported missing, whichever way this is set.",
   "mcpp.buildScript.imports.knownModules.title": "Check imported modules",
   "mcpp.buildScript.intelligence.description": "Turn completion and hover support for build.mcpp on or off.",
   "mcpp.buildScript.intelligence.title": "Enable build.mcpp intelligence",

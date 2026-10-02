@@ -44,14 +44,28 @@ function walk(dir, out = []) {
   return out;
 }
 
-// ---------------------------------------------------------------- 1. t("…")
+// ---------------------------------------------------------------- 1. runtime strings
+// Two shapes count as "used": a literal `t("…")`, and a deferred label key
+// `{ key: "…" }` — the tree models carry those and `treeProvider.resolveLabel`
+// translates them at render time, which a scan for `t(` cannot see.
 const USAGE = /\bt\(\s*"((?:[^"\\]|\\.)*)"/g;
+const LABEL_KEY = /\bkey:\s*"((?:[^"\\]|\\.)*)"/g;
+// `{ key: "…" }` is only a translatable label in the tree models. Elsewhere —
+// `mcppls/contract.ts` — the same shape holds capability identifiers, which are
+// protocol names and must never be translated.
+const LABEL_KEY_FILES = [path.join(root, "src", "views")];
 const used = new Map();
 for (const file of walk(path.join(root, "src"))) {
   const text = fs.readFileSync(file, "utf8");
-  for (const match of text.matchAll(USAGE)) {
-    const key = match[1].replace(/\\"/g, '"').replace(/\\n/g, "\n");
-    if (!used.has(key)) used.set(key, path.relative(root, file));
+  const patterns = [USAGE];
+  if (LABEL_KEY_FILES.some((dir) => file.startsWith(dir))) {
+    patterns.push(LABEL_KEY);
+  }
+  for (const pattern of patterns) {
+    for (const match of text.matchAll(pattern)) {
+      const key = match[1].replace(/\\"/g, '"').replace(/\\n/g, "\n");
+      if (!used.has(key)) used.set(key, path.relative(root, file));
+    }
   }
 }
 

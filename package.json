@@ -1064,6 +1064,25 @@
         "mac": "cmd+alt+m",
         "when": "mcpp.inProject"
       }
+    ],
+    "problemMatchers": [
+      {
+        "name": "mcpp",
+        "owner": "mcpp",
+        "source": "mcpp",
+        "fileLocation": [
+          "relative",
+          "${workspaceFolder}"
+        ],
+        "pattern": {
+          "regexp": "^(.+?):(\\\\d+):(\\\\d+):\\\\s+(error|warning|note):\\\\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        }
+      }
     ]
   },
   "scripts": {

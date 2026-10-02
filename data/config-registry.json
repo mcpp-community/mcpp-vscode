@@ -536,7 +536,7 @@
       "applies": "immediate",
       "since": "0.5.0",
       "title": "Check imported modules",
-      "description": "Flag imports in build.mcpp that are neither standard modules nor known mcpp modules."
+      "description": "Offer mcpp's own modules (std, std.compat, mcpp.*) in import completion. Hover still recognises them, and no import is ever reported missing, whichever way this is set."
     },
     {
       "key": "mcpp.buildScript.snippets",

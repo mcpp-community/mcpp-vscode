@@ -6,8 +6,8 @@ that channel: extension/VS Code/platform, workspace trust and roots, the project
 `mcpp.path` plus the `--protocol-version` probe (version, envelope, advertised `kinds`), the
 mcppls version plus every capability's state (`available` / `unconfirmed` / `missing`), the
 mcppls state summary, the last language-service refresh, and every setting whose effective value
-differs from its default. Its `Cache` section is not filled in by this build — read the size from
-the Cache view instead.
+differs from its default. Its `Cache` section reports the shared cache's size, entry count and
+incomplete-entry count, read with the same bounded query the Cache view uses.
 
 ## The C++ Modules view says the dependency is missing
 

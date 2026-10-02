@@ -21,39 +21,35 @@ import { SETTINGS } from "../../src/config/registry";
  * settings still waiting for their feature; each must name why.
  */
 
-const EXCEPTIONS: Readonly<Record<string, string>> = {
-  "mcpp.task.buildArgs": "§8 G8 — extra argv for a task is not plumbed through `projectTaskPlan` yet",
-  "mcpp.task.runArgs": "§8 G8 — same",
-  "mcpp.task.testArgs": "§8 G8 — same",
-  "mcpp.task.cleanArgs": "§8 G8 — same",
-  "mcpp.task.revealTerminal": "§8 G8 — task presentation is fixed",
-  "mcpp.task.focusTerminal": "§8 G8 — task presentation is fixed",
-  "mcpp.task.clearTerminal": "§8 G8 — task presentation is fixed",
-  "mcpp.task.problemMatcher": "§8 G8 — no problem matcher is contributed yet",
-  "mcpp.task.editorTitleButtons": "§8 G8 — the editor/title `when` clause is fixed",
-  "mcpp.task.confirmClean": "§8 G8 — the clean command's own plan already confirms",
-  "mcpp.languageService.notifyOnDegraded": "§8 G8 — the notice is unconditional",
-  "mcpp.languageService.readState": "§8 G8 — the state read is unconditional",
-  "mcpp.languageService.stateRefreshSeconds": "§8 G8 — there is no polling to configure",
-  "mcpp.languageService.confirmResetCache": "§8 G8 — the capability's own danger level confirms",
-  "mcpp.cache.warnAboveGiB": "§8 G8 — only the tree renders it, not the panel",
-  "mcpp.cache.autoRefreshSeconds": "§8 G8 — the view is refreshed on demand only",
-  "mcpp.cache.showLegacy": "§8 G6 — the legacy node is not populated yet",
-  "mcpp.cache.gc.confirmAboveGiB": "§8 G6 — the budget dialogue does not add a second confirmation",
-  "mcpp.views.project.show": "§8 G8 — the view's `when` clause is fixed",
-  "mcpp.views.cache.show": "§8 G8 — same",
-  "mcpp.views.languageServer.show": "§8 G8 — same",
-  "mcpp.ui.statusBar.showLanguageServer": "§8 G8 — the status text is mcpp-only",
-  "mcpp.ui.notifications.success": "§8 G8 — the success notice is fixed",
-  "mcpp.ui.notifications.dedupeMinutes": "§8 G8 — notices are not de-duplicated yet",
-  "mcpp.ui.confirmDestructiveOnly": "§8 G8 — confirmation comes from the cleanup plan",
-  "mcpp.project.discoveryBoundary": "§8 G8 — discovery always stops at the workspace folder",
-  "mcpp.log.level": "§8 G8 — the output channel is not levelled yet",
-  "mcpp.buildScript.imports.knownModules": "§8 G8 — known-module recognition is unconditional",
-  "mcpp.buildScript.snippets": "§8 G8 — snippets are always offered",
-  "mcpp.toml.indexCompletion": "§8 G3 — the search adapter is not wired into completion yet",
-  "mcpp.toml.indexCompletionTimeoutSeconds": "§8 G3 — same",
-};
+/**
+ * Settings read through a table rather than a literal key.
+ *
+ * These are still read once per call site — the table is the reviewer's evidence,
+ * and `evidence` must appear verbatim in the file, so renaming or deleting the
+ * table without updating this entry fails the build.
+ */
+const READ_INDIRECTLY: ReadonlyArray<{ key: string; file: string; evidence: string }> = [
+  {
+    key: "mcpp.task.buildArgs",
+    file: "src/cli/tasks.ts",
+    evidence: 'build: "mcpp.task.buildArgs"',
+  },
+  {
+    key: "mcpp.task.runArgs",
+    file: "src/cli/tasks.ts",
+    evidence: 'run: "mcpp.task.runArgs"',
+  },
+  {
+    key: "mcpp.task.testArgs",
+    file: "src/cli/tasks.ts",
+    evidence: 'test: "mcpp.task.testArgs"',
+  },
+  {
+    key: "mcpp.task.cleanArgs",
+    file: "src/cli/tasks.ts",
+    evidence: 'clean: "mcpp.task.cleanArgs"',
+  },
+];
 
 function sourceFiles(dir: string, found: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -93,7 +89,7 @@ test("every declared setting is either read by a module or listed with a reason"
     if (keys.has(entry.key) || keys.has(sub)) {
       continue;
     }
-    if (entry.key in EXCEPTIONS) {
+    if (READ_INDIRECTLY.some((entry_) => entry_.key === entry.key)) {
       continue;
     }
     unwired.push(entry.key);
@@ -105,21 +101,23 @@ test("every declared setting is either read by a module or listed with a reason"
   );
 });
 
-test("a documented exception names a reason and is still real", () => {
+test("an indirect entry names a real setting and its evidence is still in the file", () => {
   const byKey = new Map(SETTINGS.map((entry) => [entry.key, entry]));
-  for (const [key, reason] of Object.entries(EXCEPTIONS)) {
-    assert.ok(byKey.has(key), `${key} is not a registry setting; remove the stale exception`);
-    assert.match(reason, /§8 G\d+/, `${key} must point at the audit item that will remove it`);
+  for (const { key, file, evidence } of READ_INDIRECTLY) {
+    assert.ok(byKey.has(key), `${key} is not a registry setting`);
+    const source = readFileSync(path.join(process.cwd(), file), "utf8");
+    assert.ok(source.includes(evidence), `${file} no longer contains the evidence for ${key}: ${evidence}`);
   }
 });
 
-test("an exception is not left behind once the setting is wired", () => {
+test("an indirect entry is not left behind once the setting is read literally", () => {
   const keys = readKeys();
-  const stale = Object.keys(EXCEPTIONS).filter((key) => {
-    const sub = key.replace(/^mcpp\./, "");
-    return keys.has(key) || keys.has(sub);
-  });
-  assert.deepEqual(stale, [], `these settings are read now, so remove their exceptions:\n  ${stale.join("\n  ")}`);
+  const stale = READ_INDIRECTLY.filter(({ key }) => keys.has(key) || keys.has(key.replace(/^mcpp\./, "")));
+  assert.deepEqual(
+    stale.map((entry) => entry.key),
+    [],
+    "these settings are read by literal key now, so move them out of the indirect table",
+  );
 });
 
 test("deprecated settings are kept but read by nothing", () => {
@@ -132,12 +130,12 @@ test("deprecated settings are kept but read by nothing", () => {
   }
 });
 
-test("the exception list only shrinks: it never grows beyond what §8 records", () => {
-  // 31 today, down from the 42 the audit listed. Lowering this number is the
-  // point of the list; raising it means a new setting was added without wiring it.
+test("there is no exemption left that a literal read could have covered", () => {
+  // The audit in §8 G8 listed 40 unwired settings; the indirect table holds the
+  // only four that cannot be scanned for. Anything else must be read for real.
   assert.ok(
-    Object.keys(EXCEPTIONS).length <= 31,
-    `the exception list grew to ${Object.keys(EXCEPTIONS).length}; wire the setting instead`,
+    READ_INDIRECTLY.length <= 4,
+    `the indirect table grew to ${READ_INDIRECTLY.length}; read the setting by literal key instead`,
   );
 });
 

@@ -5,11 +5,12 @@
 // 与诊断共用同一份快照：快照没有的段不会出现在段头表里，快照标记 `openKeys`
 // 的段（键由用户自选）不出键建议。
 //
-// 依赖包名/版本等动态数据补全不在本版：版本候选要么本地已有、要么必须执行
-// `mcpp search`（见 src/cli/search.ts），不在这个纯文本层里做。
-//
-// 本模块不依赖 vscode API；上下文来自 parser 的 contextAt（容错解析）。
+// 依赖版本补全（`mcpp.toml.indexCompletion`，默认关）：本模块只负责
+// 「光标是不是在依赖版本值位置」与「把候选变成建议」两件纯事；执行
+// `mcpp search`、超时、会话缓存、信任/离线判定都在 src/toml/providers.ts，
+// 解析人类输出在 src/cli/search.ts。本模块不依赖 vscode API。
 
+import type { PackageVersion } from "../cli/search";
 import {
   contextAt,
   parseMcppToml,
@@ -18,7 +19,7 @@ import {
 } from "./parser";
 import { SCHEMA, sectionByName, type TomlKey, type TomlSection } from "./schema";
 
-export type McppTomlSuggestionKind = "section" | "template";
+export type McppTomlSuggestionKind = "section" | "template" | "version";
 
 export interface McppTomlSuggestion {
   label: string;
@@ -414,4 +415,102 @@ export function computeMcppTomlCompletions(
     }
   }
   return [];
+}
+
+/** 光标所在的依赖版本值位置：属于哪个依赖、替换范围、是否已在字符串内。 */
+export interface DependencyVersionContext {
+  /** 依赖名（值所属的键，如 `zlib`）。 */
+  name: string;
+  /** 光标已在引号内（只替换内容，不再补引号）。 */
+  insideString: boolean;
+  /** 替换范围：简写覆盖 `= ` 之后的值，长式在字符串内只覆盖已输入内容。 */
+  range: ReplaceRange;
+}
+
+/**
+ * 判断光标是否落在依赖的**版本值**上（方案 §3.3.2 的 `toml.indexCompletion`
+ * 位置）。只认两种写法：
+ *
+ *   `zlib = "1.2|"`                  简写版本
+ *   `zlib = { version = "1.2|" }`    长式 dep spec 的 version 字段
+ *
+ * `git` / `path` / `features` 的值不是版本，返回 undefined，绝不据此查询索引。
+ */
+export function dependencyVersionContextAt(
+  lines: readonly string[],
+  line: number,
+  character: number,
+): DependencyVersionContext | undefined {
+  const context = contextAt(lines, line, character);
+  if (context.kind !== "value" || context.section.kind !== "known") {
+    return undefined;
+  }
+  if (!DEPENDENCY_GROUPS.has(context.section.group) || context.keyPath.length === 0) {
+    return undefined;
+  }
+  const last = context.keyPath[context.keyPath.length - 1];
+  if (context.keyPath.length > 1 && last !== "version") {
+    return undefined;
+  }
+  // A version is a string, or a value not typed yet. An inline table, an array
+  // or a bare non-version token is a different dep-spec field; offering versions
+  // there would replace the wrong thing.
+  const kind = context.valueKind;
+  if (kind !== undefined && kind !== "string" && kind !== "unknown") {
+    return undefined;
+  }
+  return {
+    name: context.keyPath[0],
+    insideString: context.insideString,
+    range: context.replaceRange,
+  };
+}
+
+/** 把索引候选变成补全建议；字符串内只替换内容，裸值位置补上引号。 */
+export function indexVersionSuggestions(
+  context: DependencyVersionContext,
+  versions: readonly PackageVersion[],
+): McppTomlSuggestion[] {
+  return versions.map((entry) => {
+    const suggestion: McppTomlSuggestion = {
+      label: entry.version,
+      kind: "version",
+      detail:
+        entry.summary === undefined ? `version of ${context.name}` : `${context.name}: ${entry.summary}`,
+      insertSnippet: context.insideString ? entry.version : JSON.stringify(entry.version),
+      range: context.range,
+    };
+    return suggestion;
+  });
+}
+
+/** 取索引候选：按依赖名查询，失败与超时都由调用方降级为空数组。 */
+export type IndexVersionResolver = (name: string) => Promise<readonly PackageVersion[]>;
+
+/**
+ * 静态补全 + 依赖版本补全的合并入口。静态层有建议就返回它；否则若光标在依赖
+ * 版本值上且调用方给了 resolver，就询问索引。resolver 抛异常时静默降级为
+ * 「无候选」，绝不冒泡成错误。
+ */
+export async function computeMcppTomlCompletionsWithIndex(
+  lines: readonly string[],
+  line: number,
+  character: number,
+  resolveIndex?: IndexVersionResolver,
+): Promise<McppTomlSuggestion[]> {
+  const direct = computeMcppTomlCompletions(lines, line, character);
+  if (direct.length > 0 || resolveIndex === undefined) {
+    return direct;
+  }
+  const context = dependencyVersionContextAt(lines, line, character);
+  if (context === undefined) {
+    return direct;
+  }
+  let versions: readonly PackageVersion[];
+  try {
+    versions = await resolveIndex(context.name);
+  } catch {
+    return direct;
+  }
+  return indexVersionSuggestions(context, versions);
 }

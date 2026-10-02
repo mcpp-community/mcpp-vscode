@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { findNearestMcppProject } from "../../src/projects/discovery";
+import { findNearestMcppProject, discoveryBoundaryOf } from "../../src/projects/discovery";
 
 test("finds the nearest mcpp manifest and project root", () => {
   const root = mkdtempSync(path.join(os.tmpdir(), "mcpp-vscode-discovery-"));
@@ -53,7 +53,37 @@ test("does not discover an mcpp project outside the opened workspace folder", ()
     writeFileSync(path.join(root, "B", "mcpp.toml"), "[package]\nname = 'B'\n");
 
     assert.equal(findNearestMcppProject(externalMemberSource, openedMember), undefined);
+    assert.equal(findNearestMcppProject(externalMemberSource, openedMember, "workspaceFolder"), undefined);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("mcpp.project.discoveryBoundary=filesystem finds the nested project outside the workspace", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "mcpp-vscode-discovery-filesystem-"));
+  try {
+    const openedMember = path.join(root, "A");
+    const externalMember = path.join(root, "B");
+    const externalMemberSource = path.join(externalMember, "src", "nested");
+    mkdirSync(openedMember, { recursive: true });
+    mkdirSync(externalMemberSource, { recursive: true });
+    writeFileSync(path.join(openedMember, "mcpp.toml"), "[package]\nname = 'A'\n");
+    writeFileSync(path.join(externalMember, "mcpp.toml"), "[package]\nname = 'B'\n");
+
+    // The boundary parameter is the only difference; ignoring it fails this test.
+    assert.deepEqual(findNearestMcppProject(externalMemberSource, openedMember, "filesystem"), {
+      root: externalMember,
+      manifestPath: path.join(externalMember, "mcpp.toml"),
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("the discovery boundary setting maps to the two supported walks", () => {
+  assert.equal(discoveryBoundaryOf("filesystem"), "filesystem");
+  assert.equal(discoveryBoundaryOf("workspaceFolder"), "workspaceFolder");
+  // An unknown value keeps the shipped behaviour: stop at the workspace folder.
+  assert.equal(discoveryBoundaryOf("everything"), "workspaceFolder");
+  assert.equal(discoveryBoundaryOf(undefined), "workspaceFolder");
 });

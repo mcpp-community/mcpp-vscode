@@ -8,26 +8,50 @@
  *
  * Nothing here removes anything by itself: every destructive path goes through
  * `planClean`, a preview when the plan asks for one, and a modal.
+ *
+ * Four settings shape this file:
+ *
+ * - `mcpp.cache.showLegacy` decides whether the pre-v1 cache is measured and
+ *   offered at all (`src/views/cacheState.ts`, §8 G6);
+ * - `mcpp.cache.warnAboveGiB` adds a warning node when the shared cache is large;
+ * - `mcpp.cache.autoRefreshSeconds` re-reads while the view is visible;
+ * - `mcpp.cache.gc.confirmAboveGiB` adds one confirmation level to a large `gc`.
  */
 
 import * as vscode from "vscode";
 
-import { estimateArtifacts, type ArtifactEstimate } from "../cli/artifacts";
-import { parseCacheDir, parseCacheList, summarizeCache, type CacheInventory } from "../cli/cache";
-import { planClean, withSharedCache, type CleanAction, type CleanPlan } from "../cli/clean";
+import { estimateArtifacts, measureDirectory, type ArtifactEstimate } from "../cli/artifacts";
+import { parseCacheDir, parseCacheList, summarizeCache, type CacheInventory, type CacheEntry } from "../cli/cache";
+import { planClean, withSharedCache, type CleanPlan } from "../cli/clean";
 import { runProcess, type ProcessResult } from "../cli/process";
-import type { CacheEntry } from "../cli/cache";
 import { CACHE_COMMANDS } from "../commands/ids";
 import { read } from "../config/access";
-import { t } from "../i18n/t";
+import { format as formatMessage, t } from "../i18n/t";
+import { PollTimer } from "../mcppls/timers";
 import type { McppProjectDiscovery } from "../projects/discovery";
 import { formatBytes, projectGc } from "../util/format";
 import { clampOutput } from "../util/text";
+import {
+  buildCacheWarningNode,
+  cacheSnapshotFrom,
+  gcBudgetDialog,
+  gcBudgetNeedsExtraConfirm,
+  legacyBytesForTree,
+  legacyForPanel,
+  refreshTimerDecision,
+  type CacheSnapshot,
+} from "./cacheState";
 import { buildCacheTree, type CacheTreeInput } from "./models";
-import { registerTreeView } from "./treeProvider";
+import { StaticTreeProvider } from "./treeProvider";
 import { registerCachePanel, type CachePanelData } from "./cachePanel";
 
 export const CACHE_VIEW_ID = "mcpp.cache";
+
+/** The tick granularity; `mcpp.cache.autoRefreshSeconds` is in seconds. */
+const REFRESH_TICK_MS = 100;
+
+/** The pre-v1 walk is a courtesy figure, so it gets a smaller budget than `target/`. */
+const LEGACY_MAX_ENTRIES = 20_000;
 
 /** `mcpp.runtime.timeoutSeconds`, or the built-in default when it is 0. */
 function queryTimeoutMs(): number | undefined {
@@ -43,12 +67,19 @@ export interface CacheViewDeps {
   isTrusted: () => boolean;
 }
 
+/** What `mcpp cache dir` reported about the pre-v1 cache, measured or not. */
+interface LegacyCache {
+  path?: string;
+  bytes?: number;
+  files?: number;
+  truncated?: boolean;
+}
+
 interface CacheState {
   entries: CacheEntry[];
   inventory?: CacheInventory;
   artifacts?: ArtifactEstimate;
-  legacyPath?: string;
-  legacyBytes?: number;
+  legacy?: LegacyCache;
   error?: string;
 }
 
@@ -66,10 +97,37 @@ function numberFormat(): "binary" | "decimal" {
   return read<string>("mcpp.ui.numberFormat") === "decimal" ? "decimal" : "binary";
 }
 
-function viewSettings(): { topN: number; ageBoundaries: string[] } {
+/**
+ * `mcpp.cache.showLegacy`: the whole rule in one object, so the tree, the panel
+ * and the self-check read the same answer.
+ */
+function legacyGate(settings: { showLegacy: boolean }, legacy: LegacyCache | undefined): {
+  enabled: boolean;
+  bytes?: number;
+  files?: number;
+  truncated?: boolean;
+} {
+  return {
+    enabled: settings.showLegacy,
+    bytes: legacy?.bytes,
+    files: legacy?.files,
+    truncated: legacy?.truncated,
+  };
+}
+
+function viewSettings(): {
+  topN: number;
+  ageBoundaries: string[];
+  showLegacy: boolean;
+  warnAboveGiB: number;
+  autoRefreshSeconds: number;
+} {
   return {
     topN: Math.max(1, read<number>("mcpp.views.cache.topN")),
     ageBoundaries: read<string[]>("mcpp.views.cache.ageBuckets"),
+    showLegacy: read<boolean>("mcpp.cache.showLegacy") !== false,
+    warnAboveGiB: read<number>("mcpp.cache.warnAboveGiB"),
+    autoRefreshSeconds: read<number>("mcpp.cache.autoRefreshSeconds"),
   };
 }
 
@@ -153,11 +211,47 @@ async function confirmPlan(plan: CleanPlan, detail: string, figures: string): Pr
   return second === acknowledge;
 }
 
+/**
+ * The extra level `mcpp.cache.gc.confirmAboveGiB` adds.
+ *
+ * It is asked *before* the plan's own modal, so a refused acknowledgement never
+ * reaches the dialogue that would have run the command. It never replaces a
+ * level: a plan that already demands an acknowledgement is not asked a third
+ * time, and the plan's own modal still runs afterwards.
+ *
+ * The sentences live here rather than in `cacheState.ts` so
+ * `tools/l10n-check.mjs` sees them as translation call literals; the decision and
+ * the figure come from the pure module.
+ */
+export function extraGcConfirmation(
+  plan: CleanPlan,
+  budgetGiB: number,
+  confirmAboveGiB: number,
+): { title: string; detail: string; acknowledge: string; args: readonly (string | number)[] } | undefined {
+  if (plan.action !== "cacheGc" || plan.acknowledge) {
+    return undefined;
+  }
+  if (!gcBudgetNeedsExtraConfirm(budgetGiB, confirmAboveGiB)) {
+    return undefined;
+  }
+  const dialog = gcBudgetDialog(budgetGiB, confirmAboveGiB);
+  return {
+    title: t("Confirm a cleanup this large"),
+    detail: t(
+      "This {0} GiB budget frees entries that every mcpp project on this machine shares. The cleanup can take a while, and any dropped entry is rebuilt on next use.",
+    ),
+    acknowledge: t("I understand this removes entries other mcpp projects may use"),
+    args: dialog.args,
+  };
+}
+
 export function registerCacheView(context: vscode.ExtensionContext, deps: CacheViewDeps): void {
   let state: CacheState = { entries: [] };
+  /** Guards the interval: one refresh at a time, and none after a failure. */
+  let refreshInFlight: Promise<void> | undefined;
 
-  const treeInput = (): CacheTreeInput => {
-    const settings = viewSettings();
+  const treeInput = (settings: ReturnType<typeof viewSettings>): CacheTreeInput => {
+    const gate = legacyGate(settings, state.legacy);
     return {
       projectRoot: deps.currentProject()?.root,
       artifacts:
@@ -184,13 +278,35 @@ export function registerCacheView(context: vscode.ExtensionContext, deps: CacheV
               newestAccessed: state.inventory.newestAccessed,
               ageBuckets: state.inventory.ageBuckets,
             },
-      legacyBytes: state.legacyBytes,
+      legacyBytes: legacyBytesForTree(gate),
       error: state.error,
     };
   };
 
-  const view = registerTreeView(CACHE_VIEW_ID, () => buildCacheTree(treeInput()));
-  context.subscriptions.push(view.disposable);
+  /**
+   * The warning node for `mcpp.cache.warnAboveGiB`, prepended to the cache tree.
+   *
+   * The node is built here, next to the setting that earns it, and the tree
+   * model stays a pure list builder: `src/views/models.ts` needs no edit for
+   * this, which is why the node is prepended rather than threaded through
+   * `CacheTreeInput`. The builder is pure and covered in
+   * `test/views/cacheState.test.ts`.
+   */
+  const buildTree = (): ReturnType<typeof buildCacheTree> => {
+    const settings = viewSettings();
+    const input = treeInput(settings);
+    const warning = cacheWarningChildren(state.inventory?.totalBytes, settings.warnAboveGiB);
+    if (warning.length === 0) {
+      return buildCacheTree(input);
+    }
+    return [...warning, ...buildCacheTree(input)];
+  };
+
+  // `createTreeView` (rather than `registerTreeDataProvider`) is what makes the
+  // auto-refresh honest: the timer only runs while the view is actually visible.
+  const provider = new StaticTreeProvider(() => buildTree());
+  const view = vscode.window.createTreeView(CACHE_VIEW_ID, { treeDataProvider: provider });
+  context.subscriptions.push(view, provider);
 
   // An optional, second status item. Off by default: the C++ Modules extension
   // already owns a status item, and the mcpp quick menu owns ours.
@@ -209,14 +325,28 @@ export function registerCacheView(context: vscode.ExtensionContext, deps: CacheV
     status.show();
   };
 
-  const refresh = async (): Promise<void> => {
+  const applyState = (next: CacheState): void => {
+    state = next;
+    setLastCacheSnapshot(
+      next.inventory === undefined
+        ? undefined
+        : cacheSnapshotFrom({
+            totalBytes: next.inventory.totalBytes,
+            totalEntries: next.inventory.totalEntries,
+            incomplete: next.inventory.incomplete.length,
+          }),
+    );
+  };
+
+  const refreshNow = async (): Promise<void> => {
     const project = deps.currentProject();
     const settings = viewSettings();
-    state = { entries: [] };
+    const next: CacheState = { entries: [] };
 
     if (!deps.isTrusted()) {
-      state.error = t("the workspace is not trusted");
-      view.provider.refresh();
+      next.error = t("the workspace is not trusted");
+      applyState(next);
+      provider.refresh();
       return;
     }
 
@@ -227,31 +357,74 @@ export function registerCacheView(context: vscode.ExtensionContext, deps: CacheV
     if (listed.exitCode === 0) {
       const parsed = parseCacheList(listed.stdout);
       if (parsed === undefined) {
-        state.error = t("mcpp cache list did not return the documented document");
+        next.error = t("mcpp cache list did not return the documented document");
       } else {
-        state.entries = parsed.entries;
-        state.inventory = summarizeCache(parsed.root, parsed.entries, {
+        next.entries = parsed.entries;
+        next.inventory = summarizeCache(parsed.root, parsed.entries, {
           topN: settings.topN,
           ageBoundaries: settings.ageBoundaries,
         });
       }
     } else {
-      state.error = t("mcpp cache list failed (exit {0})", listed.exitCode);
+      next.error = t("mcpp cache list failed (exit {0})", listed.exitCode);
     }
 
     const dir = await run(deps, project, ["cache", "dir"], { timeoutMs: queryTimeoutMs(), quiet: true });
     if (dir.exitCode === 0) {
       const parsed = parseCacheDir(dir.stdout);
-      state.legacyPath = parsed.legacyPath;
+      // The pre-v1 directory is measured only when the setting offers it: a
+      // user who turned `mcpp.cache.showLegacy` off pays for no walk at all.
+      const measured =
+        settings.showLegacy && parsed.legacyPath !== undefined
+          ? measureDirectory(parsed.legacyPath, { maxEntries: LEGACY_MAX_ENTRIES })
+          : undefined;
+      next.legacy = {
+        path: parsed.legacyPath,
+        bytes: measured?.totalBytes,
+        files: measured?.files,
+        truncated: measured?.truncated !== undefined,
+      };
     }
 
     if (project !== undefined && read<boolean>("mcpp.cache.estimateProjectBytes")) {
-      state.artifacts = estimateArtifacts(project.root);
+      next.artifacts = estimateArtifacts(project.root);
     }
 
-    view.provider.refresh();
+    applyState(next);
+    provider.refresh();
     updateStatus();
   };
+
+  /** Single-flight: an interval tick during a read must not start a second one. */
+  const refresh = (): Promise<void> => {
+    if (refreshInFlight !== undefined) {
+      return refreshInFlight;
+    }
+    refreshInFlight = refreshNow().finally(() => {
+      refreshInFlight = undefined;
+    });
+    return refreshInFlight;
+  };
+
+  // `mcpp.cache.autoRefreshSeconds`: re-read while the view is visible, never in
+  // an untrusted workspace, and never on top of a read that is still running.
+  const timer = new PollTimer({
+    periodMs: 0,
+    tick: (): void => {
+      if (view.visible && deps.isTrusted()) {
+        void refresh();
+      }
+    },
+  });
+  context.subscriptions.push(timer);
+  const applyTimer = (): void => {
+    const seconds = viewSettings().autoRefreshSeconds;
+    const usable = deps.isTrusted() && Number.isFinite(seconds) && seconds > 0;
+    const decision = refreshTimerDecision(usable ? seconds : 0, view.visible);
+    timer.start(decision.active ? decision.seconds * 1000 : 0);
+  };
+  context.subscriptions.push(view.onDidChangeVisibility(() => applyTimer()));
+  applyTimer();
 
   /** The figures a confirmation dialogue needs, without running anything new. */
   const figures = (): string => {
@@ -270,6 +443,30 @@ export function registerCacheView(context: vscode.ExtensionContext, deps: CacheV
       return;
     }
     void vscode.window.showErrorMessage(t("mcpp {0} failed with exit code {1}", plan.argv.join(" "), result.exitCode));
+  };
+
+  /** `runPlan` plus the one extra level `mcpp.cache.gc.confirmAboveGiB` adds. */
+  const runGcPlan = async (
+    project: McppProjectDiscovery | undefined,
+    budgetGiB: number,
+    extra: string,
+  ): Promise<void> => {
+    const plan = planClean("cacheGc", { budgetGiB });
+    const dialog = extraGcConfirmation(plan, budgetGiB, read<number>("mcpp.cache.gc.confirmAboveGiB"));
+    // The extra level is asked *before* the plan's own modal, so a refused
+    // acknowledgement never reaches the one that would have run the command.
+    // `extraGcConfirmation` already resolved the strings through `t()`.
+    if (dialog !== undefined) {
+      const choice = await vscode.window.showWarningMessage(
+        dialog.title,
+        { modal: true, detail: formatMessage(dialog.detail, dialog.args) },
+        dialog.acknowledge,
+      );
+      if (choice !== dialog.acknowledge) {
+        return;
+      }
+    }
+    await runPlan(project, plan, extra);
   };
 
   const requireTrusted = (): boolean => {
@@ -337,7 +534,7 @@ export function registerCacheView(context: vscode.ExtensionContext, deps: CacheV
         oldestAccessed: timestamp(inventory?.oldestAccessed),
         newestAccessed: timestamp(inventory?.newestAccessed),
       },
-      legacy: state.legacyPath === undefined ? undefined : { bytes: state.legacyBytes ?? 0, path: state.legacyPath },
+      legacy: legacyForPanel(legacyGate(viewSettings(), state.legacy), state.legacy?.path),
     };
   };
 
@@ -360,7 +557,7 @@ export function registerCacheView(context: vscode.ExtensionContext, deps: CacheV
           await runPlan(project, planClean("project"));
           return;
         case "collect":
-          await runPlan(project, planClean("cacheGc", { budgetGiB: message.budgetGiB }));
+          await runGcPlan(project, message.budgetGiB, "");
           return;
         case "prune":
           await runPlan(project, planClean("cachePrune", { pruneAgeDays: read<number>("mcpp.cache.pruneAgeDays") }));
@@ -410,14 +607,18 @@ export function registerCacheView(context: vscode.ExtensionContext, deps: CacheV
     }
     const base = planClean("project");
     const alsoCache = t("Also empty the shared build cache");
-    const runLabel = t("Run");
-    const choice = await vscode.window.showWarningMessage(
-      t(base.titleKey),
-      { modal: true, detail: t(base.detailKey) },
-      runLabel,
-      alsoCache,
-    );
-    if (choice === undefined) {
+    // `mcpp.task.confirmClean` answers the same question here as it does on the
+    // task path. Turning it off skips only *this* modal: choosing to also empty
+    // the shared cache still escalates through the plan's own level 3.
+    const choice = read<boolean>("mcpp.task.confirmClean")
+      ? await vscode.window.showWarningMessage(
+          t(base.titleKey),
+          { modal: true, detail: t(base.detailKey) },
+          t("Run"),
+          alsoCache,
+        )
+      : undefined;
+    if (read<boolean>("mcpp.task.confirmClean") && choice === undefined) {
       return;
     }
     const plan = choice === alsoCache ? withSharedCache(base) : base;
@@ -462,7 +663,7 @@ export function registerCacheView(context: vscode.ExtensionContext, deps: CacheV
       projection.removed.length === 0
         ? t("Already within {0} GiB.", budgetGiB)
         : t("About {0} would be freed ({1} entries).", formatBytes(projection.freedBytes), projection.removed.length);
-    await runPlan(project, planClean("cacheGc", { budgetGiB }), `\n${estimate}`);
+    await runGcPlan(project, budgetGiB, `\n${estimate}`);
   });
 
   register(CACHE_COMMANDS.prune, async () => {
@@ -496,18 +697,105 @@ export function registerCacheView(context: vscode.ExtensionContext, deps: CacheV
       state.artifacts = estimateArtifacts(project.root);
     }
   }
-  view.provider.refresh();
+  provider.refresh();
   updateStatus();
 
-  // Keep the tree and the status item in step with the settings that shape them.
+  // Keep the tree, the timer and the status item in step with the settings.
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("mcpp.views.cache") || event.affectsConfiguration("mcpp.cache") || event.affectsConfiguration("mcpp.ui.numberFormat")) {
-        view.provider.refresh();
+        provider.refresh();
         updateStatus();
+        applyTimer();
       }
     }),
   );
+}
+
+/** The warning node, or nothing: one place so the tree and the tests agree. */
+export function cacheWarningChildren(
+  totalBytes: number | undefined,
+  warnAboveGiB: number,
+): NonNullable<ReturnType<typeof buildCacheWarningNode>>[] {
+  const node = buildCacheWarningNode(totalBytes ?? Number.NaN, warnAboveGiB);
+  return node === undefined ? [] : [node];
+}
+
+// ── the self-check's cache snapshot (§8 G9) ──────────────────────────────────
+
+/** A reading older than this is re-taken rather than reported as current. */
+const SNAPSHOT_FRESH_MS = 60_000;
+
+let lastSnapshot: { snapshot: CacheSnapshot; at: number } | undefined;
+
+function setLastCacheSnapshot(snapshot: CacheSnapshot | undefined): void {
+  lastSnapshot = snapshot === undefined ? undefined : { snapshot, at: Date.now() };
+}
+
+/** The snapshot the cache view last produced, without running anything. */
+export function lastCacheSnapshot(): CacheSnapshot | undefined {
+  return lastSnapshot?.snapshot;
+}
+
+/** The configured `mcpp.path`, or `mcpp` — the same rule the CLI controller uses. */
+function snapshotExecutable(): string {
+  const configured = vscode.workspace.getConfiguration("mcpp").get<string>("path", "");
+  return configured.trim().length === 0 ? "mcpp" : configured.trim();
+}
+
+/**
+ * `showSelfCheck` calls this to fill `buildSelfCheckText`'s `cache` field.
+ *
+ * It runs the same read-only `mcpp cache list --format json` the cache view runs
+ * and reuses that view's own aggregation, so the self-check and the view can
+ * never disagree. A reading the view took less than a minute ago is reused, so
+ * opening the self-check does not re-run a query for a number the user just saw.
+ *
+ * An untrusted workspace reuses the last reading and never runs `mcpp`; a
+ * missing `mcpp`, a failed query or an unreadable document all return
+ * `undefined`, which `buildSelfCheckText` renders as "not read".
+ *
+ * The one-line caller change is in the report:
+ * `cache: await readCacheSnapshot(),` inside the `buildSelfCheckText` call.
+ */
+export async function readCacheSnapshot(): Promise<CacheSnapshot | undefined> {
+  const cached = lastSnapshot;
+  if (cached !== undefined && Date.now() - cached.at < SNAPSHOT_FRESH_MS) {
+    return cached.snapshot;
+  }
+  if (!vscode.workspace.isTrusted) {
+    return cached?.snapshot;
+  }
+  return readCacheSnapshotNow();
+}
+
+/**
+ * Read regardless of what the view last showed: this is the query itself, kept
+ * separate so a caller with an explicit reason to re-measure can ask for one.
+ * Read-only, bounded, and never throws.
+ */
+export async function readCacheSnapshotNow(): Promise<CacheSnapshot | undefined> {
+  try {
+    const result = await runProcess(snapshotExecutable(), ["cache", "list", "--format", "json"], undefined, {
+      timeoutMs: queryTimeoutMs(),
+      maxBufferMiB: read<number>("mcpp.runtime.maxOutputMiB"),
+    });
+    if (result.exitCode !== 0) {
+      return undefined;
+    }
+    const parsed = parseCacheList(result.stdout);
+    if (parsed === undefined) {
+      return undefined;
+    }
+    const inventory = summarizeCache(parsed.root, parsed.entries, { topN: 0, ageBoundaries: [] });
+    return cacheSnapshotFrom({
+      totalBytes: inventory.totalBytes,
+      totalEntries: inventory.totalEntries,
+      incomplete: inventory.incomplete.length,
+    });
+  } catch {
+    return undefined;
+  }
 }
 
 /** The panel's text form; the webview panel is a later milestone. */

@@ -411,7 +411,7 @@ Severity used for build.mcpp diagnostics.
 
 ### `mcpp.buildScript.imports.knownModules` — advanced
 
-Flag imports in build.mcpp that are neither standard modules nor known mcpp modules.
+Offer mcpp's own modules (std, std.compat, mcpp.*) in import completion. Hover still recognises them, and no import is ever reported missing, whichever way this is set.
 
 | | |
 |---|---|

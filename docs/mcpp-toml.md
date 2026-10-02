@@ -126,9 +126,9 @@ any diff; with no checkout present it skips with a notice rather than passing si
 | `mcpp.toml.diagnostics.unknownKey` | `warning` | yes |
 | `mcpp.toml.diagnostics.planeSeparation` | `warning` | yes |
 | `mcpp.toml.diagnostics.legacyKeys` | `info` | yes |
-| `mcpp.toml.hover` | `true` | **no** |
-| `mcpp.toml.navigation` | `true` | **no** |
-| `mcpp.toml.indexCompletion` | `false` | **no** |
-| `mcpp.toml.indexCompletionTimeoutSeconds` | `20` | **no** |
+| `mcpp.toml.hover` | `true` | yes — switches the hover provider off |
+| `mcpp.toml.navigation` | `true` | yes — switches go-to-definition off |
+| `mcpp.toml.indexCompletion` | `false` | yes — **off by default**: it runs `mcpp search`, which may use the network |
+| `mcpp.toml.indexCompletionTimeoutSeconds` | `20` | yes — the completion promise returns within this, whatever the process does |
 
 Full descriptions, scopes and "when it applies": [settings.md](settings.md).
