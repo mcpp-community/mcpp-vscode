@@ -1,29 +1,21 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
 /**
- * A ceiling on untranslated user-visible strings.
+ * No untranslated user-visible string may live in `src/`.
  *
  * The English text is the key for every runtime string (`src/i18n/t.ts`), so a
  * hard-coded sentence is invisible to `tools/l10n-check.mjs` **and** ignores
- * `mcpp.ui.language`. Converting them all is mechanical work; letting new ones
- * appear is not acceptable, so this test freezes the current number and fails if
- * it grows. Lowering the number is the point.
+ * `mcpp.ui.language`: it shows Chinese on an English UI. The ceiling that used to
+ * freeze the count at 162 is now **zero** — the scan is a gate, not a ratchet.
  */
-
-/**
- * Counted on 2026-10-02 for the 0.5.0 branch: **162** lines in `src/` still carry a
- * Chinese literal, concentrated in `src/cli/controller.ts` and `src/extension.ts`.
- * Every one of them is a gap recorded as §8 G11 in
- * `.agents/docs/2026-10-02-implementation-plan.md`; the number only goes down.
- */
-const CEILING = 162;
 
 const SCANNED_DIRECTORIES = ["src"];
 
-function sourceFiles(dir: string, found: string[] = []): string[] {
+export function sourceFiles(dir: string, found: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
@@ -55,16 +47,52 @@ export function hardcodedChineseLines(root = process.cwd()): Array<{ file: strin
   return hits;
 }
 
-test("the number of untranslated user-visible strings never grows", () => {
+test("src/ carries no untranslated user-visible string", () => {
   const hits = hardcodedChineseLines();
-  assert.ok(
-    hits.length <= CEILING,
-    `hard-coded Chinese grew from ${CEILING} to ${hits.length} lines; route new strings through t(). ` +
-      `Worst offenders: ${hits.slice(0, 5).map((hit) => `${hit.file}:${hit.line}`).join(", ")}`,
+  assert.equal(
+    hits.length,
+    0,
+    `found ${hits.length} hard-coded Chinese line(s); route them through t(): ` +
+      hits.slice(0, 5).map((hit) => `${hit.file}:${hit.line}`).join(", "),
   );
 });
 
-test("the scan actually finds the strings it is meant to watch", () => {
-  // A scan that silently stops matching would make the ceiling meaningless.
-  assert.ok(hardcodedChineseLines().length > 100, "the scan found almost nothing, so it is broken");
+test("the scan still inspects every source file", () => {
+  // The zero above is only meaningful while the scan keeps looking at the same
+  // tree: a walk that stopped early would report success for the wrong reason.
+  const files = sourceFiles(path.join(process.cwd(), "src"));
+  assert.ok(files.length >= 50, `the scan inspected only ${files.length} file(s)`);
+  assert.ok(files.every((file) => file.endsWith(".ts")), "the scan picked up a non-source file");
+  for (const expected of [
+    path.join("src", "cli", "controller.ts"),
+    path.join("src", "extension.ts"),
+    path.join("src", "toml", "completion.ts"),
+    path.join("src", "views", "languageServerView.ts"),
+  ]) {
+    assert.ok(files.includes(path.join(process.cwd(), expected)), `the scan skipped ${expected}`);
+  }
+});
+
+test("the scan still finds the strings it is meant to watch", () => {
+  // Plant the two shapes the scan must tell apart in a throw-away tree: a
+  // hard-coded CJK literal (a hit) and a Chinese comment (not a hit).
+  const root = mkdtempSync(path.join(tmpdir(), "mcpp-i18n-scan-"));
+  try {
+    mkdirSync(path.join(root, "src"), { recursive: true });
+    writeFileSync(
+      path.join(root, "src", "planted.ts"),
+      [
+        `const translated = t("Plant me");`,
+        `// 这行只是注释，不是用户可见字符串`,
+        `const hardcoded = "种下我";`,
+        "",
+      ].join("\n"),
+    );
+    const hits = hardcodedChineseLines(root);
+    assert.equal(hits.length, 1, "the scan must still flag a hard-coded CJK literal");
+    assert.equal(hits[0].file, path.join("src", "planted.ts"));
+    assert.match(hits[0].text, /种下我/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

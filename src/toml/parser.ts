@@ -624,7 +624,8 @@ class Scanner {
         // 光标后方同行还有值 token（光标恰在 token 首字符、或在 = 与 token
         // 之间的空白上）时，替换范围要覆盖整个 token，否则补全插入后原文残留。
         if (!this.atEol() && this.peek() !== "#") {
-          const ahead = this.scanValue(valuePath); // 光标落在 token 内时由 scanValue 捕获
+          // 光标落在 token 内时由 scanValue 捕获。
+          const ahead = this.scanValue(valuePath);
           this.captureValue(valuePath, ahead.kind, {
             replaceRange: Scanner.singleLineReplaceRange(ahead.range) ?? this.emptyReplaceRange(),
           });
@@ -681,7 +682,8 @@ class Scanner {
     if (open) {
       while (!this.eof()) {
         if (!multiline && this.atEol()) {
-          break; // 单行串跨行 → 未闭合
+          // 单行串跨行 → 未闭合。
+          break;
         }
         const ch = this.peek();
         if (ch === "\\" && quote === '"') {
@@ -788,7 +790,8 @@ class Scanner {
       const elementStart = this.pos();
       elements.push(this.scanValue(keyPath));
       if (this.samePos(this.pos(), elementStart)) {
-        this.advance(); // 进度保护
+        // 进度保护。
+        this.advance();
       }
     }
     return { kind: "array", range: this.rangeFrom(start), open, elements };
@@ -825,7 +828,8 @@ class Scanner {
         entries.push(entry);
       }
       if (this.samePos(this.pos(), entryStart)) {
-        this.advance(); // 进度保护
+        // 进度保护。
+        this.advance();
       }
     }
     return { kind: "inlineTable", range: this.rangeFrom(start), open, entries };

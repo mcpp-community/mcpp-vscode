@@ -483,7 +483,8 @@ export function analyseManifest(
       scan(raw, state);
       continue;
     }
-    const lead = code.length - code.trimStart().length; // 行首空白宽度
+    // 行首空白宽度。
+    const lead = code.length - code.trimStart().length;
     const lineStart = lead + 1;
     const lineEnd = lead + text.length + 1;
 

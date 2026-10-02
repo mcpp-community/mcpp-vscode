@@ -36,6 +36,7 @@ import { CLI_COMMANDS } from "../commands/ids";
 import { QUICK_MENU_GROUPS, quickMenuItems, quickMenuStatusText } from "../commands/menu";
 import { read } from "../config/access";
 import { t } from "../i18n/t";
+import { controllerLabels } from "./labels";
 import { runNewProjectFlow, validateNewProjectName } from "./newProject";
 
 export interface McppCliControllerOptions {
@@ -68,13 +69,6 @@ export interface ProjectTaskRunOptions {
   /** Set to false when the caller performs its own post-task action. */
   notify?: boolean;
 }
-
-const INSTALL_CUSTOM_LABEL = "$(edit) 输入其他兼容工具链 spec…";
-const CONFIRM_INSTALL = "安装";
-const CONFIRM_DETECT = "检测";
-const CONFIRM_DEFAULT = "设为全局默认";
-const CONFIRM_CLEAN = "清理 target";
-const SHOW_TASKS = "显示正在运行的任务";
 
 function taskScope(root: string): vscode.WorkspaceFolder | vscode.TaskScope {
   return vscode.workspace.getWorkspaceFolder(vscode.Uri.file(root))
@@ -330,12 +324,13 @@ export class McppCliController {
     // `mcpp.task.confirmClean`: one prompt for this entry point; the cleanup
     // plan's own level-2/3 confirmations are untouched by it.
     if (kind === "clean" && cleanConfirmationRequired(read<boolean>("mcpp.task.confirmClean", vscode.Uri.file(project.root)))) {
+      const labels = controllerLabels();
       const choice = await vscode.window.showWarningMessage(
-        `将删除当前工程的 target 目录：${project.root}/target`,
-        { modal: true, detail: "此操作不会清理全局 BMI 缓存。" },
-        CONFIRM_CLEAN,
+        t("Delete the target/ directory of this project: {0}/target", project.root),
+        { modal: true, detail: t("This does not clean the global BMI cache.") },
+        labels.confirmClean,
       );
-      if (choice !== CONFIRM_CLEAN) {
+      if (choice !== labels.confirmClean) {
         return undefined;
       }
     }
@@ -348,11 +343,12 @@ export class McppCliController {
       ? this.operations.beginGlobal(token)
       : this.operations.beginProject(project.root, token);
     if (active !== undefined) {
+      const labels = controllerLabels();
       const choice = await vscode.window.showWarningMessage(
-        `已有 mcpp 操作正在运行，暂不启动 ${kind}。`,
-        SHOW_TASKS,
+        t("An mcpp operation is already running; not starting {0} now.", kind),
+        labels.showTasks,
       );
-      if (choice === SHOW_TASKS) {
+      if (choice === labels.showTasks) {
         await vscode.commands.executeCommand("workbench.action.tasks.showTasks");
       }
       return undefined;
@@ -397,13 +393,13 @@ export class McppCliController {
     const items = this.inventoryItems(inventory, false, project);
     if (items.length === 0) {
       await vscode.window.showInformationMessage(
-        "mcpp 没有列出可用工具链；请查看 mcpp 输出频道中的原始结果。",
+        t("mcpp listed no usable toolchain; see the raw result in the mcpp output channel."),
       );
       return;
     }
     await vscode.window.showQuickPick(items, {
-      title: "mcpp 工具链与 target",
-      placeHolder: "只读查看 mcpp 当前解析结果",
+      title: t("mcpp toolchains and targets"),
+      placeHolder: t("Read-only view of what mcpp currently resolves"),
       matchOnDescription: true,
       matchOnDetail: true,
     });
@@ -421,21 +417,22 @@ export class McppCliController {
     }
     const installKind = toolchainInstallKind(spec);
     const targetHint = toolchainSpecTargetHint(spec);
-    const confirmLabel = installKind === "system-detect" ? CONFIRM_DETECT : CONFIRM_INSTALL;
+    const labels = controllerLabels();
+    const confirmLabel = installKind === "system-detect" ? labels.confirmDetect : labels.confirmInstall;
     const confirmation = installKind === "system-detect"
-      ? `将调用 mcpp 检测系统 MSVC（${spec}）。`
+      ? t("mcpp will detect the system MSVC ({0}).", spec)
       : targetHint === "target"
-        ? `将把可能携带 target 语义的兼容 spec ${spec} 交给 mcpp 安装，最终由 mcpp 校验。`
+        ? t("The compatible spec {0}, which may carry target semantics, is handed to mcpp to install, and mcpp validates it in the end.", spec)
         : installKind === "managed-target"
-          ? `将把携带 target 语义的兼容 spec ${spec} 交给 mcpp 安装。`
-          : `将安装 mcpp 工具链 ${spec}（不指定 target，使用 host target）。`;
+          ? t("The compatible spec {0} carrying target semantics is handed to mcpp to install.", spec)
+          : t("mcpp toolchain {0} is installed (no target specified, the host target is used).", spec);
     const detail = installKind === "system-detect"
-      ? "mcpp 不会下载或安装 MSVC；它会检测 Visual Studio，并在缺失时给出官方安装指引。"
+      ? t("mcpp does not download or install MSVC; it detects Visual Studio and points to the official installation guide when it is missing.")
       : targetHint === "target"
-        ? "mcpp 会判断编译器前缀是否为有效 triple；有效时可能下载对应 target 的较大工具链包。"
+        ? t("mcpp decides whether the compiler prefix is a valid triple; when it is, it may download a larger toolchain package for that target.")
         : installKind === "managed-target"
-          ? "mcpp 会规范化兼容写法，并可能下载对应 target 的较大工具链包。"
-          : "安装可能下载较大的工具链包，并修改 mcpp 全局缓存。";
+          ? t("mcpp normalises the compatible spelling and may download a larger toolchain package for that target.")
+          : t("The installation may download a large toolchain package and modifies the mcpp global cache.");
 
     const policy = confirmationPolicy(read<boolean>("mcpp.ui.confirmDestructiveOnly"));
     const choice = await vscode.window.showWarningMessage(
@@ -451,18 +448,18 @@ export class McppCliController {
     const active = this.operations.beginGlobal(token);
     if (active !== undefined) {
       const duplicateChoice = await vscode.window.showWarningMessage(
-        "已有 mcpp 操作正在运行。",
-        SHOW_TASKS,
+        t("An mcpp operation is already running."),
+        labels.showTasks,
       );
-      if (duplicateChoice === SHOW_TASKS) {
+      if (duplicateChoice === labels.showTasks) {
         await vscode.commands.executeCommand("workbench.action.tasks.showTasks");
       }
       return;
     }
 
     const taskTitle = installKind === "system-detect"
-      ? `mcpp: 检测系统 MSVC（${spec}）`
-      : `mcpp: 安装工具链 ${spec}`;
+      ? t("mcpp: detect system MSVC ({0})", spec)
+      : t("mcpp: install toolchain {0}", spec);
     try {
       const installArgs = mcppCommandArguments("toolchain", "install", spec);
       const completion = await this.executeTask(
@@ -485,18 +482,18 @@ export class McppCliController {
     }
 
     if (installKind === "managed-target") {
-      this.reportSuccess(`mcpp 已完成 ${spec}。首版插件不修改 target 默认；如需设为默认，请使用带 --target 的 mcpp CLI。`);
+      this.reportSuccess(t("mcpp finished {0}. This first release does not change the target default; to set one, use the mcpp CLI with --target.", spec));
       return;
     }
 
     const refreshed = await this.readToolchainInventory(project);
     const defaultChoice = await vscode.window.showInformationMessage(
       installKind === "system-detect"
-        ? "MSVC 检测完成。是否从最新列表中选择全局默认？"
-        : `工具链 ${spec} 安装完成。是否从最新列表中选择全局默认？`,
-      "选择全局默认",
+        ? t("MSVC detection finished. Choose a global default from the latest list?")
+        : t("Toolchain {0} installed. Choose a global default from the latest list?", spec),
+      labels.chooseGlobalDefault,
     );
-    if (defaultChoice === "选择全局默认" && refreshed !== undefined) {
+    if (defaultChoice === labels.chooseGlobalDefault && refreshed !== undefined) {
       await this.selectDefaultToolchainFromInventory(project, refreshed);
     }
   }
@@ -519,25 +516,25 @@ export class McppCliController {
     const installed = hostDefaultToolchains(inventory);
     if (installed.length === 0) {
       await vscode.window.showWarningMessage(
-        "没有可用于 host target 的已安装工具链，不能在此处设置全局默认。target 专用工具链请使用 mcpp CLI；Windows MSVC 请先安装 Visual Studio。",
+        t("No installed toolchain is usable for the host target, so a global default cannot be set here. For target-specific toolchains use the mcpp CLI; on Windows install Visual Studio first."),
       );
       return;
     }
 
     const items: ToolchainPickItem[] = installed.map((toolchain) => ({
       label: `${toolchain.effective ? "$(check) " : ""}${toolchain.spec}`,
-      description: toolchain.source === "system" ? "系统工具链（mcpp 只检测）" : "mcpp 管理的工具链",
-      detail: toolchain.effective ? "当前工程有效工具链" : undefined,
+      description: toolchain.source === "system" ? t("System toolchain (mcpp only detects it)") : t("Toolchain managed by mcpp"),
+      detail: toolchain.effective ? t("Effective toolchain of this project") : undefined,
       spec: toolchain.spec,
       toolchain,
     }));
     const picked = await vscode.window.showQuickPick(items, {
-      title: "选择 mcpp 全局默认工具链",
+      title: t("Choose the mcpp global default toolchain"),
       placeHolder: this.isNestedWorkspaceProject(project)
-        ? "当前工程根位于 VS Code 文件夹子目录；实际构建解析以 mcpp 为准"
+        ? t("The project root sits below the VS Code folder; the real build resolution is whatever mcpp reports")
         : inventory.projectOverridesGlobal
-          ? "项目当前覆盖全局默认；这里只修改 mcpp 当前全局配置"
-          : "选择后只修改 mcpp 全局配置，不会自动构建工程",
+          ? t("The project currently overrides the global default; this only changes the current mcpp global configuration")
+          : t("Choosing here only changes the mcpp global configuration; it does not build the project"),
       matchOnDescription: true,
       matchOnDetail: true,
     });
@@ -546,22 +543,23 @@ export class McppCliController {
     }
 
     const defaultPolicy = confirmationPolicy(read<boolean>("mcpp.ui.confirmDestructiveOnly"));
+    const warningLabels = controllerLabels();
     const choice = await vscode.window.showWarningMessage(
-      `将把全局默认对设为 ${picked.spec} + host target。当前项目的 mcpp.toml/target 配置仍可能覆盖它。`,
+      t("The global default pair is set to {0} + host target. The mcpp.toml/target configuration of the current project can still override it.", picked.spec),
       this.warningOptions(
         defaultPolicy.globalDefault,
-        "mcpp 会同时清空全局 default_target；配置文件位置由当前 mcpp 安装及 MCPP_HOME 决定。",
+        t("mcpp also clears the global default_target; the configuration file location is decided by the current mcpp installation and MCPP_HOME."),
       ),
-      CONFIRM_DEFAULT,
+      warningLabels.confirmDefault,
     );
-    if (choice !== CONFIRM_DEFAULT) {
+    if (choice !== warningLabels.confirmDefault) {
       return;
     }
 
     const token: OperationToken = {};
     const active = this.operations.beginGlobal(token);
     if (active !== undefined) {
-      await vscode.window.showWarningMessage("已有 mcpp 操作正在运行。", SHOW_TASKS);
+      await vscode.window.showWarningMessage(t("An mcpp operation is already running."), warningLabels.showTasks);
       return;
     }
 
@@ -572,13 +570,13 @@ export class McppCliController {
         args,
         workingDirectory(project),
       );
-      this.appendShortCommand("设置全局默认工具链", this.mcppExecutable(project), args, result);
+      this.appendShortCommand(t("Set the global default toolchain"), this.mcppExecutable(project), args, result);
       if (result.exitCode !== 0) {
         this.reportCommandFailure(
           args,
           result.exitCode,
           `${result.stdout}\n${result.stderr}`,
-          `设置全局默认工具链失败（退出码 ${result.exitCode}）。请查看 mcpp 输出频道。`,
+          t("Setting the global default toolchain failed (exit code {0}). See the mcpp output channel.", result.exitCode),
         );
         return;
       }
@@ -588,35 +586,36 @@ export class McppCliController {
     }
 
     const buildChoice = await vscode.window.showInformationMessage(
-      `mcpp 全局默认已更新为 ${picked.spec} + host target。建议清理旧工具链产物后重新构建。`,
-      ...(project === undefined ? [] : ["清理并构建"]),
+      t("The mcpp global default is now {0} + host target. Cleaning the old toolchain artifacts and rebuilding is recommended.", picked.spec),
+      ...(project === undefined ? [] : [warningLabels.cleanAndBuild]),
     );
-    if (buildChoice === "清理并构建" && project !== undefined) {
+    if (buildChoice === warningLabels.cleanAndBuild && project !== undefined) {
       const cleanArgs = mcppCommandArguments("clean");
       const cleanResult = await runProcess(this.mcppExecutable(project), cleanArgs, project.root);
-      this.appendShortCommand("清理旧产物", this.mcppExecutable(project), cleanArgs, cleanResult);
+      this.appendShortCommand(t("Clean old artifacts"), this.mcppExecutable(project), cleanArgs, cleanResult);
       await this.runProjectTask("build");
     }
   }
 
   private async pickInstallSpec(inventory: ToolchainInventory | undefined): Promise<string | undefined> {
+    const labels = controllerLabels();
     const items: ToolchainPickItem[] = [];
     for (const toolchain of inventory?.available ?? []) {
       items.push({
         label: toolchain.spec,
-        description: "mcpp 按 family 聚合的可用版本；本操作按 host target 安装",
+        description: t("Versions mcpp aggregates by family; this operation installs for the host target"),
         spec: toolchain.spec,
       });
     }
     items.push({
-      label: INSTALL_CUSTOM_LABEL,
-      detail: "支持 family、family@version、namespace、部分版本和 mcpp 兼容旧拼写",
+      label: labels.installCustom,
+      detail: t("Accepts family, family@version, namespace, partial versions and mcpp's compatible legacy spellings"),
       customInput: true,
     });
 
     const picked = await vscode.window.showQuickPick(items, {
-      title: "安装 mcpp 工具链",
-      placeHolder: "不选择 target；target 专用安装请使用 mcpp CLI",
+      title: t("Install an mcpp toolchain"),
+      placeHolder: t("No target is selected; for a target-specific install use the mcpp CLI"),
       matchOnDescription: true,
       matchOnDetail: true,
     });
@@ -628,13 +627,13 @@ export class McppCliController {
     }
 
     const input = await vscode.window.showInputBox({
-      title: "输入工具链 spec",
-      prompt: "例如 gcc、llvm@20.1.7、xim:gcc@16、msvc、mingw；兼容写法由 mcpp 规范化",
+      title: t("Enter a toolchain spec"),
+      prompt: t("For example gcc, llvm@20.1.7, xim:gcc@16, msvc, mingw; mcpp normalises compatible spellings"),
       placeHolder: "gcc@16",
       validateInput: (value) => {
         const normalized = normalizeToolchainSpec(value);
         if (normalized === undefined) {
-          return "请输入 family、family@version、family version、namespace 或 mcpp 兼容 spec";
+          return t("Enter a family, family@version, family version, namespace or an mcpp-compatible spec");
         }
         return undefined;
       },
@@ -651,34 +650,34 @@ export class McppCliController {
     const nestedView = this.isNestedWorkspaceProject(project);
     if (inventory.effective !== undefined) {
       items.push({
-        label: `$(check) ${nestedView ? "mcpp list 当前目录工具链" : "当前有效工具链"}：${inventory.effective.spec}`,
+        label: `$(check) ${nestedView ? t("mcpp list toolchain for this directory") : t("Current effective toolchain")}: ${inventory.effective.spec}`,
         description: nestedView
-          ? "当前目录视图；实际生效值以 mcpp build 解析为准"
-          : inventory.projectOverridesGlobal ? "来自当前项目 mcpp.toml，覆盖全局默认" : "来自全局默认",
+          ? t("This is the current-directory view; the value mcpp build resolves is authoritative")
+          : inventory.projectOverridesGlobal ? t("From this project's mcpp.toml, overriding the global default") : t("From the global default"),
         detail: inventory.effectiveTarget === undefined
-          ? "有效 target：host（mcpp 未显示显式 target）"
-          : `有效 target：${inventory.effectiveTarget}`,
+          ? t("Effective target: host (mcpp shows no explicit target)")
+          : t("Effective target: {0}", inventory.effectiveTarget),
       });
     }
     if (inventory.globalDefaultSpec !== undefined) {
       items.push({
-        label: `全局默认：${inventory.globalDefaultSpec}`,
+        label: t("Global default: {0}", inventory.globalDefaultSpec),
         description: nestedView
-          ? "当前目录视图；项目或父级配置的覆盖以实际构建为准"
-          : inventory.projectOverridesGlobal ? "当前项目可能没有使用此值" : "mcpp 全局配置",
+          ? t("This is the current-directory view; overrides from the project or a parent configuration are decided by the actual build")
+          : inventory.projectOverridesGlobal ? t("This project may not be using this value") : t("mcpp global configuration"),
       });
     } else if (inventory.recognized) {
       items.push({
-        label: "全局默认：<none>",
-        description: "mcpp 尚未设置全局默认工具链",
+        label: t("Global default: <none>"),
+        description: t("mcpp has no global default toolchain yet"),
       });
     }
     for (const toolchain of inventory.installed) {
       items.push({
         label: `${toolchain.effective ? "$(check) " : ""}${toolchain.spec}`,
-        description: toolchain.source === "system" ? "System：系统工具链，仅检测" : "已安装",
+        description: toolchain.source === "system" ? t("System: system toolchain, detection only") : t("Installed"),
         detail: toolchain.effective
-          ? nestedView ? "mcpp list 当前目录有效项；实际构建解析可能受父级 mcpp 工作区影响" : "当前有效项"
+          ? nestedView ? t("mcpp list item effective for this directory; the actual build resolution may be affected by a parent mcpp workspace") : t("Currently effective item")
           : undefined,
         spec: toolchain.spec,
         toolchain,
@@ -687,21 +686,21 @@ export class McppCliController {
     for (const target of inventory.targets) {
       items.push({
         label: `${target.effective ? "$(check) " : ""}target ${target.target}`,
-        description: `${target.status}${target.toolchainSpec === undefined ? "" : ` · 约定 ${target.toolchainSpec}`}`,
-        detail: target.note.length === 0 ? "target 轴只读展示；选择 target 请使用 mcpp CLI" : target.note,
+        description: `${target.status}${target.toolchainSpec === undefined ? "" : ` · ${t("convention {0}", target.toolchainSpec)}`}`,
+        detail: target.note.length === 0 ? t("The target axis is shown read-only; to select a target use the mcpp CLI") : target.note,
       });
     }
     for (const toolchain of inventory.available) {
       items.push({
-        label: `可安装：${toolchain.spec}`,
-        description: "mcpp 按 family 聚合的索引版本；未承诺 host payload",
+        label: t("Installable: {0}", toolchain.spec),
+        description: t("Index versions mcpp aggregates by family; no host payload is promised"),
         spec: toolchain.spec,
       });
     }
     if (includeActions) {
       items.push({
-        label: "$(cloud-download) 安装工具链…",
-        detail: "回到工具链安装流程",
+        label: t("$(cloud-download) Install a toolchain…"),
+        detail: t("Back to the toolchain installation flow"),
         customInput: true,
       });
     }
@@ -734,8 +733,8 @@ export class McppCliController {
     }
 
     const input = await vscode.window.showInputBox({
-      title: "新建 mcpp 工程（1/2）",
-      prompt: "输入项目名，将在所选位置创建同名项目文件夹",
+      title: t("New mcpp project (1/2)"),
+      prompt: t("Enter a project name; a folder of that name is created at the location you pick"),
       placeHolder: "hello-mcpp",
       validateInput: validateNewProjectName,
     });
@@ -745,11 +744,11 @@ export class McppCliController {
     const projectName = input.trim();
 
     const picked = await vscode.window.showOpenDialog({
-      title: "选择项目位置（2/2）",
+      title: t("Choose the project location (2/2)"),
       canSelectFiles: false,
       canSelectFolders: true,
       canSelectMany: false,
-      openLabel: "在此创建项目",
+      openLabel: t("Create the project here"),
     });
     const location = picked?.[0];
     if (location === undefined) {
@@ -757,7 +756,8 @@ export class McppCliController {
     }
 
     const projectRoot = join(location.fsPath, projectName);
-    const confirmCreate = "创建并打开";
+    // Shown *and* compared: one definition keeps the two in step.
+    const confirmCreate = t("Create and open");
     await runNewProjectFlow(projectName, location.fsPath, projectRoot, {
       exists: existsSync,
       confirm: async (message) =>
@@ -767,7 +767,7 @@ export class McppCliController {
         const executable = this.mcppExecutable(undefined);
         const args = mcppCommandArguments("new", name);
         const result = await runProcess(executable, args, cwd);
-        this.appendShortCommand("新建工程", executable, args, result);
+        this.appendShortCommand(t("New project"), executable, args, result);
         return result.exitCode;
       },
       openFolder: async (path) => {
@@ -785,8 +785,8 @@ export class McppCliController {
         await operation();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        this.logger.error(`mcpp CLI 操作失败：${message}`);
-        await vscode.window.showErrorMessage(`mcpp：${message}`);
+        this.logger.error(t("mcpp CLI operation failed: {0}", message));
+        await vscode.window.showErrorMessage(t("mcpp: {0}", message));
       }
     };
   }
@@ -794,7 +794,7 @@ export class McppCliController {
   private requireProject(): McppProjectDiscovery | undefined {
     const project = this.options.currentProject();
     if (project === undefined) {
-      void vscode.window.showWarningMessage("当前工作区没有找到 mcpp.toml。请在 mcpp 工程中执行此命令。");
+      void vscode.window.showWarningMessage(t("No mcpp.toml was found in this workspace. Run this command inside an mcpp project."));
     }
     return project;
   }
@@ -804,7 +804,7 @@ export class McppCliController {
       return true;
     }
     void vscode.window.showWarningMessage(
-      "当前工作区未受信任。mcpp 命令可能执行工作区设置指定的外部程序，请先信任工作区。",
+      t("This workspace is not trusted. mcpp commands may run external programs named by workspace settings; trust the workspace first."),
     );
     return false;
   }
@@ -831,13 +831,13 @@ export class McppCliController {
     const executable = this.mcppExecutable(project);
     const args = mcppCommandArguments("toolchain", "list");
     const result = await runProcess(executable, args, workingDirectory(project));
-    this.appendShortCommand("查看工具链", executable, args, result);
+    this.appendShortCommand(t("Inspect the toolchain"), executable, args, result);
     if (result.exitCode !== 0) {
       this.reportCommandFailure(
         args,
         result.exitCode,
         `${result.stdout}\n${result.stderr}`,
-        `mcpp toolchain list 失败（退出码 ${result.exitCode}）。请查看 mcpp 输出频道。`,
+        t("mcpp toolchain list failed (exit code {0}). See the mcpp output channel.", result.exitCode),
       );
       return undefined;
     }
@@ -845,7 +845,7 @@ export class McppCliController {
     const inventory = parseToolchainList(`${result.stdout}${result.stderr.length > 0 ? `\n${result.stderr}` : ""}`);
     if (!inventory.recognized) {
       await vscode.window.showErrorMessage(
-        "无法识别当前 mcpp toolchain list 输出；原始输出已保留在 mcpp 输出频道，请检查 mcpp 版本。",
+        t("The current mcpp toolchain list output is not recognised; the raw output is kept in the mcpp output channel, so check the mcpp version."),
       );
       return undefined;
     }
@@ -945,16 +945,16 @@ export class McppCliController {
     completion: TaskCompletion,
   ): void {
     const suffix = completion.state === "succeeded"
-      ? `退出码 ${completion.exitCode ?? 0}`
+      ? t("Exit code {0}", completion.exitCode ?? 0)
       : completion.state === "cancelled"
-        ? "已取消"
-        : `失败，退出码 ${completion.exitCode ?? "未知"}`;
+        ? t("Cancelled")
+        : t("Failed with exit code {0}", completion.exitCode ?? t("unknown"));
     // `mcpp.log.level` gates the verbose lines; the failed result is an error
     // and is therefore never suppressed.
     this.logger.info(`\n[${new Date().toISOString()}] ${title}`);
-    this.logger.debug(`工作目录：${root}`);
-    this.logger.debug(`任务参数：${args.join(" ")}`);
-    const resultLine = `结果：${suffix}`;
+    this.logger.debug(t("Working directory: {0}", root));
+    this.logger.debug(t("Task arguments: {0}", args.join(" ")));
+    const resultLine = t("Result: {0}", suffix);
     if (completion.state === "failed") {
       this.logger.error(resultLine);
     } else if (completion.state === "cancelled") {
@@ -972,10 +972,10 @@ export class McppCliController {
         args,
         completion.exitCode ?? 1,
         "",
-        `${title}失败（退出码 ${completion.exitCode ?? "未知"}）。请查看任务终端。`,
+        t("{0} failed (exit code {1}). See the task terminal.", title, completion.exitCode ?? t("unknown")),
       );
     } else if (completion.state === "cancelled") {
-      void vscode.window.showWarningMessage(`${title}已取消。`);
+      void vscode.window.showWarningMessage(t("{0} was cancelled.", title));
     } else {
       this.reportSuccess(t("{0} finished.", title));
     }

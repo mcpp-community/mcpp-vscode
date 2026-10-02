@@ -311,7 +311,7 @@ test("泛化 triple 工具链由 mcpp 最终校验", () => {
   const end = source.indexOf("public async selectDefaultToolchain", start);
   const method = source.slice(start, end);
 
-  assert.match(method, /可能携带 target 语义.*最终由 mcpp 校验/s);
+  assert.match(method, /may carry target semantics.*mcpp validates it in the end/s);
 });
 
 test("新建工程先校验目标路径再确认创建，成功后只打开不构建", () => {

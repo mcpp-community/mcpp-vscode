@@ -1,3 +1,5 @@
+import { t } from "../i18n/t";
+
 export type ProjectTaskKind = "build" | "run" | "test" | "clean";
 export type TaskState = "succeeded" | "failed" | "cancelled";
 
@@ -12,12 +14,22 @@ export interface TaskCompletion {
   exitCode?: number;
 }
 
-const TASK_TITLES: Record<ProjectTaskKind, string> = {
-  build: "mcpp: 构建",
-  run: "mcpp: 运行",
-  test: "mcpp: 测试",
-  clean: "mcpp: 清理",
-};
+/**
+ * The task's display name. Resolved per call, not at import time, so a change to
+ * `mcpp.ui.language` applies without reloading the window.
+ */
+function taskTitle(kind: ProjectTaskKind): string {
+  switch (kind) {
+    case "build":
+      return t("mcpp: Build");
+    case "run":
+      return t("mcpp: Run");
+    case "test":
+      return t("mcpp: Test");
+    case "clean":
+      return t("mcpp: Clean");
+  }
+}
 
 /** `mcpp.task.<kind>Args`, so a user can pass `-j 4` or `--quiet` without a wrapper. */
 export const TASK_ARGUMENT_SETTINGS: Readonly<Record<ProjectTaskKind, string>> = {
@@ -30,7 +42,7 @@ export const TASK_ARGUMENT_SETTINGS: Readonly<Record<ProjectTaskKind, string>> =
 export function projectTaskPlan(kind: ProjectTaskKind, extraArgs: readonly string[] = []): ProjectTaskPlan {
   return {
     kind,
-    title: TASK_TITLES[kind],
+    title: taskTitle(kind),
     args: [kind, ...extraArgs],
   };
 }

@@ -7,26 +7,29 @@ import {
   projectTaskPlan,
   shouldRefreshLanguageServerAfterTask,
 } from "../../src/cli/tasks";
+import { t } from "../../src/i18n/t";
 
 test("基础项目任务使用固定的 mcpp 参数数组", () => {
+  // The title is a runtime string: asserted through `t()` so it follows
+  // `mcpp.ui.language` instead of freezing one language into the test.
   assert.deepEqual(projectTaskPlan("build"), {
     kind: "build",
-    title: "mcpp: 构建",
+    title: t("mcpp: Build"),
     args: ["build"],
   });
   assert.deepEqual(projectTaskPlan("run"), {
     kind: "run",
-    title: "mcpp: 运行",
+    title: t("mcpp: Run"),
     args: ["run"],
   });
   assert.deepEqual(projectTaskPlan("test"), {
     kind: "test",
-    title: "mcpp: 测试",
+    title: t("mcpp: Test"),
     args: ["test"],
   });
   assert.deepEqual(projectTaskPlan("clean"), {
     kind: "clean",
-    title: "mcpp: 清理",
+    title: t("mcpp: Clean"),
     args: ["clean"],
   });
 });

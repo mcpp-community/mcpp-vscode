@@ -1,3 +1,5 @@
+import { t } from "../i18n/t";
+
 export interface NewProjectActions {
   exists(path: string): boolean;
   confirm(message: string): Promise<boolean>;
@@ -20,11 +22,11 @@ export async function runNewProjectFlow(
   actions: NewProjectActions,
 ): Promise<NewProjectOutcome> {
   if (actions.exists(projectRoot)) {
-    await actions.showError(`目标路径已存在：${projectRoot}。请更换项目名或位置。`);
+    await actions.showError(t("The destination already exists: {0}. Choose another project name or location.", projectRoot));
     return "exists";
   }
   const confirmed = await actions.confirm(
-    `将在 ${location} 执行 “mcpp new ${projectName}”，创建项目文件夹 ${projectRoot} 并打开它。`,
+    t("Run “mcpp new {0}” in {1}, create the project folder {2} and open it.", projectName, location, projectRoot),
   );
   if (!confirmed) {
     return "declined";
@@ -32,7 +34,7 @@ export async function runNewProjectFlow(
   const exitCode = await actions.run(projectName, location);
   if (exitCode !== 0) {
     await actions.showError(
-      `mcpp new ${projectName} 失败（退出码 ${exitCode}）。请查看 mcpp 输出频道。`,
+      t("mcpp new {0} failed (exit code {1}). See the mcpp output channel.", projectName, exitCode),
     );
     return "failed";
   }
@@ -59,32 +61,32 @@ const MCPP_BUILTIN_TEMPLATE_MARKER = "PROJECT";
 export function validateNewProjectName(input: string): string | undefined {
   const name = input.trim();
   if (name.length === 0) {
-    return "项目名不能为空";
+    return t("The project name must not be empty.");
   }
   if (/[\\/]/.test(name)) {
-    return "项目名不能包含路径分隔符";
+    return t("The project name must not contain a path separator.");
   }
   if (name.startsWith("-")) {
-    return "项目名不能以 - 开头，否则会被 mcpp 解析为命令行选项";
+    return t("The project name must not start with -, or mcpp would read it as a command-line option.");
   }
   if (name === "." || name === "..") {
-    return "项目名不能是 . 或 ..";
+    return t("The project name must not be . or ..");
   }
   // mcpp#380：当前内置模板会重复扫描替换结果，名称包含该标记时不会终止。
   if (name.includes(MCPP_BUILTIN_TEMPLATE_MARKER)) {
-    return "项目名不能包含 PROJECT，否则会触发当前 mcpp 模板替换缺陷";
+    return t("The project name must not contain PROJECT: it triggers a defect in the current mcpp template substitution.");
   }
   if (CONTROL_CHARS.test(name)) {
-    return "项目名不能包含控制字符";
+    return t("The project name must not contain control characters.");
   }
   if (WINDOWS_RESERVED_CHARS.test(name)) {
-    return '项目名不能包含 <>:"|?* 等保留字符';
+    return t('The project name must not contain reserved characters such as <>:"|?*.');
   }
   if (name.endsWith(".")) {
-    return "项目名不能以 . 结尾（Windows 不支持）";
+    return t("The project name must not end with . (unsupported on Windows).");
   }
   if (WINDOWS_DEVICE_NAMES.test(name)) {
-    return "项目名不能是 Windows 保留设备名";
+    return t("The project name must not be a Windows reserved device name.");
   }
   return undefined;
 }

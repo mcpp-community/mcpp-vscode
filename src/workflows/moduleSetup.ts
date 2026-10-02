@@ -1,3 +1,5 @@
+import { t } from "../i18n/t";
+
 export type ModuleSetupStage = "build" | "language-server";
 export type ModuleSetupStepState = "succeeded" | "failed" | "cancelled" | "not-started";
 export type ModuleSetupBlockedReason = "untrusted" | "busy";
@@ -26,8 +28,8 @@ export interface ModuleSetupConfirmation {
 
 export function moduleSetupConfirmation(): ModuleSetupConfirmation {
   return {
-    message: "是否构建当前 mcpp 工程并刷新 C++ 模块语言服务？",
-    detail: "将执行 mcpp build，并由 C++ Modules 扩展重新读取构建描述；不会修改工具链、mcpp.toml 或任何语言服务设置。",
+    message: t("Build the current mcpp project and refresh the C++ Modules language service?"),
+    detail: t("This runs mcpp build and has the C++ Modules extension re-read the build description; it does not change the toolchain, mcpp.toml or any language service setting."),
   };
 }
 

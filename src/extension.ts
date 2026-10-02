@@ -126,20 +126,20 @@ function resultText(output: vscode.OutputChannel, result: LanguageServerCommandR
 function moduleSetupBlockedMessage(reason: Extract<ModuleSetupDecision, { kind: "blocked" }>["reason"]): string {
   switch (reason) {
     case "untrusted":
-      return "当前工作区未受信任，不会执行 mcpp 或刷新 C++ 模块语言服务。请先信任工作区。";
+      return t("This workspace is not trusted, so mcpp will not run and the C++ Modules language service will not refresh. Trust the workspace first.");
     case "busy":
-      return "已有 mcpp 操作正在运行，请等待完成后再试。";
+      return t("An mcpp operation is already running; wait for it to finish and try again.");
   }
 }
 
 function taskCompletionText(completion: TaskCompletion): string {
   if (completion.state === "cancelled") {
-    return "构建已取消；C++ 模块语言服务未刷新。";
+    return t("The build was cancelled; the C++ Modules language service was not refreshed.");
   }
   if (completion.state === "failed") {
-    return `mcpp 构建失败（退出码 ${completion.exitCode ?? "未知"}）；C++ 模块语言服务已重新读取现有构建描述。`;
+    return t("The mcpp build failed (exit code {0}); the C++ Modules language service re-read the existing build description.", completion.exitCode ?? t("unknown"));
   }
-  return "mcpp 构建完成，C++ 模块语言服务已刷新。";
+  return t("The mcpp build finished; the C++ Modules language service has been refreshed.");
 }
 
 async function autoConfigureModulesWizard(
@@ -162,12 +162,14 @@ async function autoConfigureModulesWizard(
     return;
   }
   const confirmation = moduleSetupConfirmation();
+  // One definition: the label is shown *and* the reply is compared against it.
+  const confirmLabel = t("Confirm one-click setup");
   const choice = await vscode.window.showWarningMessage(
     confirmation.message,
     { modal: true, detail: confirmation.detail },
-    "确认一键配置",
+    confirmLabel,
   );
-  if (choice !== "确认一键配置") {
+  if (choice !== confirmLabel) {
     return;
   }
 
@@ -178,7 +180,7 @@ async function autoConfigureModulesWizard(
         return {
           stage: "build",
           state: "not-started",
-          detail: "未启动 mcpp 构建。",
+          detail: t("mcpp build was not started."),
         };
       }
       return {
@@ -206,7 +208,7 @@ async function autoConfigureModulesWizard(
   } else if (outcome.state === "cancelled") {
     await vscode.window.showWarningMessage(taskCompletionText({ state: "cancelled" }));
   } else {
-    await vscode.window.showErrorMessage(outcome.steps.at(-1)?.detail ?? "C++ 模块语言服务配置失败。");
+    await vscode.window.showErrorMessage(outcome.steps.at(-1)?.detail ?? t("Configuring the C++ Modules language service failed."));
   }
 }
 
@@ -230,8 +232,8 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
       await operation();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      outputText(output, `发生未预期错误：${message}`);
-      void vscode.window.showErrorMessage(`mcpp：${message}`);
+      outputText(output, t("Unexpected error: {0}", message));
+      void vscode.window.showErrorMessage(t("mcpp: {0}", message));
     }
   };
   const invokeLanguageServer = (

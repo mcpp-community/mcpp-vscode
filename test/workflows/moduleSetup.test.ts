@@ -8,6 +8,7 @@ import {
   type ModuleSetupOperations,
   type ModuleSetupStepResult,
 } from "../../src/workflows/moduleSetup";
+import { t } from "../../src/i18n/t";
 
 test("只信任且不忙时可开始一键配置", () => {
   assert.deepEqual(buildModuleSetupPlan(true, false), { kind: "ready" });
@@ -17,7 +18,7 @@ test("只信任且不忙时可开始一键配置", () => {
 
 test("确认文案不再要求切换 LLVM、下载 llvm-tools 或配置 clangd", () => {
   const confirmation = moduleSetupConfirmation();
-  assert.match(confirmation.message, /构建.*刷新 C\+\+ 模块语言服务/);
+  assert.equal(confirmation.message, t("Build the current mcpp project and refresh the C++ Modules language service?"));
   assert.match(confirmation.detail, /mcpp build/);
   assert.match(confirmation.detail, /C\+\+ Modules/);
   assert.doesNotMatch(confirmation.detail, /LLVM|llvm-tools/i);

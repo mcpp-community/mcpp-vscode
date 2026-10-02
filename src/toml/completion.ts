@@ -8,9 +8,11 @@
 // 依赖版本补全（`mcpp.toml.indexCompletion`，默认关）：本模块只负责
 // 「光标是不是在依赖版本值位置」与「把候选变成建议」两件纯事；执行
 // `mcpp search`、超时、会话缓存、信任/离线判定都在 src/toml/providers.ts，
-// 解析人类输出在 src/cli/search.ts。本模块不依赖 vscode API。
+// 解析人类输出在 src/cli/search.ts。本模块不依赖 vscode API：`t()` 只在
+// `auto` 路径上按需加载编辑器 API，纯单测环境下退化为英文 key。
 
 import type { PackageVersion } from "../cli/search";
+import { t } from "../i18n/t";
 import {
   contextAt,
   parseMcppToml,
@@ -37,7 +39,11 @@ export interface SectionHeaderSpec {
   label: string;
   /** snippet 形式的段头（含 ${1:...} 占位）。 */
   header: string;
-  detail: string;
+  /**
+   * 明细文案。存的是英文 key 的**取用函数**，每个补全请求才 `t()` 一次，所以
+   * 改 `mcpp.ui.language` 无需重载窗口，且本模块在无编辑器的单测里也能加载。
+   */
+  detail: () => string;
 }
 
 // 段头明细表：只补充「写法」（label/snippet/detail），不再是段清单本身。
@@ -45,31 +51,31 @@ export interface SectionHeaderSpec {
 // 出处：mcpp 文档 02/03/05/06 与 src/manifest/toml.cppm 的段清单（契约测试用
 // 真实 mcpp 逐段验证）。
 export const SECTION_HEADERS: readonly SectionHeaderSpec[] = [
-  { group: "package", label: "[package]", header: "[package]", detail: "包元数据" },
-  { group: "lib", label: "[lib]", header: "[lib]", detail: "库根模块约定" },
-  { group: "build", label: "[build]", header: "[build]", detail: "构建配置" },
-  { group: "generated_files", label: "[generated_files]", header: "[generated_files]", detail: "生成文件（路径 → 内容）" },
-  { group: "dependencies", label: "[dependencies]", header: "[dependencies]", detail: "运行时依赖" },
-  { group: "dev-dependencies", label: "[dev-dependencies]", header: "[dev-dependencies]", detail: "开发/测试依赖" },
-  { group: "build-dependencies", label: "[build-dependencies]", header: "[build-dependencies]", detail: "构建期依赖（仅构建期拉取，运行时不可见）" },
-  { group: "workspace", label: "[workspace]", header: "[workspace]", detail: "工作空间成员声明" },
-  { group: "workspace.dependencies", label: "[workspace.dependencies]", header: "[workspace.dependencies]", detail: "集中声明依赖版本，成员用 workspace = true 继承" },
-  { group: "features", label: "[features]", header: "[features]", detail: "feature 定义" },
-  { group: "feature-deps", label: "[feature-deps.<name>]", header: "[feature-deps.${1:name}]", detail: "由 feature 拉取的可选依赖" },
-  { group: "capabilities", label: "[capabilities]", header: "[capabilities]", detail: "capability 绑定（provider 选择）" },
-  { group: "targets", label: "[targets.<name>]", header: "[targets.${1:name}]", detail: "构建目标" },
-  { group: "profile", label: "[profile.<name>]", header: "[profile.${1:name}]", detail: "构建档案" },
-  { group: "runtime", label: "[runtime]", header: "[runtime]", detail: "主机运行时能力" },
-  { group: "resources", label: "[resources]", header: "[resources]", detail: "编译进产物的元数据与资产（仅 PE 目标）" },
-  { group: "toolchain", label: "[toolchain]", header: "[toolchain]", detail: "编译器工具链简写" },
-  { group: "xlings", label: "[xlings]", header: "[xlings]", detail: "构建环境（xlings 供给）" },
-  { group: "xlings.workspace", label: "[xlings.workspace]", header: "[xlings.workspace]", detail: "固定工具版本" },
-  { group: "target", label: "[target.<triple>]", header: "[target.${1:x86_64-linux-gnu}]", detail: "按目标三元组的配置" },
-  { group: "pack", label: "[pack]", header: "[pack]", detail: "mcpp pack 打包配置" },
-  { group: "pack.bundle-project", label: "[pack.bundle-project]", header: "[pack.bundle-project]", detail: "vendored 过滤策略微调" },
-  { group: "indices", label: "[indices]", header: "[indices]", detail: "项目级索引重定向" },
-  { group: "tools.overrides", label: "[tools.overrides]", header: "[tools.overrides]", detail: "host 工具二进制覆盖" },
-  { group: "language", label: "[language]", header: "[language]", detail: "旧版兼容字段；新项目请用 [package].standard" },
+  { group: "package", label: "[package]", header: "[package]", detail: () => t("Package metadata") },
+  { group: "lib", label: "[lib]", header: "[lib]", detail: () => t("Library root-module convention") },
+  { group: "build", label: "[build]", header: "[build]", detail: () => t("Build configuration") },
+  { group: "generated_files", label: "[generated_files]", header: "[generated_files]", detail: () => t("Generated files (path → content)") },
+  { group: "dependencies", label: "[dependencies]", header: "[dependencies]", detail: () => t("Runtime dependencies") },
+  { group: "dev-dependencies", label: "[dev-dependencies]", header: "[dev-dependencies]", detail: () => t("Development/test dependencies") },
+  { group: "build-dependencies", label: "[build-dependencies]", header: "[build-dependencies]", detail: () => t("Build-time dependencies (pulled at build time only, invisible at run time)") },
+  { group: "workspace", label: "[workspace]", header: "[workspace]", detail: () => t("Workspace member declarations") },
+  { group: "workspace.dependencies", label: "[workspace.dependencies]", header: "[workspace.dependencies]", detail: () => t("Declare dependency versions centrally; members inherit them with workspace = true") },
+  { group: "features", label: "[features]", header: "[features]", detail: () => t("Feature definitions") },
+  { group: "feature-deps", label: "[feature-deps.<name>]", header: "[feature-deps.${1:name}]", detail: () => t("Optional dependencies pulled in by a feature") },
+  { group: "capabilities", label: "[capabilities]", header: "[capabilities]", detail: () => t("Capability bindings (provider selection)") },
+  { group: "targets", label: "[targets.<name>]", header: "[targets.${1:name}]", detail: () => t("Build targets") },
+  { group: "profile", label: "[profile.<name>]", header: "[profile.${1:name}]", detail: () => t("Build profiles") },
+  { group: "runtime", label: "[runtime]", header: "[runtime]", detail: () => t("Host runtime capabilities") },
+  { group: "resources", label: "[resources]", header: "[resources]", detail: () => t("Metadata and assets compiled into the product (PE targets only)") },
+  { group: "toolchain", label: "[toolchain]", header: "[toolchain]", detail: () => t("Compiler toolchain shorthand") },
+  { group: "xlings", label: "[xlings]", header: "[xlings]", detail: () => t("Build environment (supplied by xlings)") },
+  { group: "xlings.workspace", label: "[xlings.workspace]", header: "[xlings.workspace]", detail: () => t("Pin tool versions") },
+  { group: "target", label: "[target.<triple>]", header: "[target.${1:x86_64-linux-gnu}]", detail: () => t("Configuration per target triple") },
+  { group: "pack", label: "[pack]", header: "[pack]", detail: () => t("mcpp pack packaging configuration") },
+  { group: "pack.bundle-project", label: "[pack.bundle-project]", header: "[pack.bundle-project]", detail: () => t("Fine-tuning of the vendored filtering policy") },
+  { group: "indices", label: "[indices]", header: "[indices]", detail: () => t("Project-level index redirection") },
+  { group: "tools.overrides", label: "[tools.overrides]", header: "[tools.overrides]", detail: () => t("Host tool binary overrides") },
+  { group: "language", label: "[language]", header: "[language]", detail: () => t("Legacy compatibility field; new projects should use [package].standard") },
 ];
 
 /** 依赖类段（键位置给依赖写法模板）。 */
@@ -83,51 +89,52 @@ const DEPENDENCY_GROUPS: ReadonlySet<string> = new Set([
 
 interface TemplateSpec {
   label: string;
-  detail: string;
-  documentation?: string;
+  /** 同 `SectionHeaderSpec.detail`：取用时才 `t()`，语言切换无需重载。 */
+  detail: () => string;
+  documentation?: () => string;
   insertSnippet: string;
 }
 
 const DEPENDENCY_TEMPLATES: readonly TemplateSpec[] = [
   {
     label: 'name = "version"',
-    detail: "SemVer 版本依赖",
-    documentation: "默认 caret 约束（^）；也支持 ~、= 与 \">=1.0, <2.0\" 范围组合。",
+    detail: () => t("SemVer version dependency"),
+    documentation: () => t("Caret constraint (^) by default; ~, = and range combinations such as \">=1.0, <2.0\" are also supported."),
     insertSnippet: '${1:name} = "${2:1.0.0}"',
   },
   {
     label: "name = { path = ... }",
-    detail: "路径依赖（本地开发）",
+    detail: () => t("Path dependency (local development)"),
     insertSnippet: '${1:name} = { path = "${2:../mylib}" }',
   },
   {
     label: "name = { git = ..., tag = ... }",
-    detail: "Git 依赖（tag / branch / rev 三选一）",
+    detail: () => t("Git dependency (one of tag / branch / rev)"),
     insertSnippet: '${1:name} = { git = "${2:https://github.com/user/repo.git}", tag = "${3:v1.0.0}" }',
   },
   {
     label: "name = { version = ..., features = [...] }",
-    detail: "长式 dep spec：请求该依赖的 feature",
+    detail: () => t("Long dep spec: request a feature of that dependency"),
     insertSnippet: '${1:name} = { version = "${2:1.0}", features = ["${3:feature}"] }',
   },
   {
     label: "name = { version = ..., tools = [...] }",
-    detail: "依赖产出的 host 工具（须为该包的 bin target）",
+    detail: () => t("Host tools produced by the dependency (must be a bin target of that package)"),
     insertSnippet: '${1:name} = { version = "${2:1.0}", tools = ["${3:protoc}"] }',
   },
 ];
 
 const FEATURE_TEMPLATES: readonly TemplateSpec[] = [
-  { label: "name = [...]", detail: "数组简写：仅隐含 feature", insertSnippet: "${1:name} = [${2}]" },
-  { label: "name = { defines = [...] }", detail: "表形式：激活时贡献包自有宏", insertSnippet: '${1:name} = { defines = ["${2:MACRO}"] }' },
-  { label: "name = { requires = [...] }", detail: "表形式：需要 capability", insertSnippet: '${1:name} = { requires = ["${2:blas}"] }' },
-  { label: "name = { sources = [...] }", detail: "表形式：feature 门控的源 glob", insertSnippet: '${1:name} = { sources = ["${2:src/simd/**}"] }' },
+  { label: "name = [...]", detail: () => t("Array shorthand: implies the feature only"), insertSnippet: "${1:name} = [${2}]" },
+  { label: "name = { defines = [...] }", detail: () => t("Table form: contributes the package's own macros when activated"), insertSnippet: '${1:name} = { defines = ["${2:MACRO}"] }' },
+  { label: "name = { requires = [...] }", detail: () => t("Table form: requires a capability"), insertSnippet: '${1:name} = { requires = ["${2:blas}"] }' },
+  { label: "name = { sources = [...] }", detail: () => t("Table form: feature-gated source globs"), insertSnippet: '${1:name} = { sources = ["${2:src/simd/**}"] }' },
 ];
 
 const GENERATED_FILE_TEMPLATES: readonly TemplateSpec[] = [
   {
     label: '"path" = "content"',
-    detail: "生成文件（相对路径 → 内容，进指纹）",
+    detail: () => t("Generated file (relative path → content, part of the fingerprint)"),
     insertSnippet: '"${1:src/gen/wrap.cppm}" = """\n${2:}\n"""',
   },
 ];
@@ -135,19 +142,19 @@ const GENERATED_FILE_TEMPLATES: readonly TemplateSpec[] = [
 const CAPABILITY_TEMPLATES: readonly TemplateSpec[] = [
   {
     label: 'capability = "provider"',
-    detail: "capability 绑定（等价于 --cap）",
+    detail: () => t("Capability binding (equivalent to --cap)"),
     insertSnippet: '${1:blas} = "${2:compat.openblas}"',
   },
 ];
 
 const XLINGS_WORKSPACE_TEMPLATES: readonly TemplateSpec[] = [
-  { label: 'tool = "version"', detail: "固定 xlings 工具版本", insertSnippet: '${1:node} = "${2:24.19.0}"' },
+  { label: 'tool = "version"', detail: () => t("Pin the xlings tool version"), insertSnippet: '${1:node} = "${2:24.19.0}"' },
 ];
 
 const TOOLS_OVERRIDES_TEMPLATES: readonly TemplateSpec[] = [
   {
     label: '"pkg:tool" = "path"',
-    detail: "用已有二进制覆盖 host 工具（跳过构建）",
+    detail: () => t("Override a host tool with an existing binary (skips the build)"),
     insertSnippet: '"${1:compat.protobuf:protoc}" = "${2:/usr/bin/protoc}"',
   },
 ];
@@ -182,7 +189,7 @@ function headerEntries(): HeaderEntry[] {
     return SECTION_HEADERS.map((spec) => ({
       label: spec.label,
       header: spec.header,
-      detail: spec.detail,
+      detail: spec.detail(),
     }));
   }
   // The snapshot describes the schema mcpp validates; the curated list also covers
@@ -194,7 +201,7 @@ function headerEntries(): HeaderEntry[] {
     const entry: HeaderEntry = {
       label: spec?.label ?? section.header,
       header: spec?.header ?? section.header,
-      detail: spec?.detail ?? `plane: ${section.plane}`,
+      detail: spec?.detail() ?? `plane: ${section.plane}`,
     };
     if (section.deprecatedBy) {
       entry.documentation = `Deprecated; use \`${section.deprecatedBy}\`.`;
@@ -206,7 +213,7 @@ function headerEntries(): HeaderEntry[] {
     if (suggested.has(spec.header)) {
       continue;
     }
-    entries.push({ label: spec.label, header: spec.header, detail: spec.detail });
+    entries.push({ label: spec.label, header: spec.header, detail: spec.detail() });
   }
   return entries;
 }
@@ -231,8 +238,8 @@ function templateSuggestions(templates: readonly TemplateSpec[], range: ReplaceR
   return templates.map((template) => ({
     label: template.label,
     kind: "template",
-    detail: template.detail,
-    documentation: template.documentation,
+    detail: template.detail(),
+    documentation: template.documentation?.(),
     insertSnippet: template.insertSnippet,
     range,
   }));

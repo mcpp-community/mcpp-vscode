@@ -169,7 +169,7 @@ export function registerLanguageServerView(
           await handler(...args);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          deps.output.appendLine(`C++ Modules 命令失败：${message}`);
+          deps.output.appendLine(t("C++ Modules command failed: {0}", message));
           void vscode.window.showErrorMessage(t("{0} failed: {1}", id, message));
         }
       }),

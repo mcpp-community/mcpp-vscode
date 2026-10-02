@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { validateNewProjectName } from "../../src/cli/newProject";
+import { t } from "../../src/i18n/t";
 
 test("拒绝空值和纯空白项目名", () => {
   for (const name of ["", "   "]) {
@@ -101,7 +102,7 @@ test("目标路径已存在时报错且不确认、不创建、不打开", async
   assert.equal(outcome, "exists");
   assert.deepEqual(calls, [
     "exists:/parent/demo",
-    "showError:目标路径已存在：/parent/demo。请更换项目名或位置。",
+    `showError:${t("The destination already exists: {0}. Choose another project name or location.", "/parent/demo")}`,
   ]);
 });
 
@@ -128,9 +129,9 @@ test("mcpp new 失败时报错且不打开", async () => {
   assert.equal(outcome, "failed");
   assert.deepEqual(calls, [
     "exists:/parent/demo",
-    "confirm:将在 /parent 执行 “mcpp new demo”，创建项目文件夹 /parent/demo 并打开它。",
+    `confirm:${t("Run “mcpp new {0}” in {1}, create the project folder {2} and open it.", "demo", "/parent", "/parent/demo")}`,
     "run:demo@/parent",
-    "showError:mcpp new demo 失败（退出码 2）。请查看 mcpp 输出频道。",
+    `showError:${t("mcpp new {0} failed (exit code {1}). See the mcpp output channel.", "demo", 2)}`,
   ]);
 });
 
@@ -145,7 +146,7 @@ test("创建成功后只打开项目文件夹，不自动构建", async () => {
   assert.equal(outcome, "opened");
   assert.deepEqual(calls, [
     "exists:/parent/demo",
-    "confirm:将在 /parent 执行 “mcpp new demo”，创建项目文件夹 /parent/demo 并打开它。",
+    `confirm:${t("Run “mcpp new {0}” in {1}, create the project folder {2} and open it.", "demo", "/parent", "/parent/demo")}`,
     "run:demo@/parent",
     "openFolder:/parent/demo",
   ]);

@@ -13,7 +13,7 @@
  * limitation is documented in `docs/settings.md` and stated in the panel.
  */
 
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
 
 import zhCn from "../../data/i18n/zh-cn.json";
 import { format, translate, type Bundle, type LanguagePreference } from "./translate";
@@ -39,6 +39,24 @@ export function setLanguagePreference(value: LanguagePreference | undefined): vo
 export type Substitution = string | number | boolean;
 
 /**
+ * The editor's own `l10n`, loaded on demand.
+ *
+ * `t()` needs it only on the `auto` path, so requiring it lazily keeps this
+ * module importable from **pure** modules: the TOML completion tables are unit
+ * tested without an editor, and importing them must not fail on a missing
+ * `vscode`. Outside an editor host there is no locale to consult, and the
+ * English text — which is the key — is the correct answer: it is exactly what a
+ * missing translation degrades to.
+ */
+function editorL10n(): typeof vscode.l10n | undefined {
+  try {
+    return (require("vscode") as typeof vscode).l10n;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Resolve one runtime string.
  *
  * - `auto` asks VS Code, which consults `l10n/bundle.l10n.<locale>.json` and
@@ -48,7 +66,8 @@ export type Substitution = string | number | boolean;
  */
 export function t(english: string, ...args: readonly Substitution[]): string {
   if (preference === "auto") {
-    return vscode.l10n.t(english, ...args);
+    const l10n = editorL10n();
+    return l10n === undefined ? format(english, args) : l10n.t(english, ...args);
   }
   return translate(preference, english, args, BUNDLES[preference]);
 }
