@@ -54,9 +54,6 @@ const STYLESHEET = "library.css";
 /** `mcpp xpkg parse` is a local, read-only command; this is generous. */
 const PARSE_TIMEOUT_MS = 20_000;
 
-/** The index's public site; only the `mcpplibs` registry publishes one. */
-const INDEX_SITE = "https://mcpplibs.github.io/mcpp-index/packages";
-
 export interface DetailPanelDeps {
   mcppExecutable: () => string;
   projectRoot: () => string | undefined;
@@ -195,6 +192,9 @@ async function buildModel(session: DetailSession, id: string): Promise<DetailMod
   const projectRoot = session.deps.projectRoot();
   const snapshot = await loadSnapshot(projectRoot === undefined ? {} : { projectRoot });
   const entry = snapshot.entries.find((candidate) => candidate.id === id);
+  // The root the descriptor lives under, matched by path: two roots may share a
+  // directory name, and the site link belongs to the one that holds the file.
+  const root = entry === undefined ? undefined : snapshot.roots.find((candidate) => entry.file.startsWith(candidate.path));
   const ui = labels();
   if (entry === undefined) {
     return emptyModel(id, ui, t("This package is not in the local index any more."));
@@ -245,7 +245,9 @@ async function buildModel(session: DetailSession, id: string): Promise<DetailMod
     targets: (info?.targets ?? []).map((target) => target.name ?? "").filter((name) => name.length > 0),
     snippets,
     ...(entry.example === undefined ? {} : { exampleProject: entry.example.project }),
-    ...(entry.registry === "mcpplibs" ? { indexUrl: `${INDEX_SITE}/${entry.id}/` } : {}),
+    // One discreet link, and only when this root really is the index that
+    // publishes those package pages (see `IndexRoot.site`).
+    ...(root?.site === undefined ? {} : { indexUrl: `${root.site}/${entry.id}/` }),
     commandTemplate: t("mcpp add {0}@{1}"),
     commandDevTemplate: t("mcpp add {0}@{1} --dev"),
     ...(info === undefined

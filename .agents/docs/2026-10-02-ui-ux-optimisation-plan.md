@@ -572,3 +572,47 @@ README 不做（索引里没有，要联网去上游拉）。
 4. v3 提议我手绘单色 SVG——你没要；后来改为从官方图机械派生，最终撤销，直接用官方原图。
 5. **v5 提的 A–I 形状标签是错的**——那是"怎么构建"，官方站用的是"**怎么使用**"（`SURFACES`）。
    你让我参考 `mcpp-index` 仓库，直接纠正了这一条。
+
+---
+
+## 14. round 2：一条被我自己推翻的假设（重要）
+
+**§13.3 第 1 条说"所有视图关闭 → 容器从 Activity Bar 消失"只是依据二手资料、没验证过。
+我在本机 VS Code 1.132 的源码里查了，结论是：不成立。**
+
+证据链：
+
+1. `paneCompositeBar.ts` 里，Activity Bar 的每一项由
+   `showOrHideViewContainer(container)` 决定：`shouldBeHidden(container)` 为真才 `hideComposite`。
+2. `shouldBeHidden` 的第一段是**决定性**的：
+   ```ts
+   if (viewContainer) {
+       if (viewContainer.hideIfEmpty) { … }
+       else return false;          // ← 没有这个标志就永远不隐藏
+   }
+   ```
+3. `hideIfEmpty` 的注释是「If enabled, view container is not shown if it has no active views」，
+   全仓库**只有一处**赋值：`registerGeneratedViewContainer()`（VS Code 自己给"用户自定义容器"用的），
+   值为 `true`。
+4. 我在已安装的 `workbench.desktop.main.js`（1.132）里把 `hideIfEmpty` 的 **24 处**全部看了：
+   每一处都是**内置容器**的注册（ports / test / voice / debug / 用户容器 …），
+   **没有任何一处从扩展清单读取**。
+
+所以：**扩展无法把自己的容器标记为"空则隐藏"**。对第三方容器，把所有视图 `when` 设为 false 只会
+让**内容**消失，图标会留下（点开是空面板）。我原先依据的 VS Code issue #49145（closed/verified）
+和那篇第三方文章，对 1.132 不再适用。
+
+### 已做的修正
+
+- `mcpp.views.enabled` 的标题与描述改成实话：**「隐藏 mcpp 视图内容」**，并说明图标是否移除由
+  VS Code 决定、要移除可在图标上右键。中英同步，注册表与 nls 一致（`check-config` 通过）。
+- `when` 门控保留——**内容隐藏这件事是确定的**（走的是 `activeViewDescriptors.length === 0` 那条路径）。
+- 教训记在这里：**二手资料必须用一手源码或真实运行验证**。这条假设是整套里风险最高的地基，
+  幸好先查了。
+
+### 另外两处本轮修掉的
+
+- `mcpp.internal.markIndex` 之前注册了却没人调用，`mcpp.library.updateIndex` 装好索引后
+  `viewsWelcome` 不会消失。改成 `markIndexFound()`，在激活时与 `index update` 之后都重算。
+- `test/architecture.test.ts` 补上库生态的 4 个纯模块（`indexModel` / `xpkg` / `libraryHtml` /
+  `detailHtml`），让"纯模块不得依赖 vscode"这条覆盖到新代码。

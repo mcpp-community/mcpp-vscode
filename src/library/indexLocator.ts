@@ -48,6 +48,9 @@ import {
 /** How many descriptor files a walk will read before it says the index is wrong. */
 const MAX_DESCRIPTORS = 20_000;
 
+/** The index site of the official C++ library index, and its package pages. */
+export const INDEX_SITE = "https://mcpplibs.github.io/mcpp-index/packages";
+
 /** A directory that holds `pkgs/`, and the shared metadata beside it. */
 export interface IndexRoot {
   /** The directory name, e.g. `mcpplibs`. */
@@ -60,6 +63,17 @@ export interface IndexRoot {
   hasExamples: boolean;
   /** `<root>/.xpkgindex/openkal-compat.json` exists. */
   hasOpenkal: boolean;
+  /**
+   * The package page base URL of the index site, when this root is the official
+   * index.
+   *
+   * Two shapes of the same index occur: the packed copy mcpp installs into
+   * `<home>/.mcpp/registry/data/mcpplibs`, and a git checkout of `mcpp-index`
+   * (whose directory is named after the repository). The generator itself —
+   * `.xpkgindex/plugins/mcpp.py`, which only that repository carries — is the
+   * signal that this root is that index, so a checkout gets the deep link too.
+   */
+  site?: string;
 }
 
 /** Everything the view renders, read once per revision. */
@@ -102,12 +116,15 @@ async function rootAt(directory: string): Promise<IndexRoot | undefined> {
   if (!(await isDirectory(pkgs))) {
     return undefined;
   }
+  const registry = path.basename(directory);
+  const generator = await isFile(path.join(directory, ".xpkgindex", "plugins", "mcpp.py"));
   return {
-    registry: path.basename(directory),
+    registry,
     path: directory,
     pkgs,
     hasExamples: await isDirectory(path.join(directory, "tests", "examples")),
     hasOpenkal: await isFile(path.join(directory, ".xpkgindex", "openkal-compat.json")),
+    ...(registry === "mcpplibs" || generator ? { site: INDEX_SITE } : {}),
   };
 }
 

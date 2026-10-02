@@ -344,17 +344,19 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
     vscode.commands.registerCommand(LIBRARY_COMMANDS.updateIndex, async () => {
       const result = await runProcess(cliController.mcppExecutable(findCurrentProject()), ["index", "update"], findCurrentProject()?.root, { timeoutMs: 300_000 });
       await library.refresh();
+      await markIndexFound();
       if (result.exitCode !== 0) {
         void vscode.window.showErrorMessage(t("mcpp index update failed with exit code {0}", result.exitCode));
       }
     }),
-    // `viewsWelcome` shows the empty state only while the key says no index was found.
-    vscode.commands.registerCommand("mcpp.internal.markIndex", (found: unknown) =>
-      vscode.commands.executeCommand("setContext", "mcpp.library.indexFound", found === true)),
   );
-  void locateIndexRoots().then((roots: readonly unknown[]) => {
-    void vscode.commands.executeCommand("setContext", "mcpp.library.indexFound", roots.length > 0);
-  });
+  // The key drives `viewsWelcome`; it has to be recomputed whenever an index may
+  // have appeared, not only at activation.
+  const markIndexFound = async (): Promise<void> => {
+    const roots = await locateIndexRoots();
+    await vscode.commands.executeCommand("setContext", "mcpp.library.indexFound", roots.length > 0);
+  };
+  void markIndexFound();
 
   registerCacheView(extensionContext, {
     output,

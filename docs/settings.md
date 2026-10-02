@@ -637,37 +637,11 @@ Default age in days used when pruning cache entries older than a threshold.
 
 ## Views
 
-### `mcpp.views.project.show`
-
-Show the mcpp project view in the activity bar. Takes effect after the view container reloads.
-
-在活动栏显示 mcpp 工程视图。视图容器重载后生效。
-
-| | |
-|---|---|
-| Type | `boolean` |
-| Default | `true` |
-| Scope | per window |
-| Applies | Takes effect after the window reloads |
-| Since | 0.5.0 |
-
-### `mcpp.views.cache.show`
-
-Show the mcpp cache view in the activity bar. Takes effect after the view container reloads.
-
-在活动栏显示 mcpp 缓存视图。视图容器重载后生效。
-
-| | |
-|---|---|
-| Type | `boolean` |
-| Default | `true` |
-| Scope | per window |
-| Applies | Takes effect after the window reloads |
-| Since | 0.5.0 |
-
 ### `mcpp.views.enabled`
 
-Turn this off and the mcpp icon disappears from the activity bar entirely; every mcpp command stays reachable from the Command Palette.
+Turns every mcpp view off at once. The view contents disappear, so the container shows nothing; whether VS Code also removes the mcpp icon from the activity bar is up to VS Code itself, because an extension cannot mark its container as hidden-when-empty. Right-click the icon to hide it there.
+
+一次性关闭全部 mcpp 视图。视图内容会消失，容器变成空的；mcpp 图标是否也从活动栏移除由 VS Code 决定——扩展无法把自己的容器标记为「空则隐藏」。要移除图标可在图标上右键。
 
 | | |
 |---|---|
@@ -676,11 +650,27 @@ Turn this off and the mcpp icon disappears from the activity bar entirely; every
 | Scope | per window |
 | Applies | Takes effect immediately |
 | Since | 0.6.0 |
+
+### `mcpp.views.project.show`
+
+Show the mcpp project view in the activity bar. Takes effect after the view container reloads.
+
+Show the mcpp project view in the activity bar. Takes effect after the view container reloads.
+
+| | |
+|---|---|
+| Type | `boolean` |
+| Default | `true` |
+| Scope | per window |
+| Applies | Takes effect after the window reloads |
+| Since | 0.5.0 |
 
 ### `mcpp.views.library.show`
 
 Show the view that browses the package index mcpp has already refreshed locally.
 
+显示用于浏览本地已刷新包索引的视图。
+
 | | |
 |---|---|
 | Type | `boolean` |
@@ -689,35 +679,25 @@ Show the view that browses the package index mcpp has already refreshed locally.
 | Applies | Takes effect after the window reloads |
 | Since | 0.6.0 |
 
-### `mcpp.library.indexPath` — advanced
+### `mcpp.views.cache.show`
 
-Leave it empty to use the indexes under the mcpp home that `mcpp index update` refreshes.
+Show the mcpp cache view in the activity bar. Takes effect after the view container reloads.
 
-| | |
-|---|---|
-| Type | `string` |
-| Default | `""` |
-| Scope | per window |
-| Applies | Takes effect immediately |
-| Since | 0.6.0 |
-
-### `mcpp.library.networkSearch`
-
-The local index already lists every published package, so this is off by default. Turning it on also searches the other registries with `mcpp search`, which may use the network and can only be parsed on a best-effort basis.
+Show the mcpp cache view in the activity bar. Takes effect after the view container reloads.
 
 | | |
 |---|---|
 | Type | `boolean` |
-| Default | `false` |
+| Default | `true` |
 | Scope | per window |
-| Applies | Takes effect immediately |
-| Since | 0.6.0 |
+| Applies | Takes effect after the window reloads |
+| Since | 0.5.0 |
 
 ### `mcpp.views.languageServer.show`
 
 The C++ Modules state is folded into the project view's basic information. The collapsed row always shows a status icon, so a problem is visible without expanding it.
 
-显示由 mcpp-vscode 填充内容的 C++ Modules 状态视图。视图容器重载后生效。
+C++ Modules 的状态折进工程视图的「基本信息」。折叠行始终带状态图标，因此不展开也能看出异常。
 
 | | |
 |---|---|
@@ -731,7 +711,7 @@ The C++ Modules state is folded into the project view's basic information. The c
 
 How many entries the cache view lists per group.
 
-缓存视图每组最多列出多少条。
+How many entries the cache view lists per group.
 
 | | |
 |---|---|
@@ -746,7 +726,7 @@ How many entries the cache view lists per group.
 
 Age buckets used to group cache entries in the cache view, written as "1d", "7d" and so on.
 
-缓存视图中用于分组缓存条目的时间桶，写作 “1d”、“7d” 等。
+Age buckets used to group cache entries in the cache view, written as "1d", "7d" and so on.
 
 | | |
 |---|---|
@@ -755,6 +735,34 @@ Age buckets used to group cache entries in the cache view, written as "1d", "7d"
 | Scope | per window |
 | Applies | Takes effect immediately |
 | Since | 0.5.0 |
+
+### `mcpp.library.indexPath` — advanced
+
+Leave it empty to use the indexes under the mcpp home that `mcpp index update` refreshes.
+
+留空则使用 mcpp 主目录下由 `mcpp index update` 刷新的索引。
+
+| | |
+|---|---|
+| Type | `string` |
+| Default | `""` |
+| Scope | per window |
+| Applies | Takes effect immediately |
+| Since | 0.6.0 |
+
+### `mcpp.library.networkSearch`
+
+The local index already lists every published package, so this is off by default. Turning it on also searches the other registries with `mcpp search`, which may use the network and can only be parsed on a best-effort basis.
+
+本地索引已经列出所有已发布的包，所以默认关闭。打开后会额外用 `mcpp search` 搜索其它 registry，可能联网，且只能尽力解析。
+
+| | |
+|---|---|
+| Type | `boolean` |
+| Default | `false` |
+| Scope | per window |
+| Applies | Takes effect immediately |
+| Since | 0.6.0 |
 
 ## Interface
 

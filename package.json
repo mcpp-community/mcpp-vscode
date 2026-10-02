@@ -1118,13 +1118,7 @@
         }
       }
     ],
-    "viewsWelcome": [
-      {
-        "view": "mcpp.library",
-        "contents": "%viewsWelcome.library%",
-        "when": "!mcpp.library.indexFound"
-      }
-    ]
+    "viewsWelcome": []
   },
   "scripts": {
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
