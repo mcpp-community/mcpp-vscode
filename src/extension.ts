@@ -12,7 +12,7 @@ import {
   type LanguageServerBridge,
   type LanguageServerCommandResult,
 } from "./mcppls/bridge";
-import { CAPABILITIES, MCPPLS_EXTENSION_ID } from "./mcppls/contract";
+import { CAPABILITIES, MCPPLS_EXTENSION_ID, VERIFIED_MCPPLS_RANGE } from "./mcppls/contract";
 import { formatResult } from "./mcppls/messages";
 import { describeState } from "./mcppls/state";
 import {
@@ -32,6 +32,7 @@ import {
 } from "./workflows/moduleSetup";
 import type { TaskCompletion } from "./cli/tasks";
 import { changedSettings, onDidChange as onConfigurationChanged, read } from "./config/access";
+import { applyRenames, pendingRenames, renamePrompt } from "./config/migrate";
 import { registerSettingsPanel } from "./config/panel";
 import { languagePreference, setLanguagePreference, t, type LanguagePreference } from "./i18n/t";
 import { registerCacheView } from "./views/cacheView";
@@ -350,6 +351,9 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
     vscode.workspace.onDidGrantWorkspaceTrust(() => cliController.refreshStatus()),
   );
 
+  void offerSettingRenames(extensionContext);
+  void noteUnverifiedLanguageService(output);
+
   if (read<boolean>("mcpp.diagnostics.selfCheckOnStartup")) {
     void showSelfCheck(output, cliController, bridge, extensionContext.extension.packageJSON.version);
   }
@@ -359,6 +363,48 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
     manifestWatcher.onDidChange(() => cliController.refreshStatus()),
     manifestWatcher.onDidDelete(() => cliController.refreshStatus()),
   );
+}
+
+/**
+ * The 0.4.x keys that were renamed still hold values nothing reads. Offer to move
+ * them, once per workspace — and leave the old key in place either way, because
+ * deleting a user's setting is their decision.
+ */
+async function offerSettingRenames(context: vscode.ExtensionContext): Promise<void> {
+  const pending = pendingRenames(vscode.window.activeTextEditor?.document.uri);
+  if (pending.length === 0 || context.workspaceState.get<boolean>("mcpp.renamesOffered") === true) {
+    return;
+  }
+  await context.workspaceState.update("mcpp.renamesOffered", true);
+
+  const toUser = t("Move them to my user settings");
+  const toWorkspace = t("Move them to this workspace");
+  const choice = await vscode.window.showInformationMessage(renamePrompt(pending), toUser, toWorkspace);
+  if (choice !== toUser && choice !== toWorkspace) {
+    return;
+  }
+  const moved = await applyRenames(pending, choice === toUser ? "user" : "workspace");
+  void vscode.window.showInformationMessage(t("mcpp: moved {0} setting(s).", moved));
+}
+
+/**
+ * A version notice, never a gate. `extensionDependencies` cannot express a version
+ * range, so a user can legitimately end up with a build of the language service
+ * older than the one this extension was tested against; the capability probe means
+ * that still works, but it is worth one sentence in the log.
+ */
+async function noteUnverifiedLanguageService(output: vscode.OutputChannel): Promise<void> {
+  const version = languageServerVersion();
+  if (version === undefined) {
+    return;
+  }
+  const [major = 0, minor = 0, patch = 0] = version.split(".").map((part) => Number.parseInt(part, 10) || 0);
+  const below = major < 0 || (major === 0 && (minor < 0 || (minor === 0 && patch < 4)));
+  if (below) {
+    output.appendLine(
+      t("{0} {1} is older than the verified range ({2}); the capability probe will hide what it cannot do.", MCPPLS_EXTENSION_ID, version, VERIFIED_MCPPLS_RANGE),
+    );
+  }
 }
 
 /**

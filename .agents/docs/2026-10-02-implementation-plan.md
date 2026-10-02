@@ -304,3 +304,16 @@ VSIX 打包 69 文件 180 KB；本地隔离 profile 已就绪（含 mcppls 0.0.9
 | `package` | 打包、`unzip -t`、清单承诺校验（依赖未变、无第二个语言客户端、无 `onCommand:*`）、VSIX 必须包含 l10n／nls／registry／css、上传产物 |
 | `extension-host-e2e` | `xvfb-run` 下跑全部五种 mcppls 变体 |
 | `isolated-install` | 把 VSIX 装进私有 profile，让 VS Code 解析依赖并断言 `sunrisepeak.mcpp-language-server@<版本>` 真实存在 |
+
+---
+
+## 11. 进展（round 4，2026-10-02）
+
+| 项 | 状态 | 说明 |
+|---|---|---|
+| G5 快捷键 | ✅ | ctrl/cmd+alt + b/r/t/l/m，作用域 `mcpp.inProject`，并有断言 |
+| G8 设置接线 | 🟡 | 三个并行工作流（controller 组 / views+mcppls 组 / buildscript+toml 组）在跑 |
+| G10 `errors.ts`、`migrate.ts` | ✅ | 重命名提示接入激活路径（每工作区一次，旧键保留）；退出码指引由 controller 组接入 |
+| G12 版本提示 | ✅ | 低于 `VERIFIED_MCPPLS_RANGE` 时在输出频道写一句，仅提示不做门禁 |
+| 视图可见性 | ✅ | `setContext` + `contributes.views.*.when` |
+| 例外表 | 🟡 | 31 条，新增一条'已接线的设置必须从例外表删除'的断言，防止例外表腐烂 |

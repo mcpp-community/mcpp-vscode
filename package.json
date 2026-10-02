@@ -42,12 +42,12 @@
         {
           "command": "mcpp.run",
           "group": "navigation@1",
-          "when": "mcpp.inProject"
+          "when": "mcpp.inProject && mcpp.editorTitleButtons"
         },
         {
           "command": "mcpp.test",
           "group": "navigation@2",
-          "when": "mcpp.inProject"
+          "when": "mcpp.inProject && mcpp.editorTitleButtons"
         }
       ],
       "view/title": [
@@ -996,17 +996,20 @@
         {
           "id": "mcpp.project",
           "name": "%view.mcpp.project.name%",
-          "contextualTitle": "%view.mcpp.project.name%"
+          "contextualTitle": "%view.mcpp.project.name%",
+          "when": "mcpp.views.project"
         },
         {
           "id": "mcpp.cache",
           "name": "%view.mcpp.cache.name%",
-          "contextualTitle": "%view.mcpp.cache.name%"
+          "contextualTitle": "%view.mcpp.cache.name%",
+          "when": "mcpp.views.cache"
         },
         {
           "id": "mcpp.languageServer",
           "name": "%view.mcpp.languageServer.name%",
-          "description": "%view.mcpp.languageServer.description%"
+          "description": "%view.mcpp.languageServer.description%",
+          "when": "mcpp.views.languageServer"
         }
       ]
     },
@@ -1028,6 +1031,38 @@
           "light": "#bf8803",
           "highContrast": "#ffff00"
         }
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "mcpp.build",
+        "key": "ctrl+alt+b",
+        "mac": "cmd+alt+b",
+        "when": "mcpp.inProject"
+      },
+      {
+        "command": "mcpp.run",
+        "key": "ctrl+alt+r",
+        "mac": "cmd+alt+r",
+        "when": "mcpp.inProject"
+      },
+      {
+        "command": "mcpp.test",
+        "key": "ctrl+alt+t",
+        "mac": "cmd+alt+t",
+        "when": "mcpp.inProject"
+      },
+      {
+        "command": "mcpp.cleanProjectArtifacts",
+        "key": "ctrl+alt+l",
+        "mac": "cmd+alt+l",
+        "when": "mcpp.inProject"
+      },
+      {
+        "command": "mcpp.showMenu",
+        "key": "ctrl+alt+m",
+        "mac": "cmd+alt+m",
+        "when": "mcpp.inProject"
       }
     ]
   },

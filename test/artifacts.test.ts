@@ -26,8 +26,9 @@ interface PackageManifest {
     configurationDefaults?: Record<string, unknown>;
     languages?: Array<{ id: string; aliases?: string[]; filenames?: string[]; configuration?: string }>;
     viewsContainers?: { activitybar?: Array<{ id: string; title?: string; icon?: string }> };
-    views?: Record<string, Array<{ id: string; name?: string; description?: string }>>;
+    views?: Record<string, Array<{ id: string; name?: string; description?: string; when?: string }>>;
     colors?: Array<{ id: string; description?: string }>;
+    keybindings?: Array<{ command: string; key?: string; mac?: string; when?: string }>;
     grammars?: Array<{ language?: string; scopeName: string; injectTo?: string[]; path: string }>;
   };
 }
@@ -119,11 +120,36 @@ test("一键向导只执行普通 build 并在之后刷新 C++ 模块语言服�
   assert.doesNotMatch(controller, /runAutomaticModuleSetup|executeAutomaticModuleSetupCommand/);
 });
 
+test("the promised keybindings are contributed and scoped to a project", () => {
+  const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
+  const bindings = manifest.contributes?.keybindings ?? [];
+  assert.deepEqual(
+    bindings.map((binding) => binding.command),
+    ["mcpp.build", "mcpp.run", "mcpp.test", "mcpp.cleanProjectArtifacts", "mcpp.showMenu"],
+  );
+  for (const binding of bindings) {
+    assert.match(binding.key ?? "", /^ctrl\+alt\+[a-z]$/);
+    assert.match(binding.mac ?? "", /^cmd\+alt\+[a-z]$/);
+    assert.equal(binding.when, "mcpp.inProject");
+  }
+});
+
+test("each view is gated by its own visibility setting", () => {
+  const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
+  assert.deepEqual(manifest.contributes?.views?.mcpp?.map((view) => view.when), [
+    "mcpp.views.project",
+    "mcpp.views.cache",
+    "mcpp.views.languageServer",
+  ]);
+});
+
 test("shows editor title buttons only inside mcpp projects", () => {
   const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
+  // Both conditions matter: a project must be open, and the user must not have
+  // turned the buttons off with `mcpp.task.editorTitleButtons`.
   assert.deepEqual(manifest.contributes?.menus?.["editor/title"], [
-    { command: "mcpp.run", group: "navigation@1", when: "mcpp.inProject" },
-    { command: "mcpp.test", group: "navigation@2", when: "mcpp.inProject" },
+    { command: "mcpp.run", group: "navigation@1", when: "mcpp.inProject && mcpp.editorTitleButtons" },
+    { command: "mcpp.test", group: "navigation@2", when: "mcpp.inProject && mcpp.editorTitleButtons" },
   ]);
 
   const commands = manifest.contributes?.commands ?? [];

@@ -32,8 +32,6 @@ const EXCEPTIONS: Readonly<Record<string, string>> = {
   "mcpp.task.problemMatcher": "§8 G8 — no problem matcher is contributed yet",
   "mcpp.task.editorTitleButtons": "§8 G8 — the editor/title `when` clause is fixed",
   "mcpp.task.confirmClean": "§8 G8 — the clean command's own plan already confirms",
-  "mcpp.languageService.refreshAfterBuild": "§8 G8 — the candidate chain is not overridable yet",
-  "mcpp.languageService.menuItems": "§8 G8 — the quick menu always shows them",
   "mcpp.languageService.notifyOnDegraded": "§8 G8 — the notice is unconditional",
   "mcpp.languageService.readState": "§8 G8 — the state read is unconditional",
   "mcpp.languageService.stateRefreshSeconds": "§8 G8 — there is no polling to configure",
@@ -45,23 +43,16 @@ const EXCEPTIONS: Readonly<Record<string, string>> = {
   "mcpp.views.project.show": "§8 G8 — the view's `when` clause is fixed",
   "mcpp.views.cache.show": "§8 G8 — same",
   "mcpp.views.languageServer.show": "§8 G8 — same",
-  "mcpp.ui.statusBar.show": "§8 G8 — the status item is always created",
   "mcpp.ui.statusBar.showLanguageServer": "§8 G8 — the status text is mcpp-only",
   "mcpp.ui.notifications.success": "§8 G8 — the success notice is fixed",
   "mcpp.ui.notifications.dedupeMinutes": "§8 G8 — notices are not de-duplicated yet",
   "mcpp.ui.confirmDestructiveOnly": "§8 G8 — confirmation comes from the cleanup plan",
   "mcpp.project.discoveryBoundary": "§8 G8 — discovery always stops at the workspace folder",
-  "mcpp.runtime.timeoutSeconds": "§8 G8 — each call site passes its own timeout",
-  "mcpp.runtime.maxOutputMiB": "§8 G8 — the 16 MiB buffer is fixed",
-  "mcpp.runtime.concurrency": "§8 G8 — the registry is always per project",
   "mcpp.log.level": "§8 G8 — the output channel is not levelled yet",
-  "mcpp.diagnostics.selfCheckOnStartup": "§8 G8 — the self-check is on demand only",
-  "mcpp.buildScript.intelligence": "§8 G8 — the providers are registered unconditionally",
   "mcpp.buildScript.imports.knownModules": "§8 G8 — known-module recognition is unconditional",
   "mcpp.buildScript.snippets": "§8 G8 — snippets are always offered",
   "mcpp.toml.indexCompletion": "§8 G3 — the search adapter is not wired into completion yet",
   "mcpp.toml.indexCompletionTimeoutSeconds": "§8 G3 — same",
-  "mcpp.ui.numberFormat": "§8 G13 — `formatBytes` is always binary",
 };
 
 function sourceFiles(dir: string, found: string[] = []): string[] {
@@ -122,6 +113,15 @@ test("a documented exception names a reason and is still real", () => {
   }
 });
 
+test("an exception is not left behind once the setting is wired", () => {
+  const keys = readKeys();
+  const stale = Object.keys(EXCEPTIONS).filter((key) => {
+    const sub = key.replace(/^mcpp\./, "");
+    return keys.has(key) || keys.has(sub);
+  });
+  assert.deepEqual(stale, [], `these settings are read now, so remove their exceptions:\n  ${stale.join("\n  ")}`);
+});
+
 test("deprecated settings are kept but read by nothing", () => {
   const keys = readKeys();
   const deprecated = SETTINGS.filter((entry) => entry.deprecated === true);
@@ -133,11 +133,10 @@ test("deprecated settings are kept but read by nothing", () => {
 });
 
 test("the exception list only shrinks: it never grows beyond what §8 records", () => {
-  // 40 today, down from the 42 the audit listed once G1 was wired. Lowering this
-  // number is the point of the list; raising it means a new setting was added
-  // without wiring it.
+  // 31 today, down from the 42 the audit listed. Lowering this number is the
+  // point of the list; raising it means a new setting was added without wiring it.
   assert.ok(
-    Object.keys(EXCEPTIONS).length <= 40,
+    Object.keys(EXCEPTIONS).length <= 31,
     `the exception list grew to ${Object.keys(EXCEPTIONS).length}; wire the setting instead`,
   );
 });
