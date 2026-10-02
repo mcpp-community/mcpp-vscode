@@ -1,80 +1,106 @@
-export const MCPPLS_EXTENSION_ID = "sunrisepeak.mcpp-language-server";
+/**
+ * The one place this extension talks to the C++ Modules extension.
+ *
+ * It forwards commands and nothing else: no LSP client, no reading of
+ * `mcppls.*` settings, no writing of them, no parsing of its logs. The
+ * capability table (`./contract.ts`) says what may be forwarded and how much
+ * confirmation each action needs; `./capabilities.ts` decides whether it exists.
+ *
+ * Results are **structured, not phrased**: a caller that has a user in front of
+ * it turns them into words through `./messages.ts`. That keeps this module free
+ * of `vscode` and therefore unit-testable, and it keeps the strings translatable
+ * without threading a translator through the probe logic.
+ */
 
-export const MCPPLS_COMMANDS = {
-  restart: "mcppls.restartServer",
-  selectContext: "mcppls.selectContext",
-  graph: "mcppls.showModuleGraph",
-  logs: "mcppls.showLogs",
-} as const;
+import { CapabilityRegistry, type CapabilityEnvironment, type InvokeResult } from "./capabilities";
+import { capability } from "./contract";
 
-export type LanguageServerCommandState = "completed" | "unavailable" | "failed";
+export { MCPPLS_EXTENSION_ID } from "./contract";
 
-export interface LanguageServerCommandResult {
-  state: LanguageServerCommandState;
-  message: string;
-}
-
-export interface LanguageServerCommandExecutor {
-  extensionInstalled(id: string): boolean;
-  /** Activate the dependency before forwarding a command when VS Code has not activated it yet. */
-  activateExtension?(id: string): Thenable<void>;
-  executeCommand<T>(command: string, ...args: unknown[]): Thenable<T>;
-}
+export type LanguageServerCommandState = InvokeResult["state"];
+export type LanguageServerCommandResult = InvokeResult;
+export { CapabilityRegistry } from "./capabilities";
+export type { CapabilityEnvironment } from "./capabilities";
 
 export interface LanguageServerBridge {
-  restartLanguageServer(): Promise<LanguageServerCommandResult>;
+  /** The probe, exposed so the environment self-check can print the whole table. */
+  readonly capabilities: CapabilityRegistry;
+  /** Generic entry point for the view and the menu. */
+  invoke(key: string, ...args: unknown[]): Promise<LanguageServerCommandResult>;
+  /** True when the user should not be offered this capability. */
+  isGone(key: string): boolean;
+  /** True when it exists but the static read could not confirm it. */
+  isUnconfirmed(key: string): boolean;
+  /** How much confirmation the action needs. */
+  dangerOf(key: string): "none" | "confirm" | "destructive";
+
   refreshLanguageServerAfterBuild(): Promise<LanguageServerCommandResult>;
+  restartLanguageServer(): Promise<LanguageServerCommandResult>;
+  restartEngine(): Promise<LanguageServerCommandResult>;
+  resetWorkspaceCache(): Promise<LanguageServerCommandResult>;
   selectContext(): Promise<LanguageServerCommandResult>;
   showModuleGraph(): Promise<LanguageServerCommandResult>;
   showLanguageServerLogs(): Promise<LanguageServerCommandResult>;
+  collectReport(): Promise<LanguageServerCommandResult>;
+  exportDiagnosticBundle(): Promise<LanguageServerCommandResult>;
+  runBuildToolInTerminal(): Promise<LanguageServerCommandResult>;
+  manageConflicts(restore?: boolean): Promise<LanguageServerCommandResult>;
+  toggleInWorkspace(enable: boolean): Promise<LanguageServerCommandResult>;
+  installCommandLineTools(): Promise<LanguageServerCommandResult>;
+  reviewChanges(clear?: boolean): Promise<LanguageServerCommandResult>;
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
+/** Methods that map one-to-one onto a capability, so the bridge stays a table. */
+const FORWARDED = {
+  restartLanguageServer: "restartServer",
+  restartEngine: "restartEngine",
+  resetWorkspaceCache: "resetCache",
+  selectContext: "selectContext",
+  showModuleGraph: "moduleGraph",
+  showLanguageServerLogs: "logs",
+  collectReport: "report",
+  exportDiagnosticBundle: "diagnosticBundle",
+  runBuildToolInTerminal: "runBuildTool",
+  installCommandLineTools: "installTools",
+} as const;
 
-export function createLanguageServerBridge(
-  executor: LanguageServerCommandExecutor,
-): LanguageServerBridge {
+export function createLanguageServerBridge(environment: CapabilityEnvironment): LanguageServerBridge {
+  const capabilities = new CapabilityRegistry(environment);
   let refreshInFlight: Promise<LanguageServerCommandResult> | undefined;
 
-  async function invoke(command: string, successMessage: string): Promise<LanguageServerCommandResult> {
-    if (!executor.extensionInstalled(MCPPLS_EXTENSION_ID)) {
-      return {
-        state: "unavailable",
-        message: `C++ 模块语言服务依赖未安装或已禁用：${MCPPLS_EXTENSION_ID}。`,
-      };
-    }
-    try {
-      await executor.activateExtension?.(MCPPLS_EXTENSION_ID);
-      await executor.executeCommand(command);
-      return { state: "completed", message: successMessage };
-    } catch (error) {
-      return {
-        state: "failed",
-        message: `C++ Modules 命令执行失败：${errorMessage(error)}`,
-      };
-    }
-  }
+  const invoke = (key: string, ...args: unknown[]): Promise<LanguageServerCommandResult> =>
+    capabilities.invoke(key, ...args);
 
-  async function restartLanguageServer(): Promise<LanguageServerCommandResult> {
-    return invoke(MCPPLS_COMMANDS.restart, "C++ 模块语言服务已重启。");
-  }
-
+  /**
+   * Builds are frequent; a second refresh while one is in flight would restart
+   * the language server twice for one edit. The single-flight promise is shared,
+   * so both callers see the same outcome.
+   */
   function refreshLanguageServerAfterBuild(): Promise<LanguageServerCommandResult> {
     if (refreshInFlight !== undefined) {
       return refreshInFlight;
     }
-    refreshInFlight = invoke(MCPPLS_COMMANDS.restart, "C++ 模块语言服务已刷新。")
-      .finally(() => { refreshInFlight = undefined; });
+    refreshInFlight = invoke("refresh").finally(() => {
+      refreshInFlight = undefined;
+    });
     return refreshInFlight;
   }
 
+  const forwarded = Object.fromEntries(
+    Object.entries(FORWARDED).map(([method, key]) => [method, () => invoke(key)]),
+  ) as Record<keyof typeof FORWARDED, () => Promise<LanguageServerCommandResult>>;
+
   return {
-    restartLanguageServer,
+    capabilities,
+    invoke,
+    isGone: (key) => capabilities.isGone(key),
+    isUnconfirmed: (key) => capabilities.isUnconfirmed(key),
+    dangerOf: (key) => capability(key)?.danger ?? "none",
     refreshLanguageServerAfterBuild,
-    selectContext: () => invoke(MCPPLS_COMMANDS.selectContext, "已打开 C++ 模块上下文选择。"),
-    showModuleGraph: () => invoke(MCPPLS_COMMANDS.graph, "已打开 C++ 模块图。"),
-    showLanguageServerLogs: () => invoke(MCPPLS_COMMANDS.logs, "已打开 C++ Modules 日志。"),
+    ...forwarded,
+    // The two commands whose *argument* selects the direction.
+    manageConflicts: (restore = false) => invoke("manageConflicts", restore),
+    toggleInWorkspace: (enable) => invoke("toggleInWorkspace", enable),
+    reviewChanges: (clear = false) => invoke("review", clear),
   };
 }

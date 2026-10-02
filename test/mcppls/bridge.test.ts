@@ -1,91 +1,124 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  createLanguageServerBridge,
-  MCPPLS_COMMANDS,
-  MCPPLS_EXTENSION_ID,
-} from "../../src/mcppls/bridge";
+import { createLanguageServerBridge, MCPPLS_EXTENSION_ID } from "../../src/mcppls/bridge";
+import type { CapabilityEnvironment } from "../../src/mcppls/capabilities";
 
-function harness(installed = true) {
+function harness(options: { installed?: boolean; behaviour?: (command: string) => void } = {}) {
+  const installed = options.installed ?? true;
   const calls: Array<{ command: string; args: unknown[] }> = [];
   const activations: string[] = [];
-  const bridge = createLanguageServerBridge({
+  const environment: CapabilityEnvironment = {
     extensionInstalled: (id) => installed && id === MCPPLS_EXTENSION_ID,
-    activateExtension: async (id) => { activations.push(id); },
+    declaredCommands: () => undefined,
+    activateExtension: async (id) => {
+      activations.push(id);
+    },
     executeCommand: async <T>(command: string, ...args: unknown[]): Promise<T> => {
       calls.push({ command, args });
+      options.behaviour?.(command);
       return undefined as T;
     },
-  });
-  return { bridge, calls, activations };
+  };
+  return { bridge: createLanguageServerBridge(environment), calls, activations };
 }
 
-test("uses the published mcppls extension and command identifiers", () => {
+test("uses the published mcppls extension id", () => {
   assert.equal(MCPPLS_EXTENSION_ID, "sunrisepeak.mcpp-language-server");
-  assert.deepEqual(MCPPLS_COMMANDS, {
-    restart: "mcppls.restartServer",
-    selectContext: "mcppls.selectContext",
-    graph: "mcppls.showModuleGraph",
-    logs: "mcppls.showLogs",
-  });
 });
 
-test("forwards the public mcppls UI commands", async () => {
+test("forwards one command per capability and activates the dependency first", async () => {
   const { bridge, calls, activations } = harness();
 
   assert.deepEqual(await bridge.restartLanguageServer(), {
     state: "completed",
-    message: "C++ 模块语言服务已重启。",
+    capabilityKey: "restartServer",
+    command: "mcppls.restartServer",
   });
   await bridge.selectContext();
   await bridge.showModuleGraph();
   await bridge.showLanguageServerLogs();
+  await bridge.restartEngine();
+  await bridge.resetWorkspaceCache();
+  await bridge.collectReport();
+  await bridge.exportDiagnosticBundle();
+  await bridge.runBuildToolInTerminal();
+  await bridge.installCommandLineTools();
 
-  assert.deepEqual(activations, [MCPPLS_EXTENSION_ID, MCPPLS_EXTENSION_ID, MCPPLS_EXTENSION_ID, MCPPLS_EXTENSION_ID]);
-  assert.deepEqual(calls, [
-    { command: MCPPLS_COMMANDS.restart, args: [] },
-    { command: MCPPLS_COMMANDS.selectContext, args: [] },
-    { command: MCPPLS_COMMANDS.graph, args: [] },
-    { command: MCPPLS_COMMANDS.logs, args: [] },
+  assert.deepEqual(calls.map((call) => call.command), [
+    "mcppls.restartServer",
+    "mcppls.selectContext",
+    "mcppls.showModuleGraph",
+    "mcppls.showLogs",
+    "mcppls.restartClangd",
+    "mcppls.resetWorkspaceCache",
+    "mcppls.collectReport",
+    "mcppls.exportDiagnosticBundle",
+    "mcppls.runBuildToolInTerminal",
+    "mcppls.installCommandLineTools",
   ]);
+  assert.equal(activations.length, 10);
+  assert.ok(activations.every((id) => id === MCPPLS_EXTENSION_ID));
 });
 
-test("returns a stable unavailable result instead of throwing", async () => {
-  const { bridge, calls } = harness(false);
+test("the refresh capability prefers the cheap reload", async () => {
+  const { bridge, calls } = harness();
+  const result = await bridge.refreshLanguageServerAfterBuild();
+  assert.deepEqual(result, {
+    state: "completed",
+    capabilityKey: "refresh",
+    command: "mcppls.reloadBuildDescription",
+  });
+  assert.deepEqual(calls.map((call) => call.command), ["mcppls.reloadBuildDescription"]);
+});
 
+test("an uninstalled dependency yields unavailable without calling anything", async () => {
+  const { bridge, calls } = harness({ installed: false });
   assert.deepEqual(await bridge.restartLanguageServer(), {
     state: "unavailable",
-    message: "C++ 模块语言服务依赖未安装或已禁用：sunrisepeak.mcpp-language-server。",
+    capabilityKey: "restartServer",
   });
+  assert.equal(bridge.isGone("restartServer"), true);
   assert.deepEqual(calls, []);
 });
 
-test("returns a stable failed result when mcppls rejects a command", async () => {
-  const calls: string[] = [];
-  const bridge = createLanguageServerBridge({
-    extensionInstalled: (id) => id === MCPPLS_EXTENSION_ID,
-    executeCommand: async <T>(command: string): Promise<T> => {
-      calls.push(command);
+test("a failure is reported verbatim and does not remove the capability", async () => {
+  const { bridge } = harness({
+    behaviour: () => {
       throw new Error("server is not running");
     },
   });
-
-  assert.deepEqual(await bridge.restartLanguageServer(), {
-    state: "failed",
-    message: "C++ Modules 命令执行失败：server is not running",
-  });
-  assert.deepEqual(calls, [MCPPLS_COMMANDS.restart]);
+  const result = await bridge.restartLanguageServer();
+  assert.equal(result.state, "failed");
+  assert.match(result.error ?? "", /server is not running/);
+  assert.equal(bridge.isGone("restartServer"), false);
 });
 
-test("coalesces concurrent build refresh requests into one restart", async () => {
+test("a missing command is not called again", async () => {
+  const { bridge, calls } = harness({
+    behaviour: (command) => {
+      throw new Error(`command '${command}' not found`);
+    },
+  });
+  const first = await bridge.showModuleGraph();
+  assert.equal(first.state, "missing");
+  assert.equal(bridge.isGone("moduleGraph"), true);
+  const second = await bridge.showModuleGraph();
+  assert.equal(second.state, "missing");
+  assert.equal(calls.length, 1);
+});
+
+test("coalesces concurrent build refresh requests into one call", async () => {
   let release: (() => void) | undefined;
   const calls: string[] = [];
   const bridge = createLanguageServerBridge({
-    extensionInstalled: (id) => id === MCPPLS_EXTENSION_ID,
+    extensionInstalled: () => true,
+    declaredCommands: () => undefined,
     executeCommand: async <T>(command: string): Promise<T> => {
       calls.push(command);
-      await new Promise<void>((resolve) => { release = resolve; });
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
       return undefined as T;
     },
   });
@@ -93,15 +126,29 @@ test("coalesces concurrent build refresh requests into one restart", async () =>
   const first = bridge.refreshLanguageServerAfterBuild();
   const second = bridge.refreshLanguageServerAfterBuild();
   await new Promise<void>((resolve) => setImmediate(resolve));
-  assert.deepEqual(calls, [MCPPLS_COMMANDS.restart]);
+  assert.deepEqual(calls, ["mcppls.reloadBuildDescription"]);
   release?.();
-  assert.deepEqual(await first, {
-    state: "completed",
-    message: "C++ 模块语言服务已刷新。",
-  });
-  assert.deepEqual(await second, {
-    state: "completed",
-    message: "C++ 模块语言服务已刷新。",
-  });
-  assert.deepEqual(calls, [MCPPLS_COMMANDS.restart]);
+  assert.equal((await first).state, "completed");
+  assert.equal((await second).state, "completed");
+  assert.deepEqual(calls, ["mcppls.reloadBuildDescription"]);
+});
+
+test("directional commands pass their argument through", async () => {
+  const { bridge, calls } = harness();
+  await bridge.manageConflicts(true);
+  await bridge.toggleInWorkspace(false);
+  await bridge.reviewChanges(true);
+  assert.deepEqual(calls, [
+    { command: "mcppls.turnOffOtherCppFeatures", args: [true] },
+    { command: "mcppls.turnOffInWorkspace", args: [false] },
+    { command: "mcppls.review.run", args: [true] },
+  ]);
+});
+
+test("the danger level comes from the capability table", () => {
+  const { bridge } = harness();
+  assert.equal(bridge.dangerOf("resetCache"), "destructive");
+  assert.equal(bridge.dangerOf("restartEngine"), "confirm");
+  assert.equal(bridge.dangerOf("selectContext"), "none");
+  assert.equal(bridge.dangerOf("nope"), "none");
 });

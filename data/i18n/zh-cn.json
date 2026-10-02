@@ -1,1 +1,10 @@
-{}
+{
+  "{0}: done.": "{0}：完成。",
+  "The C++ Modules extension ({0}) is not installed or is disabled.": "C++ Modules 扩展（{0}）未安装或已禁用。",
+  "{0}: the installed C++ Modules does not offer this action.": "{0}：已安装的 C++ Modules 不提供该操作。",
+  "{0} failed: {1}": "{0} 失败：{1}",
+  "unknown error": "未知错误",
+  "Direction: enable.": "方向：启用。",
+  "Direction: disable.": "方向：停用。",
+  "Install extension": "安装扩展"
+}

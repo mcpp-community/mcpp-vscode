@@ -9,6 +9,8 @@ import {
   type LanguageServerBridge,
   type LanguageServerCommandResult,
 } from "./mcppls/bridge";
+import { MCPPLS_EXTENSION_ID } from "./mcppls/contract";
+import { formatResult } from "./mcppls/messages";
 import { computeMcppTomlCompletions } from "./toml/completion";
 import {
   buildModuleSetupPlan,
@@ -19,7 +21,24 @@ import {
 } from "./workflows/moduleSetup";
 import type { TaskCompletion } from "./cli/tasks";
 import { onDidChange as onConfigurationChanged, read } from "./config/access";
-import { setLanguagePreference, type LanguagePreference } from "./i18n/t";
+import { setLanguagePreference, t, type LanguagePreference } from "./i18n/t";
+
+/**
+ * The commands an extension declares in its own `package.json`, read without
+ * activating it. `undefined` means "no static information", which the capability
+ * probe treats as "assume it works until a call says otherwise".
+ */
+function declaredCommandsOf(id: string): readonly string[] | undefined {
+  const extension = vscode.extensions.getExtension(id);
+  const commands = (extension?.packageJSON as { contributes?: { commands?: Array<{ command?: string }> } })
+    ?.contributes?.commands;
+  if (!Array.isArray(commands)) {
+    return undefined;
+  }
+  return commands
+    .map((entry) => entry.command)
+    .filter((command): command is string => typeof command === "string");
+}
 
 /** `mcpp.ui.language` decides which of our strings the user sees. */
 function applyLanguagePreference(): void {
@@ -59,15 +78,21 @@ function outputText(output: vscode.OutputChannel, line: string): void {
 }
 
 function resultText(output: vscode.OutputChannel, result: LanguageServerCommandResult): void {
-  outputText(output, `[C++ Modules] ${result.message}`);
+  const formatted = formatResult(result);
+  outputText(output, `[C++ Modules] ${formatted.message}${formatted.hint === undefined ? "" : ` ${formatted.hint}`}`);
   if (result.state === "unavailable") {
-    void vscode.window.showWarningMessage(result.message, "安装扩展").then((choice) => {
-      if (choice === "安装扩展") {
-        void vscode.commands.executeCommand("workbench.extensions.search", "@id:sunrisepeak.mcpp-language-server");
+    const install = t("Install extension");
+    void vscode.window.showWarningMessage(formatted.message, install).then((choice) => {
+      if (choice === install) {
+        void vscode.commands.executeCommand("workbench.extensions.search", `@id:${MCPPLS_EXTENSION_ID}`);
       }
     });
-  } else if (result.state === "failed") {
-    void vscode.window.showErrorMessage(result.message);
+    return;
+  }
+  if (formatted.severity === "warning") {
+    void vscode.window.showWarningMessage(formatted.message);
+  } else if (formatted.severity === "error") {
+    void vscode.window.showErrorMessage(formatted.message);
   }
 }
 
@@ -141,7 +166,7 @@ async function autoConfigureModulesWizard(
       return {
         stage: "language-server",
         state: result.state === "completed" ? "succeeded" : "failed",
-        detail: result.state === "completed" ? undefined : result.message,
+        detail: result.state === "completed" ? undefined : formatResult(result).message,
       };
     },
   });
@@ -206,6 +231,7 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
 
   const bridge = createLanguageServerBridge({
     extensionInstalled: (id) => vscode.extensions.getExtension(id) !== undefined,
+    declaredCommands: declaredCommandsOf,
     activateExtension: async (id) => {
       await vscode.extensions.getExtension(id)?.activate();
     },
