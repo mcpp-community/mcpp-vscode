@@ -1,5 +1,78 @@
 # 更新日志
 
+> From 0.5.0 on, entries are written in English. Earlier entries remain as they
+> were written.
+
+## 0.5.0 - 2026-10-02
+
+A groundwork release: the extension now says what it is doing, in the user's
+language, and every claim about mcpp or the C++ Modules extension is checked by a
+test or a generated snapshot rather than by a comment.
+
+### Added
+
+- **Three views** under a new `mcpp` Activity Bar container: **Project** (identity,
+  toolchain, targets and the build/run/test buttons), **Cache** (project artifacts
+  and the shared build cache, with its size, age distribution, largest packages
+  and incomplete entries) and **C++ Modules** (the language service's state,
+  issues and every action, forwarded to `sunrisepeak.mcpp-language-server`).
+- **A settings panel** (`mcpp: Open Settings Panel`) built from a single registry:
+  search, "only modified", per-section collapse, four presets, each row showing
+  where its value comes from, when it takes effect, and a link to the native
+  Settings editor.
+- **64 settings**, 29 of them public and the rest behind "show advanced". A new
+  `data/config-registry.json` is the single source of truth; `package.json` and
+  `docs/settings.md` are held to it by CI.
+- **Cache cleanup as a table of plans**, with five levels of confirmation: reading
+  is free, `mcpp clean` asks once, `--stale`/`gc`/`prune` show a preview first,
+  `mcpp cache clean --all` additionally requires an explicit acknowledgement naming
+  every project on the machine, and emptying the shared cache during a project
+  clean is a separate, unticked choice.
+- **`mcpp: Environment Self-check`**: one copyable snapshot of every version, the
+  mcpp protocol and advertised kinds, each C++ Modules capability and its fate,
+  the cache figures and every setting changed from its default.
+- **`build.mcpp` intelligence** without a language server: completion and hover for
+  the 31 build directives and the five action roles, snippets, document symbols and
+  seven static SPEC-007 diagnostics, generated from mcpp's own directive table.
+  `import std;` and `import mcpp;` are recognised and never reported as missing —
+  measured behaviour, see `docs/build-script.md`.
+- **`mcpp.toml` editing**: key completion, enum values, hover with the type, default,
+  plane and legacy advice, seven manifest diagnostics and navigation for
+  `workspace = true`, `path = …` and `features = […]`.
+- **English and Chinese**: every command title, setting and runtime message follows
+  the editor's language. `mcpp.ui.language` can override the runtime messages and
+  our panels; the Command Palette and the Settings UI always follow VS Code.
+
+### Changed
+
+- User-visible strings in `package.json` are now `%nls%` references; the text lives
+  in `package.nls.json` and `package.nls.zh-cn.json`.
+- Activation is narrower: the `onCommand:*` events are gone (VS Code derives them
+  from `contributes.commands` since 1.74), as is `onLanguage:cpp`.
+- `mcpp template`-free: `mcpp: Clean` is now `mcpp: Clean Project Artifacts`, and
+  the language-service commands moved under the `mcpp.languageServer.*` namespace.
+
+### Fixed
+
+- The toolchain inventory is read from `mcpp toolchain list --format json` when mcpp
+  speaks the machine-output protocol, instead of scraping the human table — the
+  human table no longer prints the line the old parser depended on.
+- A failing C++ Modules call can no longer be mistaken for a failing mcpp build, and
+  a command that a newer or older mcppls does not offer is remembered and hidden
+  rather than retried on every click.
+
+### Removed
+
+- `src/configureOnly.ts` and `src/ideWorkflow.ts`: dead since 0.4.0 moved the build
+  database to the language service, and at odds with the documented boundary.
+
+### Migration
+
+Nothing has to be changed by hand. Every 0.4.x command id and setting key still
+works: the old language-service ids forward to the new ones, `mcpp.clean` is an
+alias of `mcpp.cleanProjectArtifacts`, and `mcpp.tomlCompletion` is read as
+`mcpp.toml.completion` with a one-time offer to move the value.
+
 ## 0.3.1 - 2026-08-11
 
 - 修复缺少 CDB 时 IDE 命令看似无响应的问题：配置 clangd、刷新编译数据库、检查模块支持和一键配置现在会立即显示进度并打开 `mcpp` 输出频道；clangd 重启与 `mcpp build --configure-only` 增加超时，避免异步操作永久占用 IDE 队列。
