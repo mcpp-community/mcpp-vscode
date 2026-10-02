@@ -219,3 +219,30 @@ menus / activationEvents）、`src/views/` 的 provider 与命令实现、`src/e
 
 **上游反馈已记录**：生成脚本对照 mcpp 源码时发现方案文档里两个不存在的键名
 （`[profile.<n>].opt_level` 实为 `opt`；`bidi_schedule` 实为 `bmi_schedule`），已修正。
+
+---
+
+## 8. Round 2 审计出的缺口（下一轮的输入）
+
+文档子代理在写 `docs/` 时逐项核对了代码，发现"设置已声明但无人读取"的地方。这不是文档
+缺陷，而是**功能缺陷**：声明了却不生效，比没有这个设置更糟。按严重度排列：
+
+| # | 缺口 | 证据 | 处理 |
+|---|---|---|---|
+| G1 | `mcpp.toml` 的 hover 与跳转不存在 | `src/toml/providers.ts` 只注册补全与诊断；`mcpp.toml.hover`/`navigation` 无人读 | 实现 `src/toml/hover.ts` + `src/toml/navigation.ts`（schema 已有键与文档锚点） |
+| G2 | 键/枚举值补全不存在 | `src/toml/completion.ts` 用的是手写 25 条段头表，**没有读** `data/toml-schema.json` | 让补全读 schema（键 + 枚举 + legacy 提示） |
+| G3 | 依赖版本补全不存在 | `mcpp.toml.indexCompletion*` 无人读，`mcpp search` 无人调用 | 实现 `src/cli/search.ts` + 接入补全 |
+| G4 | 缓存面板不是 webview | `mcpp.showCachePanel` 打开只读 Markdown 预览 | 实现 `src/views/cachePanelHtml.ts` + `cachePanel.ts`（叠条/年龄分布/TopN/预算模拟器） |
+| G5 | 未贡献任何快捷键 | `contributes.keybindings` 缺失，方案 §3.5 承诺了 ctrl+alt+b/r/t/m/, | 加 keybindings |
+| G6 | `mcpp.cache.gc.confirmAboveGiB` 无人读 | gc 超过阈值不会追加确认 | 接入 |
+| G7 | pre-v1 遗留缓存节点永不显示 | `state.legacyBytes` 从未赋值 | 从 `cache dir` 的 legacy 路径估算体积并赋值 |
+| G8 | 大量设置无人读 | 64 项中仅 16 项被生产代码读取 | 逐项接线：`mcpp.task.*`、`mcpp.languageService.*`、`mcpp.views.*.show`、`mcpp.ui.*`、`mcpp.runtime.*`、`mcpp.log.level`、`mcpp.buildScript.intelligence/snippets/imports.knownModules`、`mcpp.cache.statusBar/warnAboveGiB/autoRefreshSeconds/showLegacy` |
+| G9 | 环境自检的缓存段永远是"not read" | `showSelfCheck` 没有传 `cache` | 采集后传入 |
+| G10 | `src/cli/errors.ts` 与 `src/config/migrate.ts` 没有生产调用者 | 退出码分层与旧键迁移提示都没接 | 接入错误提示与首次激活的迁移提示 |
+| G11 | i18n 仍有硬编码中文 | `src/cli/controller.ts`、`src/extension.ts` 多处直接写中文 | 全部改走 `t()`，并补 zh 条目 |
+| G12 | `VERIFIED_MCPPLS_RANGE` 无人读 | 没有版本提示 | 在会话头/自检里提示（不作为门禁） |
+| G13 | `mcpp.ui.numberFormat` 无人读 | `formatBytes` 恒为二进制单位 | 接入 |
+
+**验收方式**：新增一条单测，遍历 `data/config-registry.json`，断言每个设置键在 `src/`
+中至少被"读取一次"（用一张显式的"由谁读取"映射表，而不是正则扫描），缺一项即失败。
+这条测试是这一轮的产出物之一——它把"声明了就要生效"变成可执行的约束。

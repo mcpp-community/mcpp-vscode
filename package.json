@@ -1045,7 +1045,8 @@
     "check": "npm run check:config && npm run check:l10n && npm run check:generated",
     "gen:buildscript": "node tools/generate-buildscript-api.mjs",
     "gen:toml": "node tools/generate-toml-schema.mjs",
-    "check:generated": "node tools/check-generators.mjs"
+    "check:generated": "node tools/check-generators.mjs",
+    "test:e2e:one": "node dist/test/e2e/runTest.js"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
