@@ -36,7 +36,14 @@ const root = path.resolve(process.cwd());
 
 test("declares mcpp-language-server as the C++ modules language service", () => {
   const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
-  assert.equal(manifest.version, "0.4.0");
+  // The version lives in three places; they must agree or a release tag is a lie.
+  const lock = JSON.parse(readFileSync(path.join(root, "package-lock.json"), "utf8")) as {
+    version?: string;
+    packages?: Record<string, { version?: string }>;
+  };
+  assert.match(manifest.version ?? "", /^\d+\.\d+\.\d+$/);
+  assert.equal(lock.version, manifest.version);
+  assert.equal(lock.packages?.[""]?.version, manifest.version);
   // User-visible strings live in the nls bundle; the manifest only names them.
   assert.equal(manifest.description, "%description%");
   assert.equal(manifest.displayName, "%displayName%");
@@ -321,16 +328,26 @@ test("声明 GitHub 仓库和扩展图标", () => {
   assert.deepEqual([...icon.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
 });
 
-test("README 说明 mcpp 与 mcppls 的职责边界和升级限制", () => {
+test("the READMEs state the responsibility split, the boundary and the limits", () => {
+  // The English README is the Marketplace listing; the Chinese one is its mirror.
   const readme = readFileSync(path.join(root, "README.md"), "utf8");
-  assert.match(readme, /sunrisepeak\.mcpp-language-server/);
-  assert.match(readme, /不启动第二个\s+LSP 客户端/);
-  assert.match(readme, /不表示本扩展读取用户的 `clangd\.\*` 设置/);
-  assert.match(readme, /mcpp\.path.*只控制/s);
-  assert.match(readme, /darwin-x64/);
-  assert.match(readme, /不再读取或写入它们/);
-  assert.doesNotMatch(readme, /mcpp\.clangd\.path.*匹配 LLVM/);
-  assert.doesNotMatch(readme, /当前完整的模块语义能力只支持 LLVM/);
+  const chinese = readFileSync(path.join(root, "README.zh-CN.md"), "utf8");
+
+  for (const text of [readme, chinese]) {
+    assert.match(text, /sunrisepeak\.mcpp-language-server/);
+    assert.match(text, /darwin-x64/);
+    assert.match(text, /mcpp\.path/);
+  }
+  assert.match(readme, /README\.zh-CN\.md/);
+  assert.match(chinese, /README\.md/);
+
+  // The claims that must not creep back in: this extension is not a language
+  // client, does not read clangd settings, and does not claim LLVM-only support.
+  for (const text of [readme, chinese]) {
+    assert.doesNotMatch(text, /starts? (a|its own) (second )?LSP client/i);
+    assert.doesNotMatch(text, /reads your `clangd\./);
+  }
+  assert.doesNotMatch(readme, /only LLVM/i);
 });
 
 test("嵌套工程提示不猜测它一定是 mcpp 工作区成员", () => {

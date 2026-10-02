@@ -32,9 +32,17 @@ async function runVariant(repositoryRoot: string, fixtureRoot: string, variant: 
   copyFileSync(join(fixtureRoot, "project/mcpp.toml"), join(workspaceDir, "mcpp.toml"));
   copyFileSync(join(fixtureRoot, "project/main.cpp"), join(workspaceDir, "main.cpp"));
 
+  // `MCPP_E2E_CODE` runs the suite against an already-installed VS Code, which is
+  // what makes the Extension Host tests runnable without the 135 MB download.
+  // CI leaves it unset and pins the version instead.
+  const executable = process.env.MCPP_E2E_CODE ?? "";
+  const launcher = executable.length === 0
+    ? { version: "1.91.0" }
+    : { vscodeExecutablePath: executable };
+
   try {
     await runTests({
-      version: "1.91.0",
+      ...launcher,
       extensionDevelopmentPath: repositoryRoot,
       extensionTestsPath: join(repositoryRoot, "dist/test/e2e/suite/index.js"),
       launchArgs: [

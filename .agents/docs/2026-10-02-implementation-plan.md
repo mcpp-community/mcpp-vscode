@@ -246,3 +246,25 @@ menus / activationEvents）、`src/views/` 的 provider 与命令实现、`src/e
 **验收方式**：新增一条单测，遍历 `data/config-registry.json`，断言每个设置键在 `src/`
 中至少被"读取一次"（用一张显式的"由谁读取"映射表，而不是正则扫描），缺一项即失败。
 这条测试是这一轮的产出物之一——它把"声明了就要生效"变成可执行的约束。
+
+---
+
+## 9. 进展（round 2，2026-10-02）
+
+`npm test` 420 通过；`check-config` / `l10n-check` / `check-generators` 全绿；
+VSIX 打包 69 文件 180 KB；本地隔离 profile 已就绪（含 mcppls 0.0.9 与一个可用的 mcpp 工程）。
+
+| 任务 | 状态 | 说明 |
+|---|---|---|
+| T15/T20/T21/T34–T38 视图与命令 | ✅ | 三棵视图、42 个命令、视图容器、两个颜色 ID、配置面板 |
+| T16 e2e 五变体 | ✅（代码）/ ⚠️（本地未跑通） | 变体生成 + 每变体一次隔离 Extension Host；本地因无法下载固定版 VS Code 未完成 |
+| T39 CI | ⬜ | 工作流尚未更新 |
+| T40 文档 | ✅ | README 英/中 + 7 篇 `docs/`，52 条链接全部解析 |
+| T41 CHANGELOG | ✅ | 0.5.0 英文段 |
+| T42 本地 profile | ✅ | `tools/dev-profile.mjs` |
+| G1–G13（§8 审计缺口） | ⬜ | 下一轮的输入 |
+
+**本地 e2e 的限制**：`@vscode/test-electron` 需要下载 135 MB 的 1.91 稳定版，本机网络在
+下载中途反复中断；改用已安装的 VS Code（`MCPP_E2E_CODE`，本轮新增）时 Extension Host
+以 0 退出但没有执行套件。因此 **e2e 的结论仍以 CI 为准**（CI 里有 xvfb 与固定版本），
+本地只验证到"编译通过、变体生成正确、命令面完整"。这一条必须在本轮报告里如实说明。
