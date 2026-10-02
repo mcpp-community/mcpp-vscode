@@ -40,6 +40,27 @@ jobs:
       - name: 打包 VSIX
         run: npm run package
 
+      # 发布的产物正是那个曾经把本地 .dev-profile/ 打进去的地方（4035 文件 / 64 MB），
+      # 所以体积与目录守卫在这里比在 CI 里更重要。
+      - name: 校验 VSIX 体积与内容
+        shell: bash
+        run: |
+          set -euo pipefail
+          VSIX="mcpp-vscode-${PACKAGE_VERSION}.vsix"
+          SIZE=$(stat -c %s "$VSIX")
+          COUNT=$(unzip -l "$VSIX" | tail -1 | awk '{print $2}')
+          echo "VSIX: $COUNT files, $((SIZE / 1024)) KiB"
+          if [ "$COUNT" -gt 200 ]; then echo "文件数异常：$COUNT"; exit 1; fi
+          if [ "$SIZE" -gt 1048576 ]; then echo "体积异常：$SIZE 字节"; exit 1; fi
+          for forbidden in .dev-profile/ .agents/ test/ tools/ src/ node_modules/; do
+            if unzip -l "$VSIX" | grep -q "extension/$forbidden"; then
+              echo "产物里混入了本地内容：$forbidden"
+              exit 1
+            fi
+          done
+          unzip -t "$VSIX" >/dev/null
+          echo "VSIX 内容与体积正常"
+
       - name: 生成 SHA-256 校验文件
         shell: bash
         run: sha256sum "mcpp-vscode-${PACKAGE_VERSION}.vsix" > "mcpp-vscode-${PACKAGE_VERSION}.vsix.sha256"

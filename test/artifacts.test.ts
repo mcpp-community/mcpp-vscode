@@ -395,6 +395,13 @@ test("tag release 工作流校验版本并发布 VSIX", () => {
   assert.match(workflow, /gh release upload.*--clobber/s);
 });
 
+test("the release workflow guards the published artefact against local leakage", () => {
+  const workflow = readFileSync(path.join(root, ".github/workflows/release.yml"), "utf8");
+  assert.match(workflow, /校验 VSIX 体积与内容/);
+  assert.match(workflow, /forbidden in \.dev-profile\/ \.agents\/ test\/ tools\/ src\/ node_modules\//);
+  assert.match(workflow, /unzip -t/);
+});
+
 test("CI runs the gates, the package checks, the drift check and every e2e variant", () => {
   const workflow = readFileSync(path.join(root, ".github/workflows/ci.yml"), "utf8");
   assert.match(workflow, /pull_request:/);
