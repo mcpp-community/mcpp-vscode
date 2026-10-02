@@ -18,6 +18,14 @@ import {
   type ModuleSetupStepResult,
 } from "./workflows/moduleSetup";
 import type { TaskCompletion } from "./cli/tasks";
+import { onDidChange as onConfigurationChanged, read } from "./config/access";
+import { setLanguagePreference, type LanguagePreference } from "./i18n/t";
+
+/** `mcpp.ui.language` decides which of our strings the user sees. */
+function applyLanguagePreference(): void {
+  setLanguagePreference(read<LanguagePreference>("mcpp.ui.language"));
+}
+
 
 function findCurrentProject(): McppProjectDiscovery | undefined {
   const activeEditor = vscode.window.activeTextEditor;
@@ -191,6 +199,11 @@ const mcppTomlCompletionProvider: vscode.CompletionItemProvider = {
 
 export async function activate(extensionContext: vscode.ExtensionContext): Promise<void> {
   const output = vscode.window.createOutputChannel("mcpp");
+
+  // Language first: everything below may want to speak to the user.
+  applyLanguagePreference();
+  extensionContext.subscriptions.push(onConfigurationChanged(applyLanguagePreference));
+
   const bridge = createLanguageServerBridge({
     extensionInstalled: (id) => vscode.extensions.getExtension(id) !== undefined,
     activateExtension: async (id) => {

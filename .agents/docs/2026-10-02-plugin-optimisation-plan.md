@@ -359,7 +359,7 @@ CI 漂移 job：用 `mcpp@main` 重新生成 + `git diff --exit-code`。
 
 | 命令 | 数据 | 机读 |
 |---|---|---|
-| `mcpp cache list --format json` | kind `mcpp.cache`：`data.root` + `data.entries[]`，每条 `{accessed(Unix 秒), bytes, complete, dir, files, key, kind, label}`。实测 **657 条 / 7.22 GiB / pkg 576 · std 81 / 2 条 incomplete / 83 个 label / 最旧 2026-09-23** | ✅ 信封 |
+| `mcpp cache list --format json` | kind `mcpp.cache`：`data.root` + `data.entries[]`，每条 `{accessed(Unix 秒), bytes, complete, dir, files, key, kind, label}`。实测 **657 条 / 7.20 GiB / pkg 576 · std 81 / 2 条 incomplete / 83 个 label / 最旧 2026-09-23** | ✅ 信封 |
 | `mcpp cache dir` | 缓存根 + `legacy (unused, removable with mcpp cache clean --legacy): <path>` | ❌ 文本 |
 | `mcpp cache info <pkg>` | `dir/key/package/size/file count/last used/complete/inputs(JSON)` | ❌ 文本 |
 | `mcpp cache verify` | 校验条目清单与磁盘 | ❌（看退出码与文本） |
@@ -481,7 +481,7 @@ mcpp                                   ← Activity Bar 容器 $(tools)
 │   ├── 项目产物 … 1.4 GiB（估算）· 3 个 fingerprint
 │   │   ├── 过期产物 12 项 · 820 MiB   [$(trash) 清理过期产物…]
 │   │   └── [$(trash) 清理项目产物…]
-│   ├── 全局构建缓存 … 7.22 GiB · 657 条目
+│   ├── 全局构建缓存 … 7.20 GiB · 657 条目
 │   │   └── [$(refresh) 刷新] [$(graph) 统计面板] [$(history) 收敛到预算…] [$(check) 校验]
 │   └── pre-v1 遗留缓存 … 167.5 MiB    [$(trash) 清理遗留缓存]
 └── C++ Modules (mcpp.languageServer)  ← TreeView，由 mcppls 提供内容（§3.9）
@@ -1084,7 +1084,7 @@ mcppls 降级能力与状态视图、i18n 机制本身。
 | 交给 clangd 后 std 与 mcpp 都报错 | `mcppls check build.mcpp` → `module 'std' not found` + `module 'mcpp' not found` + `Failed to build module mcpp`，clangd exit 3 |
 | 数据库内的文件零诊断 | `mcppls check src/main.cpp` → clangd exit 0 |
 | 构建脚本 API 可机读 | `modules/buildmcpp/src/directives.cppm:297`（31 行表）、`:1132-1134`（5 role）、`program_protocol.cppm:121,147`、`provisions.cppm:80` |
-| 缓存数据可机读 | `mcpp cache list --format json` → kind `mcpp.cache`，657 条 / 7.22 GiB / pkg 576 · std 81 / 2 incomplete |
+| 缓存数据可机读 | `mcpp cache list --format json` → kind `mcpp.cache`，657 条 / 7.20 GiB / pkg 576 · std 81 / 2 incomplete |
 | `--stale` 语义与默认 | `mcpp clean --help`：`--older-than … (default 1d; 0 keeps none; implies --stale)`；`--dry-run` 隐含 `--stale` 且不删 |
 | `search` / `info` / `verify` 无机器格式 | 各自 `--help` 只有人类选项；`search` 只有 `--all-versions` |
 

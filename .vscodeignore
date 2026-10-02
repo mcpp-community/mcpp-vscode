@@ -1,9 +1,12 @@
 .vscode/**
 .github/**
 .gitignore
+.agents/**
 docs/**
 src/**
 test/**
+tools/**
+data/**
 tsconfig.json
 package-lock.json
 *.tsbuildinfo

@@ -5,6 +5,7 @@ import test from "node:test";
 
 interface PackageManifest {
   version?: string;
+  displayName?: string;
   description?: string;
   icon?: string;
   dependencies?: Record<string, string>;
@@ -17,9 +18,9 @@ interface PackageManifest {
   activationEvents?: string[];
   capabilities?: { untrustedWorkspaces?: { supported?: string; description?: string } };
   contributes?: {
-    commands?: Array<{ command: string; icon?: string }>;
+    commands?: Array<{ command: string; title?: string; category?: string; icon?: string }>;
     menus?: { "editor/title"?: Array<{ command: string; group?: string; when?: string }> };
-    configuration?: { properties?: Record<string, unknown> };
+    configuration?: { title?: string; properties?: Record<string, unknown> };
     configurationDefaults?: Record<string, unknown>;
     languages?: Array<{ id: string; aliases?: string[]; filenames?: string[]; configuration?: string }>;
     grammars?: Array<{ language?: string; scopeName: string; injectTo?: string[]; path: string }>;
@@ -31,7 +32,9 @@ const root = path.resolve(process.cwd());
 test("declares mcpp-language-server as the C++ modules language service", () => {
   const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
   assert.equal(manifest.version, "0.4.0");
-  assert.equal(manifest.description, "mcpp 工程构建、工具链与 C++ Modules 语言服务集成");
+  // User-visible strings live in the nls bundle; the manifest only names them.
+  assert.equal(manifest.description, "%description%");
+  assert.equal(manifest.displayName, "%displayName%");
   assert.equal(manifest.engines?.vscode, "^1.91.0");
   assert.deepEqual(manifest.extensionDependencies, ["sunrisepeak.mcpp-language-server"]);
   assert.ok(!manifest.extensionDependencies?.includes("llvm-vs-code-extensions.vscode-clangd"));
@@ -40,10 +43,7 @@ test("declares mcpp-language-server as the C++ modules language service", () => 
   assert.ok(manifest.activationEvents?.includes("onCommand:mcpp.configureLanguageServer"));
   assert.ok(manifest.activationEvents?.includes("onCommand:mcpp.configureClangd")); // deprecated alias
   assert.equal(manifest.capabilities?.untrustedWorkspaces?.supported, "limited");
-  assert.equal(
-    manifest.capabilities?.untrustedWorkspaces?.description,
-    "未受信任工作区仅启用本扩展的模块语法高亮与 mcpp.toml 结构补全（纯文本分析），不执行 mcpp CLI 或接管语言服务配置。",
-  );
+  assert.equal(manifest.capabilities?.untrustedWorkspaces?.description, "%untrustedWorkspaces.description%");
   assert.deepEqual(
     manifest.contributes?.commands?.map((command) => command.command),
     [
@@ -67,6 +67,11 @@ test("declares mcpp-language-server as the C++ modules language service", () => 
   );
   assert.ok(manifest.contributes?.configuration?.properties?.["mcpp.path"]);
   assert.ok(manifest.contributes?.configuration?.properties?.["mcpp.tomlCompletion"]);
+  assert.equal(manifest.contributes?.configuration?.title, "%mcpp.configuration.title%");
+  for (const command of manifest.contributes?.commands ?? []) {
+    assert.match(command.title ?? "", /^%command\.[^%]+\.title%$/, `command ${command.command} title must be an nls key`);
+    assert.equal(command.category, "%category%");
+  }
   assert.equal(manifest.dependencies?.["vscode-languageclient"], undefined);
   assert.equal(manifest.devDependencies?.["vscode-languageclient"], undefined);
   assert.deepEqual(manifest.contributes?.configurationDefaults?.["files.associations"], {
