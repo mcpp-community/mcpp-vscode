@@ -2,7 +2,7 @@
 /**
  * `data/buildscript-api.json` <- the mcpp checkout.
  *
- * Spec: `.agents/docs/2026-10-02-plugin-optimisation-plan.md` §3.2.3. `build.mcpp`
+ * Spec: `.agents/docs/archive/2026-10-02-plugin-optimisation-plan.md` §3.2.3. `build.mcpp`
  * is deliberately kept away from clangd (§3.2.1 measured that handing it to the C++
  * language service makes both `import std` and `import mcpp` fail), so the editor
  * intelligence for `mcpp::…` names comes from this snapshot instead: the directive

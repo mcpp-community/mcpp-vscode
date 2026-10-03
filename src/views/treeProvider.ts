@@ -1,5 +1,5 @@
 /**
- * One tree provider for all three views.
+ * The tree provider for the project view.
  *
  * The trees are described as data (`./models.ts`); this file is the only part
  * that knows about `vscode.TreeItem`. Labels carry keys, so the translation

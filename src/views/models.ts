@@ -25,7 +25,6 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import { parseMcppToml } from "../toml/parser";
-import { formatBytes, formatCount } from "../util/format";
 
 export type LabelArgument = string | number | Label;
 
@@ -552,7 +551,7 @@ const LANGUAGE_SERVICE_MORE_ACTIONS: readonly ActionRow[] = [
   { id: "project.languageService.action.restartEngine", label: "Restart the semantic engine", icon: "debug-restart", command: "mcpp.languageServer.restartEngine" },
   { id: "project.languageService.action.resetCache", label: "Reset this workspace's cache", icon: "trash", command: "mcpp.languageServer.resetWorkspaceCache" },
   { id: "project.languageService.action.report", label: "Collect a diagnostic report", icon: "report", command: "mcpp.languageServer.collectReport" },
-  { id: "project.languageService.action.bundle", label: "Export a diagnostic bundle", icon: "package", command: "mcpp.languageServer.exportDiagnosticBundle" },
+  { id: "project.languageService.action.bundle", label: "Export a diagnostic bundle", icon: "file-zip", command: "mcpp.languageServer.exportDiagnosticBundle" },
   { id: "project.languageService.action.runBuildTool", label: "Run the build tool in a terminal", icon: "terminal", command: "mcpp.languageServer.runBuildToolInTerminal" },
   { id: "project.languageService.action.settings", label: "Open the C++ Modules settings", icon: "settings-gear", command: "mcpp.openMcpplsSettings" },
 ];
@@ -577,7 +576,7 @@ export function buildProjectTree(project: ProjectSummary | undefined, options: P
     // deliberately absent: `mcpp new` refuses a destination that already exists
     // (`scaffold/create.cppm`: `"'{}' already exists"`) and has no `--here`, so
     // there is nothing to run for "make this folder a project" — see §17 of
-    // `.agents/docs/2026-10-02-ui-ux-optimisation-plan.md`.
+    // `.agents/docs/archive/2026-10-02-ui-ux-optimisation-plan.md`.
     return [
       {
         id: "project.none",
@@ -876,228 +875,4 @@ function languageServiceStatus(state: LanguageServiceBlock["state"]): TreeNode {
     label: plain(state.state === "ready" ? "Ready" : state.state === "degraded" ? "Degraded" : state.state ?? "Unknown"),
     icon: state.state === "ready" ? "pass" : "warning",
   };
-}
-
-export interface CacheTreeInput {
-  projectRoot?: string;
-  artifacts?: ArtifactEstimateSummary;
-  inventory?: CacheInventorySummary;
-  legacyBytes?: number;
-  error?: string;
-}
-
-export interface ArtifactEstimateSummary {
-  exists: boolean;
-  totalBytes: number;
-  files: number;
-  groups: number;
-  truncated?: string;
-}
-
-export interface CacheInventorySummary {
-  root: string;
-  totalBytes: number;
-  totalEntries: number;
-  byKind: Array<{ kind: string; entries: number; bytes: number }>;
-  topLabels: Array<{ label: string; entries: number; bytes: number }>;
-  incomplete: number;
-  oldestAccessed?: number;
-  newestAccessed?: number;
-  ageBuckets: Array<{ fromDays: number; toDays?: number; entries: number; bytes: number }>;
-}
-
-/** The cache view: what this project leaves behind, then what the machine shares. */
-export function buildCacheTree(input: CacheTreeInput): TreeNode[] {
-  const nodes: TreeNode[] = [];
-
-  nodes.push({
-    id: "cache.project",
-    label: plain("Project artifacts"),
-    description: { key: "{0}", args: [input.projectRoot ?? "target/"] },
-    icon: "file-directory",
-    contextValue: "mcppCacheProject",
-    children: projectArtifactChildren(input),
-  });
-
-  if (input.inventory !== undefined) {
-    nodes.push({
-      id: "cache.global",
-      label: plain("Global build cache"),
-      description: { key: "{0} · {1}", args: [formatBytes(input.inventory.totalBytes), formatCount(input.inventory.totalEntries)] },
-      icon: "database",
-      contextValue: "mcppCacheGlobal",
-      tooltip: { key: "{0}", args: [input.inventory.root] },
-      children: globalCacheChildren(input.inventory),
-    });
-  } else {
-    nodes.push({
-      id: "cache.global.unknown",
-      label: plain("Global build cache"),
-      description: input.error === undefined ? plain("not read yet") : { key: "{0}", args: [input.error] },
-      icon: input.error === undefined ? "database" : "warning",
-      contextValue: "mcppCacheGlobalUnknown",
-      command: { command: "mcpp.refreshCacheStats", title: plain("Refresh cache statistics") },
-    });
-  }
-
-  if (input.legacyBytes !== undefined && input.legacyBytes > 0) {
-    nodes.push({
-      id: "cache.legacy",
-      label: plain("Pre-v1 cache"),
-      description: { key: "{0}", args: [formatBytes(input.legacyBytes)] },
-      icon: "archive",
-      contextValue: "mcppCacheLegacy",
-      command: { command: "mcpp.cleanLegacyCache", title: plain("Remove the pre-v1 cache") },
-    });
-  }
-
-  return nodes;
-}
-
-function projectArtifactChildren(input: CacheTreeInput): TreeNode[] {
-  const estimate = input.artifacts;
-  if (estimate === undefined) {
-    return [
-      {
-        id: "cache.project.unread",
-        label: plain("Not measured yet"),
-        icon: "info",
-        command: { command: "mcpp.refreshCacheStats", title: plain("Refresh cache statistics") },
-      },
-    ];
-  }
-  if (!estimate.exists) {
-    return [{ id: "cache.project.absent", label: plain("No target/ directory"), icon: "info" }];
-  }
-  const children: TreeNode[] = [
-    {
-      id: "cache.project.size",
-      label: plain("Estimated size"),
-      description: {
-        key: "{0} · {1} file(s)",
-        args: [formatBytes(estimate.totalBytes), formatCount(estimate.files)],
-      },
-      icon: "graph",
-      tooltip: plain("An estimate: mcpp does not publish the layout of target/, so this is measured from the file system."),
-    },
-    {
-      id: "cache.project.groups",
-      label: plain("Build directories"),
-      description: { key: "{0}", args: [estimate.groups] },
-      icon: "file-submodule",
-    },
-    {
-      id: "cache.project.stale",
-      label: plain("Stale artifacts"),
-      description: plain("Removed by mcpp clean --stale"),
-      icon: "history",
-      contextValue: "mcppCacheStale",
-      command: { command: "mcpp.cleanStaleArtifacts", title: plain("Clean stale artifacts") },
-    },
-    {
-      id: "cache.project.clean",
-      label: plain("Clean project artifacts"),
-      icon: "trash",
-      command: { command: "mcpp.cleanProjectArtifacts", title: plain("Clean project artifacts") },
-    },
-  ];
-  if (estimate.truncated !== undefined) {
-    children.push({
-      id: "cache.project.truncated",
-      label: plain("The measurement stopped early; the figure is a lower bound"),
-      icon: "warning",
-    });
-  }
-  return children;
-}
-
-function globalCacheChildren(inventory: CacheInventorySummary): TreeNode[] {
-  const children: TreeNode[] = [
-    ...inventory.byKind.map((entry): TreeNode => ({
-      id: `cache.kind.${entry.kind}`,
-      label: { key: "{0}", args: [entry.kind] },
-      description: { key: "{0} · {1}", args: [formatBytes(entry.bytes), formatCount(entry.entries)] },
-      icon: entry.kind === "std" ? "library" : "package",
-    })),
-    {
-      id: "cache.age",
-      label: plain("By last use"),
-      icon: "clock",
-      children: inventory.ageBuckets.map((bucket, index): TreeNode => ({
-        id: `cache.age.${index}`,
-        label:
-          bucket.toDays === undefined
-            ? { key: "more than {0} day(s) ago", args: [bucket.fromDays] }
-            : { key: "{0}–{1} day(s) ago", args: [bucket.fromDays, bucket.toDays] },
-        description: { key: "{0} · {1}", args: [formatBytes(bucket.bytes), formatCount(bucket.entries)] },
-        icon: index === inventory.ageBuckets.length - 1 ? "warning" : "history",
-      })),
-    },
-    ...(inventory.topLabels.length === 0
-      ? []
-      : [
-          {
-            id: "cache.top",
-            label: plain("Largest packages"),
-            icon: "list-ordered",
-            children: inventory.topLabels.map((entry): TreeNode => ({
-              id: `cache.top.${entry.label}`,
-              label: { key: "{0}", args: [entry.label] },
-              description: { key: "{0} · {1}", args: [formatBytes(entry.bytes), formatCount(entry.entries)] },
-              icon: "package",
-              contextValue: "mcppCachePackage",
-              command: {
-                command: "mcpp.showCacheEntry",
-                title: plain("Show cache entry details"),
-                arguments: [entry.label],
-              },
-            })),
-          },
-        ]),
-  ];
-
-  if (inventory.incomplete > 0) {
-    children.push({
-      id: "cache.incomplete",
-      label: plain("Incomplete entries"),
-      description: { key: "{0}", args: [formatCount(inventory.incomplete)] },
-      icon: "warning",
-      contextValue: "mcppCacheIncomplete",
-      command: { command: "mcpp.verifyGlobalCache", title: plain("Verify the cache") },
-    });
-  }
-
-  children.push(
-    {
-      id: "cache.action.refresh",
-      label: plain("Refresh statistics"),
-      icon: "refresh",
-      command: { command: "mcpp.refreshCacheStats", title: plain("Refresh cache statistics") },
-    },
-    {
-      id: "cache.action.panel",
-      label: plain("Open the cache panel"),
-      icon: "graph",
-      command: { command: "mcpp.cache.focus", title: plain("Cache statistics") },
-    },
-    {
-      id: "cache.action.gc",
-      label: plain("Collect to a budget"),
-      icon: "history",
-      command: { command: "mcpp.gcGlobalCache", title: plain("Collect the global cache") },
-    },
-    {
-      id: "cache.action.prune",
-      label: plain("Drop entries unused for a while"),
-      icon: "clock",
-      command: { command: "mcpp.pruneGlobalCache", title: plain("Prune the global cache") },
-    },
-    {
-      id: "cache.action.verify",
-      label: plain("Verify the cache"),
-      icon: "check",
-      command: { command: "mcpp.verifyGlobalCache", title: plain("Verify the cache") },
-    },
-  );
-  return children;
 }

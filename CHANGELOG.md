@@ -91,6 +91,31 @@ traced to its cause rather than to its symptom.
   dead button. The click now writes a `pending` line immediately, and the host answers with
   either the result, or the URL on the clipboard plus a note in the output channel.
 
+### Security & platform (found in external review)
+
+- **The workspace-trust boundary is closed again.** Three mcpp calls the new library
+  views had added (`xpkg parse` on the detail page, `mcpp search` behind the
+  cross-registry switch, the self-check's protocol probe) ran without checking trust,
+  and `mcpp.path` is a `resource`-scoped setting — so a repository could name any
+  program and have it run in a workspace the user had explicitly marked untrusted.
+  `mcpp.path` and `mcpp.clangd.path` are now `restrictedConfigurations`, every
+  non-controller call goes through a trust-gated seam (`runMcpp`), and an
+  architecture test keeps new call sites from bypassing it. Untrusted workspaces
+  degrade in place: the detail page falls back to the descriptor's own text, the
+  search keeps its local results, the self-check says it did not probe.
+- **Windows: arguments are quoted on the `.cmd`/`.bat` path.** Node joins shell
+  arguments without quoting, so an index path containing a space split in two and a
+  search term like `foo & calc` became two commands. Arguments now follow the
+  `CommandLineToArgvW` quoting rules.
+- **One render seam for all four webviews** (`WebviewDocument`): a per-view CSP nonce
+  and an assign-only-on-change rule, with gates holding every host to it. The cache
+  view was the real winner: a refresh that changes nothing no longer reloads the
+  page, so the budget input and the scroll position survive.
+- **The release pipeline publishes to two markets.** A version tag tests, packages one
+  VSIX, publishes it to GitHub Releases and Open VSX (required), and to the
+  Visual Studio Marketplace when its token is configured (skipped with a notice
+  otherwise) — always the same artifact the Release carries.
+
 > From 0.5.0 on, entries are written in English. Earlier entries remain as they
 > were written.
 
@@ -159,10 +184,26 @@ test or a generated snapshot rather than by a comment.
 
 ### Migration
 
-Nothing has to be changed by hand. Every 0.4.x command id and setting key still
-works: the old language-service ids forward to the new ones, `mcpp.clean` is an
-alias of `mcpp.cleanProjectArtifacts`, and `mcpp.tomlCompletion` is read as
-`mcpp.toml.completion` with a one-time offer to move the value.
+Nothing has to be changed by hand: every 0.4.x command id and setting key below still
+works, a keybinding that names an old id keeps firing, and the old setting key is read
+as an alias. A one-time prompt offers to move renamed setting values to their new
+names (dismiss it and it comes back next session; the old key is never deleted without
+your say-so).
+
+| 0.4.x | Now |
+| --- | --- |
+| `mcpp.tomlCompletion` (setting) | `mcpp.toml.completion` |
+| `mcpp.configureLanguageServer` | `mcpp.languageServer.selectContext` |
+| `mcpp.configureClangd` | `mcpp.languageServer.selectContext` |
+| `mcpp.refreshCompilationDatabase` | runs `mcpp build` (which refreshes the database) |
+| `mcpp.checkModuleSupport` | `mcpp.languageServer.restartServer` |
+| `mcpp.showModuleGraph` | `mcpp.languageServer.showModuleGraph` |
+| `mcpp.showLanguageServerLogs` | `mcpp.languageServer.showLogs` |
+| `mcpp.clean` | alias of `mcpp.cleanProjectArtifacts` |
+
+Removed outright in 0.6.0: `mcpp.showCachePanel` (the cache view is now in the sidebar
+— `mcpp.cache.focus` brings it up) and the standalone C++ Modules view (its state and
+actions live in 工程 → 基本信息 and the status bar menu).
 
 ## 0.3.1 - 2026-08-11
 

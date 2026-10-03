@@ -44,7 +44,6 @@ import {
   refreshTimerDecision,
   type CacheSnapshot,
 } from "./cacheState";
-import type { CacheTreeInput } from "../views/models";
 import {
   CACHE_VIEW_ID,
   CACHE_VIEW_FOCUS_COMMAND,
@@ -700,11 +699,6 @@ function setLastCacheSnapshot(snapshot: CacheSnapshot | undefined): void {
   lastSnapshot = snapshot === undefined ? undefined : { snapshot, at: Date.now() };
 }
 
-/** The snapshot the cache view last produced, without running anything. */
-export function lastCacheSnapshot(): CacheSnapshot | undefined {
-  return lastSnapshot?.snapshot;
-}
-
 /** The configured `mcpp.path`, or `mcpp` — the same rule the CLI controller uses. */
 function snapshotExecutable(): string {
   const configured = vscode.workspace.getConfiguration("mcpp").get<string>("path", "");
@@ -766,36 +760,3 @@ export async function readCacheSnapshotNow(): Promise<CacheSnapshot | undefined>
   }
 }
 
-/** The panel's text form; kept for callers that want the figures as Markdown. */
-export function cacheSummaryText(input: CacheTreeInput): string {
-  const lines: string[] = [];
-  const artifacts = input.artifacts;
-  lines.push(`## ${t("Project artifacts")}`);
-  if (artifacts === undefined) {
-    lines.push(`- ${t("Not measured yet")}`);
-  } else if (!artifacts.exists) {
-    lines.push(`- ${t("No target/ directory")}`);
-  } else {
-    lines.push(`- ${t("Estimated size")}: ${artifacts.totalBytes} B · ${artifacts.files} file(s) · ${artifacts.groups} group(s)`);
-  }
-  const inventory = input.inventory;
-  lines.push("");
-  lines.push(`## ${t("Global build cache")}`);
-  if (inventory === undefined) {
-    lines.push(`- ${input.error ?? t("not read yet")}`);
-  } else {
-    lines.push(`- ${inventory.totalEntries} entries · ${inventory.totalBytes} B`);
-    for (const kind of inventory.byKind) {
-      lines.push(`- ${kind.kind}: ${kind.entries} · ${kind.bytes} B`);
-    }
-    if (inventory.incomplete > 0) {
-      lines.push(`- ${t("Incomplete entries")}: ${inventory.incomplete}`);
-    }
-    lines.push("");
-    lines.push(`### ${t("Largest packages")}`);
-    for (const entry of inventory.topLabels) {
-      lines.push(`- ${entry.label}: ${entry.bytes} B · ${entry.entries}`);
-    }
-  }
-  return lines.join("\n");
-}

@@ -33,6 +33,7 @@ import {
   codeSnippets,
   descriptorDependencies,
   installedFor,
+  lockPackageVersions,
   mergeSurfaces,
   parseXpkgJson,
   platformKey,
@@ -314,7 +315,14 @@ async function buildModel(session: DetailSession, id: string): Promise<DetailMod
   const realUsage = usageLinesFor(exampleFiles, entry.id);
   const usage = realUsage.length > 0 ? realUsage : syntheticUsageLines(mergeSurfaces(info, text), entry.id);
 
-  const dependencies = descriptorDependencies(text).map((dependency) => ({ ...dependency }));
+  // The lock answers what a build actually resolved for each declared edge —
+  // the same matching rule `installedFor` uses for this package itself.
+  const lock = lockPackageVersions(readInstalledLock(session));
+  const dependencies = descriptorDependencies(text).map((dependency) => {
+    const short = dependency.id.slice(dependency.id.lastIndexOf(".") + 1);
+    const resolved = lock.find((entry) => entry.id === dependency.id || entry.id === short)?.version;
+    return resolved === undefined ? { ...dependency } : { ...dependency, resolved };
+  });
   const model: DetailModel = {
     ui,
     id: entry.id,
@@ -442,6 +450,12 @@ function readTextTolerantly(file: string): string {
   }
 }
 
+/** The workspace's `mcpp.lock` text, empty when there is none to read. */
+function readInstalledLock(session: DetailSession): string {
+  const root = session.deps.projectRoot();
+  return root === undefined ? "" : readTextTolerantly(path.join(root, "mcpp.lock"));
+}
+
 /** Every visible string, resolved once per model. */
 function labels(): Record<string, string> {
   return {
@@ -466,7 +480,6 @@ function labels(): Record<string, string> {
       "What the descriptor declares. The resolved version lives in a project's mcpp.lock, not here.",
     ),
     [DETAIL_UI.resolved]: t("resolved {0}"),
-    [DETAIL_UI.dev]: t("dev"),
     [DETAIL_UI.code]: t("Example code"),
     [DETAIL_UI.codeNone]: t("This package has no test project in the index, so there is no example to show."),
     [DETAIL_UI.codeSource]: t("{0} · line {1}"),

@@ -37,9 +37,7 @@ export interface DetailVersionGroup {
 export interface DetailDependency {
   id: string;
   version?: string;
-  /** Declared under `[dev-dependencies]`. */
-  dev?: boolean;
-  /** The resolved (`mcpp.lock`) version, when a caller could supply one. */
+  /** The version the project's `mcpp.lock` resolved, when it is known. */
   resolved?: string;
 }
 
@@ -142,7 +140,6 @@ export const DETAIL_UI = {
   dependenciesNone: "detail.dependencies.none",
   dependenciesHint: "detail.dependencies.hint",
   resolved: "detail.resolved",
-  dev: "detail.dev",
   code: "detail.code",
   codeNone: "detail.code.none",
   codeSource: "detail.code.source",
@@ -311,9 +308,6 @@ function renderDependencies(model: DetailModel, label: UiLabel): string {
   }
   const rows = model.dependencies.map((dependency) => {
     const parts = [dependency.version ?? ""];
-    if (dependency.dev === true) {
-      parts.push(label(DETAIL_UI.dev));
-    }
     if (dependency.resolved !== undefined) {
       parts.push(fill(label, DETAIL_UI.resolved, [dependency.resolved]));
     }

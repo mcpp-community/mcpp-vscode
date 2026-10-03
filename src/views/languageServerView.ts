@@ -343,19 +343,3 @@ export function registerLanguageServerCommands(
   };
 }
 
-/**
- * Compatibility shim, rewritten 0.5.0: the standalone view is gone.
- *
- * Kept only so `extension.ts` compiles while it still calls the old name; the
- * return value must be handed to `registerProjectView` or the folded block never
- * renders. Delete this once `extension.ts` calls
- * {@link registerLanguageServerCommands} directly.
- *
- * @deprecated Use {@link registerLanguageServerCommands}.
- */
-export function registerLanguageServerView(
-  context: vscode.ExtensionContext,
-  deps: LanguageServerViewDeps,
-): LanguageServerBlockSource {
-  return registerLanguageServerCommands(context, deps);
-}

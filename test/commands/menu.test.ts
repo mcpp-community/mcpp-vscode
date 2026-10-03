@@ -115,23 +115,43 @@ test("every row has a generated coloured icon for both themes", () => {
 test("a row and its project-view twin agree on icon and colour", () => {
   // The same command shown twice must look the same twice. The tree names a
   // theme token and the menu names a palette word, which is exactly the kind of
-  // pair that drifts; `charts.<word>` is the join between them.
+  // pair that drifts; `charts.<word>` is the join between them. Two facts keep
+  // the scan honest: the walk is **recursive** (the language-service actions
+  // sit two levels down inside 基本信息 — a one-level scan is how the
+  // export-bundle row drifted to two different icons), and the icon is compared
+  // for every twin while the colour is compared only where the tree row has
+  // one (the language-service rows are deliberately mono).
+  const flatten = (nodes: readonly unknown[]): Array<{ command?: { command?: string }; icon?: string; iconColor?: string }> => {
+    const out: Array<{ command?: { command?: string }; icon?: string; iconColor?: string }> = [];
+    for (const node of nodes as Array<{ command?: { command?: string }; icon?: string; iconColor?: string; children?: unknown[] }>) {
+      out.push(node);
+      if (Array.isArray(node.children)) {
+        out.push(...flatten(node.children));
+      }
+    }
+    return out;
+  };
   const tree = buildProjectTree({ root: "/w", name: "greeter", version: "0.1.0" });
   const twins = new Map(
-    tree
-      .flatMap((section) => section.children ?? [])
-      .filter((node) => node.command !== undefined)
+    flatten(tree)
+      .filter((node) => node.command?.command !== undefined)
       .map((node) => [node.command?.command ?? "", node] as const),
   );
   let compared = 0;
+  let coloured = 0;
   for (const item of quickMenuItems) {
     const twin = twins.get(item.command);
-    if (twin === undefined || twin.iconColor === undefined) {
+    if (twin === undefined || twin.icon === undefined) {
       continue;
     }
     assert.equal(item.icon, twin.icon, `${item.command} uses a different icon in the two places`);
-    assert.equal(`charts.${item.iconColor}`, twin.iconColor, `${item.command} uses a different colour`);
     compared += 1;
+    if (twin.iconColor === undefined) {
+      continue;
+    }
+    assert.equal(`charts.${item.iconColor}`, twin.iconColor, `${item.command} uses a different colour`);
+    coloured += 1;
   }
-  assert.equal(compared, 7, "the shared commands must all be compared; did the tree or the menu change shape?");
+  assert.equal(coloured, 7, "the colour-compared commands must all be compared; did the tree or the menu change shape?");
+  assert.ok(compared > coloured, "the mono language-service twins must be compared on their icons too");
 });

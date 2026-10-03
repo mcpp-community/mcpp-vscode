@@ -141,8 +141,6 @@ async function handle(active: PanelSession, raw: unknown): Promise<void> {
   }
   try {
     switch (message.type) {
-      case "ready":
-        break;
       case "update":
         await applyUpdate(active, message.key, message.value, message.target);
         break;

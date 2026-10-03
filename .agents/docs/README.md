@@ -8,7 +8,7 @@
 | [`architecture.md`](architecture.md) | mcpp-vscode 的分层结构、模块职责与扩展点 | 现状 |
 | [`mcpp-integration.md`](mcpp-integration.md) | 与 `mcpp-community/mcpp`（mcpp CLI）的接口契约 | 现状 |
 | [`mcppls-integration.md`](mcppls-integration.md) | 与 `sunrisepeak.mcpp-language-server`（mcppls）的依赖与命令桥接契约 | 现状 |
-| [`2026-10-02-plugin-optimisation-plan.md`](2026-10-02-plugin-optimisation-plan.md) | 插件优化方案 **v4**：目录树与 README、mcppls 依赖韧性、稳定基座、`mcpp.toml` 与 `build.mcpp` 编辑体验、缓存统计与两级清理、配色与可视化、i18n、统一配置模块与配置面板、**mcppls 状态与管理（§3.9）** | **待评审** |
+
 
 边界：
 
@@ -18,3 +18,15 @@
 - `.agents/reviews/` = **分析与评审记录**，已加入 `.gitignore`，不进入版本库。
 
 背景分析见 `.agents/reviews/2026-10-02-mcpp-vscode-architecture-and-mcppls-dependency-review.md`。
+
+## archive/
+
+`archive/` 存放**已按其执行完毕**的方案文档（round 制的评审与决定记录），按日期命名。
+当前实现与其偏差以代码与 CHANGELOG 为准：
+
+| 文档 | 内容 |
+| --- | --- |
+| [`archive/2026-10-02-implementation-plan.md`](archive/2026-10-02-implementation-plan.md) | 0.5.0 基座实施（纯模块、注册表、门禁） |
+| [`archive/2026-10-02-plugin-optimisation-plan.md`](archive/2026-10-02-plugin-optimisation-plan.md) | 插件优化方案 v4（侧边栏、编辑体验、缓存、i18n、配置面板） |
+| [`archive/2026-10-02-ui-ux-optimisation-plan.md`](archive/2026-10-02-ui-ux-optimisation-plan.md) | 0.6.0 UI/UX 方案与 23 轮作者反馈记录 |
+| [`archive/2026-10-03-repo-engineering-plan.md`](archive/2026-10-03-repo-engineering-plan.md) | 仓库工程化（双市场发布、WebviewDocument、目录收敛） |

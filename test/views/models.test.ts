@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { format } from "../../src/i18n/translate";
-import { buildCacheTree, buildProjectTree, type Label, type TreeNode } from "../../src/views/models";
+import { buildProjectTree, type Label, type TreeNode } from "../../src/views/models";
 
 function ids(nodes: readonly TreeNode[]): string[] {
   return nodes.map((node) => node.id);
@@ -96,72 +96,4 @@ test("a project with no declared dependency has no dependency group", () => {
     find(buildProjectTree({ root: "/w", dependencies: [] }), "project.dependencies"),
     undefined,
   );
-});
-
-test("the cache tree separates project artifacts from the shared cache", () => {
-  const tree = buildCacheTree({ projectRoot: "/w/target" });
-  assert.deepEqual(ids(tree), ["cache.project", "cache.global.unknown"]);
-  assert.equal(find(tree, "cache.project")?.contextValue, "mcppCacheProject");
-  assert.equal(find(tree, "cache.global.unknown")?.command?.command, "mcpp.refreshCacheStats");
-});
-
-test("an unmeasured target/ offers to measure rather than showing a zero", () => {
-  const tree = buildCacheTree({});
-  assert.equal(find(tree, "cache.project.unread")?.command?.command, "mcpp.refreshCacheStats");
-});
-
-test("a missing target/ is stated, not shown as 0 bytes", () => {
-  const tree = buildCacheTree({ artifacts: { exists: false, totalBytes: 0, files: 0, groups: 0 } });
-  assert.equal(find(tree, "cache.project.absent")?.label.key, "No target/ directory");
-});
-
-test("a truncated estimate is labelled a lower bound", () => {
-  const tree = buildCacheTree({
-    artifacts: { exists: true, totalBytes: 1024, files: 3, groups: 2, truncated: "entries" },
-  });
-  assert.ok(find(tree, "cache.project.truncated"));
-  assert.equal(find(tree, "cache.project.stale")?.command?.command, "mcpp.cleanStaleArtifacts");
-});
-
-test("the global cache shows kinds, ages, the largest packages and the actions", () => {
-  const tree = buildCacheTree({
-    inventory: {
-      root: "/home/u/.mcpp/build-cache/v1",
-      totalBytes: 7_736_306_884,
-      totalEntries: 657,
-      byKind: [
-        { kind: "pkg", entries: 576, bytes: 7_000_000_000 },
-        { kind: "std", entries: 81, bytes: 736_306_884 },
-      ],
-      topLabels: [{ label: "ns/name@1.0.0", entries: 5, bytes: 1_200_000_000 }],
-      incomplete: 2,
-      ageBuckets: [
-        { fromDays: 0, toDays: 1, entries: 1, bytes: 10 },
-        { fromDays: 30, entries: 2, bytes: 20 },
-      ],
-    },
-  });
-  assert.equal(find(tree, "cache.kind.pkg")?.description?.args?.[1], "576");
-  assert.equal(find(tree, "cache.kind.std")?.icon, "library");
-  assert.equal(find(tree, "cache.age.1")?.label.key, "more than {0} day(s) ago");
-  assert.equal(find(tree, "cache.top.ns/name@1.0.0")?.command?.command, "mcpp.showCacheEntry");
-  assert.deepEqual(find(tree, "cache.top.ns/name@1.0.0")?.command?.arguments, ["ns/name@1.0.0"]);
-  assert.ok(find(tree, "cache.incomplete"));
-  for (const id of ["cache.action.refresh", "cache.action.panel", "cache.action.gc", "cache.action.prune", "cache.action.verify"]) {
-    assert.ok(find(tree, id), id);
-  }
-});
-
-test("an empty cache has no largest-packages node", () => {
-  const tree = buildCacheTree({
-    inventory: { root: "/c", totalBytes: 0, totalEntries: 0, byKind: [], topLabels: [], incomplete: 0, ageBuckets: [] },
-  });
-  assert.equal(find(tree, "cache.top"), undefined);
-  assert.equal(find(tree, "cache.incomplete"), undefined);
-});
-
-test("a pre-v1 cache is offered for removal only when it exists", () => {
-  assert.equal(find(buildCacheTree({ legacyBytes: 0 }), "cache.legacy"), undefined);
-  const tree = buildCacheTree({ legacyBytes: 175_000_000 });
-  assert.equal(find(tree, "cache.legacy")?.command?.command, "mcpp.cleanLegacyCache");
 });

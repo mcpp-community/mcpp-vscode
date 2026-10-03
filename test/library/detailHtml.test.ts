@@ -35,7 +35,6 @@ const UI: Record<string, string> = {
   [DETAIL_UI.dependenciesNone]: "This descriptor declares no dependencies.",
   [DETAIL_UI.dependenciesHint]: "What the descriptor declares.",
   [DETAIL_UI.resolved]: "resolved {0}",
-  [DETAIL_UI.dev]: "dev",
   [DETAIL_UI.code]: "Example code",
   [DETAIL_UI.codeNone]: "This package has no test project in the index.",
   [DETAIL_UI.codeSource]: "{0} · line {1}",
@@ -200,10 +199,10 @@ test("dependencies are listed as declared, and the resolved column is left out w
   assert.match(html, /<code>compat\.vulkan<\/code> — 1\.4\.357\.3/);
   assert.match(html, /What the descriptor declares\./);
   const resolved = renderDetailHtml(
-    model({ dependencies: [{ id: "compat.zlib", version: "1.3", dev: true, resolved: "1.2.13" }] }),
+    model({ dependencies: [{ id: "compat.zlib", version: "1.3", resolved: "1.2.13" }] }),
     ASSETS,
   );
-  assert.match(resolved, /<code>compat\.zlib<\/code> — 1\.3 · dev · resolved 1\.2\.13/);
+  assert.match(resolved, /<code>compat\.zlib<\/code> — 1\.3 · resolved 1\.2\.13/);
   const none = renderDetailHtml(model({ dependencies: [] }), ASSETS);
   assert.match(none, /This descriptor declares no dependencies\./);
 });

@@ -10,7 +10,7 @@ import { SETTINGS } from "../../src/config/registry";
  *
  * A setting that nothing reads is worse than no setting: it is offered in the
  * Settings UI, it is documented, and it does nothing. The audit in
- * `.agents/docs/2026-10-02-implementation-plan.md` §8 found thirteen such gaps,
+ * `.agents/docs/archive/2026-10-02-implementation-plan.md` §8 found thirteen such gaps,
  * so this gate makes the rule executable — a new registry entry that no module
  * reads fails the build.
  *
