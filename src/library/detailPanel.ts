@@ -312,7 +312,7 @@ async function buildModel(session: DetailSession, id: string): Promise<DetailMod
   // §22: the example project's real `import`/`#include` lines when it states
   // them, else the honest synthetic form for the surface the parse resolved.
   const realUsage = usageLinesFor(exampleFiles, entry.id);
-  const usage = realUsage.length > 0 ? realUsage : syntheticUsageLines(mergeSurfaces(info, text), entry.name);
+  const usage = realUsage.length > 0 ? realUsage : syntheticUsageLines(mergeSurfaces(info, text), entry.id);
 
   const dependencies = descriptorDependencies(text).map((dependency) => ({ ...dependency }));
   const model: DetailModel = {

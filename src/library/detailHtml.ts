@@ -407,7 +407,7 @@ function renderActions(model: DetailModel, label: UiLabel): string {
   return [
     `<section class="detail-primary" data-section="add">`,
     `  <div class="detail-actions">`,
-    `    <button type="button" id="detail-add" class="detail-add"${flag("disabled", disabled || alreadyInstalled)}>${escapeHtml(addLabel)}</button>`,
+    `    <button type="button" id="detail-add" class="detail-add"${flag("disabled", disabled || alreadyInstalled)}${flag("data-installed", alreadyInstalled)}>${escapeHtml(addLabel)}</button>`,
     `    <label class="detail-toggle"><input id="detail-dev" type="checkbox"><span>${escapeHtml(label(DETAIL_UI.addDev))}</span></label>`,
     ...(model.repo === undefined ? [] : [link(model.repo, label(DETAIL_UI.openRepo))]),
     ...(model.indexUrl === undefined ? [] : [link(model.indexUrl, label(DETAIL_UI.indexLink))]),
@@ -472,24 +472,29 @@ function clientScript(initialModel: string): string {
   /**
    * The button's label and enabled state follow the selection: adding a new
    * package, switching the version of one that is already there, or nothing to do
-   * because this is the version the manifest already asks for.
+   * because this is the version the manifest already asks for. The inert state
+   * carries the data-installed attribute, which is what paints it the thinned
+   * green of a thing already done.
    */
   function updateButton() {
     if (!addButton) { return; }
     if (!version) {
       addButton.textContent = labels.add || "";
       addButton.disabled = true;
+      addButton.removeAttribute("data-installed");
       return;
     }
     if (installed && version === installed) {
       addButton.textContent = labels.alreadyAdded || "";
       addButton.disabled = true;
+      addButton.setAttribute("data-installed", "");
       return;
     }
     addButton.textContent = installed
       ? (labels.switchTo || "{0}").split("{0}").join(version)
       : (labels.add || "");
     addButton.disabled = false;
+    addButton.removeAttribute("data-installed");
   }
 
   /** One version button is the selection; the rest are alternatives. */

@@ -437,14 +437,17 @@ test("usageLinesFor keeps only the lines that name this package", () => {
 });
 
 test("syntheticUsageLines: the module form names the package, the header form stays a placeholder", () => {
-  // Measured in a real project: `openkal = "0.12.0"` in the manifest,
-  // `import openkal.types;` in the sources — the short name is the import root.
-  assert.deepEqual(syntheticUsageLines(["module"], "openkal"), ["import openkal;"]);
-  assert.deepEqual(syntheticUsageLines(["module", "tool"], "cmdline"), ["import cmdline;"]);
+  // The module name is the dotted id — nlohmann.json's descriptor says so in
+  // as many words ("exposed as the C++23 module nlohmann.json") — except the
+  // default mcpplibs namespace, whose packages export their short name:
+  // measured in a real project (import openkal.types;) and in cmdline.
+  assert.deepEqual(syntheticUsageLines(["module"], "nlohmann.json"), ["import nlohmann.json;"]);
+  assert.deepEqual(syntheticUsageLines(["module"], "mcpplibs.openkal"), ["import openkal;"]);
+  assert.deepEqual(syntheticUsageLines(["module", "tool"], "mcpplibs.cmdline"), ["import cmdline;"]);
   // A header package's real path lives in the upstream archive and cannot be
   // known offline, so the index site's own placeholder answers, not an
   // invented path.
-  assert.deepEqual(syntheticUsageLines(["header"], "argparse"), ["#include <foo.h>"]);
+  assert.deepEqual(syntheticUsageLines(["header"], "compat.argparse"), ["#include <foo.h>"]);
   assert.deepEqual(syntheticUsageLines(["tool"], "flex"), []);
   assert.deepEqual(syntheticUsageLines(["external"], "ut"), []);
 });

@@ -1012,17 +1012,21 @@ export function usageLinesFor(files: readonly CodeFile[], id: string): string[] 
 /**
  * The usage lines to show when no example project states the real ones (§22).
  *
- * A module package is imported by its short name — measured in a real project:
- * `openkal = "0.12.0"` in the manifest, `import openkal.types;` in the
- * sources — so `import <name>;` is the honest root form. A header package's
- * real path lives inside the upstream archive and is unknowable offline, so
- * the index site's own muted placeholder answers (`#include <foo.h>`) rather
- * than an invented path. `tool` and `external` packages are not imported at
- * all; their surface badge already says what they are.
+ * The module name follows the **dotted id** — `import nlohmann.json;`, in that
+ * descriptor's own words (`export module nlohmann.json;`) — except the default
+ * `mcpplibs.` namespace, whose packages export their short name: measured in a
+ * real project (`openkal = "0.12.0"` in the manifest, `import openkal.types;`
+ * in the sources) and in the cmdline descriptor. A header package's real path
+ * lives inside the upstream archive and is unknowable offline, so the index
+ * site's own muted placeholder answers (`#include <foo.h>`) rather than an
+ * invented path. `tool` and `external` packages are not imported at all; their
+ * surface badge already says what they are.
  */
-export function syntheticUsageLines(surfaces: readonly Surface[], name: string): string[] {
+export function syntheticUsageLines(surfaces: readonly Surface[], id: string): string[] {
   if (surfaces.includes("module")) {
-    return [`import ${name};`];
+    const short = id.slice(id.lastIndexOf(".") + 1);
+    const moduleName = id.startsWith("mcpplibs.") ? short : id;
+    return [`import ${moduleName};`];
   }
   if (surfaces.includes("header")) {
     return [SURFACE_TEXT.header.usage];

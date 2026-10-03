@@ -519,6 +519,24 @@ pre.detail-code code {
   background-color: var(--vscode-button-secondaryBackground, transparent);
 }
 
+/* "Already added" is success, not a call to action: the theme's pass colour,
+   thinned until it reads inert — disabled stays disabled, the hue tells the
+   reader the outcome is the good one (§22.5). */
+.detail-actions button.detail-add[data-installed],
+.detail-actions button.detail-add[data-installed]:hover {
+  color: var(--vscode-button-foreground);
+  background-color: color-mix(
+    in srgb,
+    var(--vscode-testing-iconPassed, var(--vscode-button-background)) 55%,
+    transparent
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--vscode-testing-iconPassed, var(--vscode-contrastBorder, transparent)) 70%,
+    transparent
+  );
+}
+
 .detail-toggle {
   display: flex;
   align-items: center;
@@ -528,25 +546,37 @@ pre.detail-code code {
   cursor: pointer;
 }
 
+/* The command and each usage line are text a reader copies elsewhere, so they
+   read as code blocks — the same recipe the example snippets use — with the
+   copy affordance riding beside them (§22.5). */
 .detail-command-row {
   display: flex;
-  align-items: baseline;
+  align-items: stretch;
   gap: 8px;
+  margin-top: 6px;
 }
 
 .detail-command {
-  margin: 6px 0 0;
+  flex: 1;
+  margin: 0;
+  padding: 8px 10px;
+  overflow-x: auto;
+  background-color: var(--vscode-textCodeBlock-background, transparent);
+  border: 1px solid var(--vscode-panel-border, transparent);
+  border-radius: 3px;
   font-family: var(--vscode-editor-font-family, monospace);
-  font-size: 11px;
-  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  white-space: pre;
+  color: var(--vscode-editorForeground, var(--vscode-foreground));
 }
 
 /* The small affordance beside the command and each usage line: text a reader
    pastes elsewhere, so a click takes it to the clipboard. */
 .detail-copy {
   flex: none;
-  padding: 1px 8px;
-  font-size: 10px;
+  align-self: center;
+  padding: 3px 10px;
+  font-size: 11px;
   color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
   background-color: var(--vscode-button-secondaryBackground, transparent);
   border: 1px solid var(--vscode-contrastBorder, transparent);
@@ -560,14 +590,22 @@ pre.detail-code code {
 
 .detail-usage-line {
   display: flex;
-  align-items: baseline;
+  align-items: stretch;
   gap: 8px;
   margin: 4px 0 0;
 }
 
 .detail-usage-line code {
+  flex: 1;
+  display: block;
+  padding: 6px 10px;
+  overflow-x: auto;
+  background-color: var(--vscode-textCodeBlock-background, transparent);
+  border: 1px solid var(--vscode-panel-border, transparent);
+  border-radius: 3px;
   font-family: var(--vscode-editor-font-family, monospace);
-  font-size: 11px;
+  font-size: 12px;
+  white-space: pre;
   color: var(--vscode-editorForeground, var(--vscode-foreground));
 }
 

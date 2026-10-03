@@ -229,9 +229,13 @@ test("the add button carries the exact command, and is disabled when there is no
 });
 
 test("a package the project already has says so, and the button offers the switch", () => {
-  // Same version as the manifest: nothing to do, and the button says so.
+  // Same version as the manifest: nothing to do, and the button says so — with
+  // `data-installed`, which paints it the thinned green of a done thing.
   const same = renderDetailHtml(model({ installed: { version: "3.2", dev: false } }), ASSETS);
-  assert.match(same, /<button type="button" id="detail-add" class="detail-add" disabled>Already added<\/button>/);
+  assert.match(
+    same,
+    /<button type="button" id="detail-add" class="detail-add" disabled data-installed>Already added<\/button>/,
+  );
   assert.match(same, /data-version="3\.2" data-selected data-installed>3\.2<\/button><span class="detail-installed">added<\/span>/);
 
   // A different version: the button names the switch, and the marker stays on the
@@ -274,6 +278,10 @@ test("the client can re-decide the button, and a link click is never silent", ()
   assert.match(script[1], /function updateButton\(\)/);
   assert.match(script[1], /showResult\(\{ state: "pending"/);
   assert.match(script[1], /updateButton\(\);/);
+  // The inert state is the one that paints green, so the client has to toggle
+  // the attribute exactly when it toggles the disabled state.
+  assert.match(script[1], /setAttribute\("data-installed", ""\)/);
+  assert.match(script[1], /removeAttribute\("data-installed"\)/);
 });
 
 test("the usage lines and the command each carry their own copy button (§22)", () => {

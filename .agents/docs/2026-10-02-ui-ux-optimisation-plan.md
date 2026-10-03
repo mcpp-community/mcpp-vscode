@@ -1427,3 +1427,19 @@ buildscript 6 / projects 3 / util 3 / i18n 2 / commands 2 / workflows 1）+ 根 
 - **需要作者验证**：详情页打开一个 `mcpp.toml` 里已有的包 → 按钮应是 `Already added`
   （禁用）或 `Switch to <ver>`，版本矩阵上那一版带 `added` 字标；命令行与用法行旁的
   **Copy** 应把文本放进剪贴板并有"已复制"回音；`import <name>;` 行出现在命令下方。
+
+### 22.5 round 9 补：作者在 nlohmann.json 上给的 4 条（2026-10-03）
+
+1. **`import json;` 是错的，应为 `import nlohmann.json;`**——合成规则修正：模块名 = **全
+   id**（nlohmann.json 的描述符自己写着 `export module nlohmann.json;`），**唯 `mcpplibs.`
+   默认命名空间**导出短名（实测 openkal/cmdline）。`syntheticUsageLines` 参数从 name 改为
+   id。索引官网的参考（示例工程）在完整索引检出下仍优先于合成行；本机索引没有示例目录，
+   官网按钮（Open on the index site）即人工参考入口。
+2. **命令与用法行要用代码块样式**——复用示例代码块的同一配方
+   （`--vscode-textCodeBlock-background` + 面板边框 + 等宽 + `white-space: pre`），复制按钮
+   骑在块旁边。
+3. **Already added 按钮半透明绿**——`data-installed` 属性（宿主首屏与客户端 `updateButton`
+   同步维护），CSS 用主题的 `--vscode-testing-iconPassed` 经 `color-mix(… 55%, transparent)`
+   调薄：仍是 disabled（不可点），但色相说明结果是好的。
+4. 测试对齐：synthetic 三例改按 id 规则；按钮断言加 `data-installed`；客户端脚本源断言
+   setAttribute/removeAttribute 成对出现。671 测试全绿。
