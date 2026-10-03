@@ -18,7 +18,9 @@
  *   renderer (the pure one) and no client-side model application to keep in
  *   sync. `renderCachePanelHtml` is idempotent, which is what a `WebviewView`
  *   needs: it has no `retainContextWhenHidden`, so hiding the sidebar destroys
- *   the document and showing it renders a new one.
+ *   the document and showing it renders a new one. An unchanged document is
+ *   not re-assigned (`WebviewDocument.paint()`), so a refresh that changes
+ *   nothing keeps the scroll position and the budget input as they are.
  * - **A failure still renders.** When the refresh/read pair rejects, the view
  *   draws an unavailable state with the reason instead of going blank. A global
  *   block that is unavailable is rendered *open*, because a reason hidden behind
@@ -31,18 +33,17 @@
  * modals in `src/views/cacheView.ts`.
  */
 
-import { randomBytes } from "node:crypto";
 import * as vscode from "vscode";
 
 import { read } from "../config/access";
 import { languagePreference, t } from "../i18n/t";
 import { localeFromEditorLanguage } from "../i18n/translate";
 import { formatBytes, formatCount, type NumberFormat } from "../util/format";
+import { WebviewDocument } from "../webview/document";
 import {
   CACHE_PANEL_UI,
   decodeCachePanelMessage,
   renderCachePanelHtml,
-  type CachePanelAssets,
   type CachePanelMessage,
   type CachePanelModel,
 } from "./cachePanelHtml";
@@ -122,6 +123,13 @@ class CacheWebviewViewProvider implements CachePanelProvider {
   private busy = false;
   /** A redraw was asked for while one was running: do exactly one more pass. */
   private again = false;
+  /**
+   * The document on screen and the one CSP nonce it may be built with — the
+   * same kit the library view uses: a nonce per render would make every render
+   * a different document, and an assignment reloads the view (which is what
+   * loses the scroll position and the budget input).
+   */
+  private readonly webviewDocument = new WebviewDocument(STYLESHEET);
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -146,6 +154,9 @@ class CacheWebviewViewProvider implements CachePanelProvider {
    */
   resolveWebviewView(view: vscode.WebviewView): void {
     this.view = view;
+    // A resolved view is a fresh, empty webview, so the document comparison
+    // starts from nothing again.
+    this.webviewDocument.invalidate();
     view.webview.options = {
       enableScripts: true,
       localResourceRoots: [mediaRoot(this.context)],
@@ -153,6 +164,7 @@ class CacheWebviewViewProvider implements CachePanelProvider {
     view.onDidDispose(() => {
       if (this.view === view) {
         this.view = undefined;
+        this.webviewDocument.invalidate();
       }
     });
     view.onDidChangeVisibility(() => {
@@ -226,7 +238,8 @@ class CacheWebviewViewProvider implements CachePanelProvider {
     if (this.view !== view) {
       return;
     }
-    view.webview.html = renderCachePanelHtml(model, assets(this.context, view));
+    const html = renderCachePanelHtml(model, this.webviewDocument.assets(this.context, view.webview));
+    this.webviewDocument.paint(view.webview, html);
   }
 }
 
@@ -377,12 +390,4 @@ function htmlLanguage(): string {
 
 function mediaRoot(context: vscode.ExtensionContext): vscode.Uri {
   return vscode.Uri.joinPath(context.extensionUri, MEDIA_DIRECTORY);
-}
-
-function assets(context: vscode.ExtensionContext, view: vscode.WebviewView): CachePanelAssets {
-  return {
-    cspSource: view.webview.cspSource,
-    nonce: randomBytes(16).toString("base64"),
-    styleUri: view.webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot(context), STYLESHEET)).toString(),
-  };
 }
