@@ -156,12 +156,14 @@
 
 ### D1 现状证据（2026-10-03，逐文件）
 
+> 行号以 88bfc31 为准；落地后 cache 四文件已按 D6-2 移至 `src/cache/`。
+
 | webview 宿主 | nonce | 赋值 | 变化才重绘 | 风险 |
 | --- | --- | --- | --- | --- |
 | `src/library/libraryView.ts`（侧边栏） | **每视图**（:139 `private readonly nonce`） | :373 | **有**（:369 `documentNeedsRender` + `this.document` 缓存，resolve/dispose 双清 :156/:170） | 无——这是已证明的模式 |
 | `src/views/cachePanel.ts`（侧边栏） | **每次渲染**（:385） | :229 无条件 | 无 | 刷新即整页重载：预算输入与滚动位置丢失；若未来客户端加"加载即上报"，就是 library 踩过的死循环（见 D2） |
-| `src/config/panel.ts`（设置面板） | **每次渲染**（:397） | :113 无条件 | 无 | 同上；它监听 `onDidChange`（:85），写设置→事件→重渲染→重载，输入焦点丢失 |
-| `src/library/detailPanel.ts`（详情页） | **每次渲染**（:233） | :231 无条件 | 无（§20 已让 add 成功后不重建，渲染点少） | 最低，但模式不一致 |
+| `src/config/panel.ts`（设置面板） | **每次渲染**（:397） | :113 无条件 | 无 | **实施时修正本表初稿的夸大**：它的 html 每次 open 只赋值一次，配置变化全走 postMessage（`onDidChange` → `postModel`），本来就不会重载——迁移是四个宿主一副骨架的一致性收口，零行为变化 |
+| `src/library/detailPanel.ts`（详情页） | **每次渲染**（:233） | :231 无条件 | 无（§20 已让 add 成功后不重建，渲染点少） | 低；重开同一个包也会因 nonce 变化而无谓重载一次 |
 
 ### D2 库视图已证明的模式（也是这套 API 的出处）
 
@@ -248,7 +250,7 @@ randomNonce();`）——kit 抽取后必然失效，改写为锁**不变量**：
 | 3 | `docs: README 精简 + 相关项目表 + 4 处实错；superpowers 移至 .agents；l10n 两层说明` | 两份 README 同构、无死链；`docs/` 只剩用户文档 |
 | 4 | `refactor(webview): 抽出 WebviewDocument，library 迁移，门禁改写为锁不变量` | 全量单测过；artifacts 新门禁过 |
 | 5 | `fix(cache): 缓存视图换 WebviewDocument——刷新不再整页重载` | D5 行为验收（预算输入/滚动保留）；cacheView 零改动 |
-| 6 | `refactor(config,library): 设置面板与详情页同用 WebviewDocument`（若批准） | 设置面板写设置不重载 |
+| 6 | `refactor(config,library): 设置面板与详情页同用 WebviewDocument`（若批准） | 零行为变化（设置面板本就 postMessage 更新）；全局门禁覆盖四宿主 |
 | 7 | `chore: cache 四文件移入 src/cache/`（若批准） | PURE_MODULES/测试路径/门禁全对齐 |
 
 每个 commit 独立可回滚；全部落地后跑一轮三平台 CI（11 项门禁全绿）再请作者验收。
