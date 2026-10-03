@@ -5,7 +5,7 @@
  * The panel is a **reading aid** for what `mcpp cache list`, `mcpp cache dir`
  * and a bounded walk of `target/` already report: composition, age, the largest
  * labels, an LRU projection for a budget, and the cleanup actions the cache view
- * exposes. `src/views/cachePanelHtml.ts` owns the document; this module owns the
+ * exposes. `src/cache/cachePanelHtml.ts` owns the document; this module owns the
  * data, the messages and the webview's lifetime.
  *
  * Deliberate boundaries:
@@ -30,7 +30,7 @@
  *
  * The confirmation logic does not live here: `run()` is the caller's, and every
  * destructive path still goes through `src/cli/clean.ts`'s plans and the graded
- * modals in `src/views/cacheView.ts`.
+ * modals in `src/cache/cacheView.ts`.
  */
 
 import * as vscode from "vscode";

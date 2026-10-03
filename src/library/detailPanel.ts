@@ -6,7 +6,7 @@
  * `mcpp xpkg parse <descriptor.lua> --json` (see `src/library/xpkg.ts`), on
  * demand, for the one package the reader opened — never once per row.
  *
- * Boundaries, in the same spirit as `src/views/cachePanel.ts`:
+ * Boundaries, in the same spirit as `src/cache/cachePanel.ts`:
  *
  * - **One panel per window.** Opening another package re-renders the existing
  *   panel instead of stacking a second one.

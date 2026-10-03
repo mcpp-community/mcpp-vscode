@@ -38,7 +38,7 @@ import {
   readLanguageServerState,
 } from "../mcppls/stateSource";
 import { PollTimer } from "../mcppls/timers";
-import { refreshTimerDecision } from "./cacheState";
+import { refreshTimerDecision } from "../cache/cacheState";
 import type { LanguageServiceBlock } from "./models";
 import { degradedNoticeEnabled, resetCacheConfirmation } from "./viewPolicy";
 

@@ -35,7 +35,7 @@ import { changedSettings, onDidChange as onConfigurationChanged, read } from "./
 import { applyRenames, pendingRenames, renamePrompt } from "./config/migrate";
 import { registerSettingsPanel } from "./config/panel";
 import { languagePreference, setLanguagePreference, t, type LanguagePreference } from "./i18n/t";
-import { readCacheSnapshot, registerCacheView } from "./views/cacheView";
+import { readCacheSnapshot, registerCacheView } from "./cache/cacheView";
 import { registerLanguageServerCommands } from "./views/languageServerView";
 import { createLibraryDetailOpener } from "./library/detailPanel";
 import { loadSnapshot } from "./library/indexLocator";

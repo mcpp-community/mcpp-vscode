@@ -10,7 +10,7 @@ import {
   renderCachePanelHtml,
   type CachePanelAssets,
   type CachePanelModel,
-} from "../../src/views/cachePanelHtml";
+} from "../../src/cache/cachePanelHtml";
 
 const ASSETS: CachePanelAssets = {
   cspSource: "vscode-webview://cache",

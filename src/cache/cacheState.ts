@@ -10,7 +10,7 @@
  * - the extra confirmation `mcpp.cache.gc.confirmAboveGiB` adds;
  * - the snapshot the environment self-check reads (`showSelfCheck`, §8 G9).
  *
- * `src/views/cacheView.ts` reads the settings and hands the values in; the
+ * `src/cache/cacheView.ts` reads the settings and hands the values in; the
  * `vscode` layer therefore stays thin enough to read in one sitting.
  */
 
@@ -25,7 +25,7 @@ export const BYTES_PER_GIB = 1024 ** 3;
  * a sidebar `WebviewView` since §8.1 and no longer builds a tree, so this node is
  * kept as the policy (§8 G6) that the warning threshold is decided in one pure
  * place — the view states the same threshold in
- * `src/views/cachePanelHtml.ts`'s warning banner.
+ * `src/cache/cachePanelHtml.ts`'s warning banner.
  */
 export interface CacheTreeNode {
   id: string;
@@ -153,7 +153,7 @@ export interface CacheSnapshot {
 
 /**
  * The snapshot from an inventory the caller already read. No query is repeated
- * here; `readCacheSnapshot()` in `src/views/cacheView.ts` is the one that runs
+ * here; `readCacheSnapshot()` in `src/cache/cacheView.ts` is the one that runs
  * them, and it reuses the cache view's own read path.
  */
 export function cacheSnapshotFrom(

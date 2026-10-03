@@ -1,7 +1,7 @@
 /**
  * The cache view's document, as a pure function (plan §8.1).
  *
- * `src/views/cachePanel.ts` resolves the cache inventory into a
+ * `src/cache/cachePanel.ts` resolves the cache inventory into a
  * `CachePanelModel`; this module turns that into one self-contained HTML
  * document. No `vscode`, no file system, no network — which is what makes the
  * interesting parts (escaping, the strict CSP, the proportional bars, the

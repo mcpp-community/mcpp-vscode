@@ -234,7 +234,7 @@ test("every webview host holds its document through the kit", () => {
   // the kit.
   const hosts = [
     "src/library/libraryView.ts",
-    "src/views/cachePanel.ts",
+    "src/cache/cachePanel.ts",
     "src/config/panel.ts",
     "src/library/detailPanel.ts",
   ];

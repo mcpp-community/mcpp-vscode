@@ -11,7 +11,7 @@ import {
   legacyDisplay,
   legacyForPanel,
   refreshTimerDecision,
-} from "../../src/views/cacheState";
+} from "../../src/cache/cacheState";
 
 // ── mcpp.cache.showLegacy ────────────────────────────────────────────────────
 

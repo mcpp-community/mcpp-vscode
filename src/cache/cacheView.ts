@@ -2,8 +2,8 @@
  * The cache view and every cleanup command.
  *
  * The view is a sidebar **WebviewView** (`mcpp.cache`, plan §8.1): the numbers
- * and the bars live in one document whose host is `src/views/cachePanel.ts`, and
- * whose structure is the pure `src/views/cachePanelHtml.ts`. This file owns the
+ * and the bars live in one document whose host is `src/cache/cachePanel.ts`, and
+ * whose structure is the pure `src/cache/cachePanelHtml.ts`. This file owns the
  * data behind it, the status item, the auto-refresh timer and the commands.
  *
  * The *policy* — which argv, how much confirmation, whether a preview is shown —
@@ -17,7 +17,7 @@
  * Four settings shape this file:
  *
  * - `mcpp.cache.showLegacy` decides whether the pre-v1 cache is measured and
- *   offered at all (`src/views/cacheState.ts`, §8 G6);
+ *   offered at all (`src/cache/cacheState.ts`, §8 G6);
  * - `mcpp.cache.warnAboveGiB` adds a warning when the shared cache is large;
  * - `mcpp.cache.autoRefreshSeconds` re-reads while the view is on screen;
  * - `mcpp.cache.gc.confirmAboveGiB` adds one confirmation level to a large `gc`.
@@ -44,7 +44,7 @@ import {
   refreshTimerDecision,
   type CacheSnapshot,
 } from "./cacheState";
-import type { CacheTreeInput } from "./models";
+import type { CacheTreeInput } from "../views/models";
 import {
   CACHE_VIEW_ID,
   CACHE_VIEW_FOCUS_COMMAND,
