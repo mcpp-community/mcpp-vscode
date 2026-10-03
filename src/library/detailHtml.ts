@@ -116,6 +116,7 @@ export const DETAIL_UI = {
   versionsAll: "detail.versions.all",
   versionsCurrent: "detail.versions.current",
   versionsNone: "detail.versions.none",
+  versionsPick: "detail.versions.pick",
   dependencies: "detail.dependencies",
   dependenciesNone: "detail.dependencies.none",
   dependenciesHint: "detail.dependencies.hint",
@@ -150,8 +151,16 @@ const BADGE_KEY_UI: Readonly<Record<BadgeKey, string>> = {
   "openkal-platform": DETAIL_UI.badgeOpenkalPlatform,
 };
 
+/**
+ * What the page says to the host.
+ *
+ * There is no `ready`: the document is already the whole model, and a page that
+ * announces its own load only invites the host to render it again — which is
+ * exactly the reload loop the *library sidebar* shipped with (see the note in
+ * `libraryHtml.ts`). This host happened to answer `ready` with an empty `return`,
+ * so the trap never fired here; it is gone all the same.
+ */
 export type DetailMessage =
-  | { type: "ready" }
   | { type: "add"; version: string; dev: boolean }
   | { type: "openUrl"; url: string };
 
@@ -218,23 +227,46 @@ function renderSnippets(model: DetailModel, label: UiLabel): string {
   return blocks.join("\n");
 }
 
+/**
+ * The version matrix, as the page's **selector**: each version is a button that
+ * aims the command at the top of the page at itself.
+ *
+ * A `<select>` and a printed list of the same versions used to sit in two
+ * different places, and only the select was interactive, so the list was
+ * something to read and the choice was something else to find. One clickable
+ * list is both.
+ */
 function renderVersions(model: DetailModel, label: UiLabel): string {
   if (model.versions.length === 0) {
     return `<p class="detail-hint">${escapeHtml(label(DETAIL_UI.versionsNone))}</p>`;
   }
   const groups = model.versions
     .map((group) => {
-      const list = group.versions.length === 0 ? "—" : group.versions.join(", ");
+      const list =
+        group.versions.length === 0
+          ? `<span class="detail-version-empty">—</span>`
+          : group.versions
+              .map(
+                (version) =>
+                  `<button type="button" class="detail-version" data-version="${escapeHtml(version)}"` +
+                  `${flag("data-selected", version === model.latest)}>${escapeHtml(version)}</button>`,
+              )
+              .join("");
       return (
-        `<span class="detail-version-group"${flag("data-current", group.current)}>` +
+        `<li class="detail-version-group"${flag("data-current", group.current)}>` +
         `<span class="detail-platform">${escapeHtml(group.platform)}</span>` +
-        `<span class="detail-version">${escapeHtml(list)}</span>` +
+        `<span class="detail-version-list">${list}</span>` +
         (group.current ? `<span class="detail-current">${escapeHtml(label(DETAIL_UI.versionsCurrent))}</span>` : "") +
-        `</span>`
+        `</li>`
       );
     })
     .join("\n");
-  return [`<div class="detail-versions">`, groups, `</div>`].join("\n");
+  return [
+    `<ul class="detail-versions">`,
+    groups,
+    `</ul>`,
+    `<p class="detail-hint">${escapeHtml(label(DETAIL_UI.versionsPick))}</p>`,
+  ].join("\n");
 }
 
 function renderDependencies(model: DetailModel, label: UiLabel): string {
@@ -309,35 +341,36 @@ function renderExtras(model: DetailModel, label: UiLabel): string {
   return blocks.join("\n");
 }
 
+/**
+ * The primary block: what this page is *for*, immediately under the title.
+ *
+ * It used to be the last thing on the page, below four sections of prose, so the
+ * button a reader came for was the one thing they had to scroll to find. The
+ * version is chosen in the list below (`renderVersions`), and this block shows
+ * the command the choice produces.
+ */
 function renderActions(model: DetailModel, label: UiLabel): string {
   const disabled = model.latest === undefined;
-  const versionOptions = model.currentVersions
-    .map(
-      (version) =>
-        `<option value="${escapeHtml(version)}"${flag("selected", version === model.latest)}>${escapeHtml(version)}</option>`,
-    )
-    .join("");
   const command = fill(label, DETAIL_UI.command, [model.id, model.latest ?? "?"]);
   return [
-    `<div class="detail-section" data-section="add">`,
-    `  <h2>${escapeHtml(label(DETAIL_UI.add))}</h2>`,
+    `<section class="detail-primary" data-section="add">`,
     `  <div class="detail-actions">`,
-    `    <select id="detail-version" aria-label="${escapeHtml(label(DETAIL_UI.versions))}"${flag("disabled", disabled)}>${versionOptions}</select>`,
-    `    <button type="button" id="detail-add"${flag("disabled", disabled)}>${escapeHtml(label(DETAIL_UI.add))}</button>`,
+    `    <button type="button" id="detail-add" class="detail-add"${flag("disabled", disabled)}>${escapeHtml(label(DETAIL_UI.add))}</button>`,
     `    <label class="detail-toggle"><input id="detail-dev" type="checkbox"><span>${escapeHtml(label(DETAIL_UI.addDev))}</span></label>`,
-    `    <span class="detail-hint">${escapeHtml(label(DETAIL_UI.addLatest))}</span>`,
     `  </div>`,
-    `  <p class="detail-command" id="detail-command" data-template="${escapeHtml(model.commandTemplate)}" data-template-dev="${escapeHtml(model.commandDevTemplate)}">${escapeHtml(command)}</p>`,
-    disabled ? `  <p class="detail-hint">${escapeHtml(label(DETAIL_UI.addNoVersion))}</p>` : "",
+    `  <p class="detail-command" id="detail-command" data-selected-version="${escapeHtml(model.latest ?? "")}" data-template="${escapeHtml(model.commandTemplate)}" data-template-dev="${escapeHtml(model.commandDevTemplate)}">${escapeHtml(command)}</p>`,
+    disabled
+      ? `  <p class="detail-hint">${escapeHtml(label(DETAIL_UI.addNoVersion))}</p>`
+      : `  <p class="detail-hint">${escapeHtml(label(DETAIL_UI.addLatest))}</p>`,
     `  <p class="detail-result" id="detail-result" role="status"${attribute("data-state", model.result?.state)}${model.result === undefined ? " hidden" : ""}>${escapeHtml(model.result?.message ?? "")}</p>`,
-    `</div>`,
+    `</section>`,
   ]
     .filter((line) => line.length > 0)
     .join("\n");
 }
 
 /**
- * The client. It posts three things — `add`, `openUrl` and `ready` — and applies
+ * The client. It posts two things — `add` and `openUrl` — and applies
  * the host's `{type:"result"}` in place, so running `mcpp add` never rebuilds the
  * document and never resets the version the reader picked.
  */
@@ -346,10 +379,10 @@ function clientScript(initialModel: string): string {
   "use strict";
   var api = typeof acquireVsCodeApi === "function" ? acquireVsCodeApi() : undefined;
   var state = ${initialModel};
-  var versionSelect = document.getElementById("detail-version");
   var devInput = document.getElementById("detail-dev");
   var command = document.getElementById("detail-command");
   var result = document.getElementById("detail-result");
+  var version = command ? (command.getAttribute("data-selected-version") || "") : "";
 
   function post(message) {
     if (api) { api.postMessage(message); }
@@ -365,12 +398,27 @@ function clientScript(initialModel: string): string {
 
   function updateCommand() {
     if (!command) { return; }
-    var version = versionSelect ? versionSelect.value : state.latest;
     var dev = devInput ? devInput.checked === true : false;
     var template = dev
       ? (command.getAttribute("data-template-dev") || "")
       : (command.getAttribute("data-template") || "");
-    command.textContent = fillTemplate(template, [state.id, version === undefined ? "?" : version]);
+    command.setAttribute("data-selected-version", version);
+    command.textContent = fillTemplate(template, [state.id, version || "?"]);
+  }
+
+  /** One version button is the selection; the rest are alternatives. */
+  function selectVersion(next) {
+    version = next;
+    var buttons = document.querySelectorAll("[data-version]");
+    for (var index = 0; index < buttons.length; index += 1) {
+      var button = buttons[index];
+      if (button.getAttribute("data-version") === next) {
+        button.setAttribute("data-selected", "");
+      } else {
+        button.removeAttribute("data-selected");
+      }
+    }
+    updateCommand();
   }
 
   function showResult(payload) {
@@ -380,7 +428,6 @@ function clientScript(initialModel: string): string {
     result.textContent = payload.message || "";
   }
 
-  if (versionSelect) { versionSelect.addEventListener("change", updateCommand); }
   if (devInput) { devInput.addEventListener("change", updateCommand); }
 
   document.addEventListener("click", function (event) {
@@ -392,9 +439,13 @@ function clientScript(initialModel: string): string {
       post({ type: "openUrl", url: link.getAttribute("data-open-url") });
       return;
     }
+    var pick = target.closest("[data-version]");
+    if (pick) {
+      selectVersion(pick.getAttribute("data-version") || "");
+      return;
+    }
     var add = target.closest("#detail-add");
     if (add && !add.disabled) {
-      var version = versionSelect ? versionSelect.value : state.latest;
       if (!version) { return; }
       post({ type: "add", version: version, dev: devInput ? devInput.checked === true : false });
     }
@@ -406,7 +457,6 @@ function clientScript(initialModel: string): string {
   });
 
   updateCommand();
-  post({ type: "ready" });
 })();`;
 }
 
@@ -447,6 +497,7 @@ export function renderDetailHtml(model: DetailModel, assets: DetailAssets): stri
   ${renderMeta(model, label)}
 </header>
 <main>
+  ${renderActions(model, label)}
   <section class="detail-section" data-section="versions">
     <h2>${escapeHtml(versionsHeading)}</h2>
     ${renderVersions(model, label)}
@@ -465,7 +516,6 @@ export function renderDetailHtml(model: DetailModel, assets: DetailAssets): stri
     ${renderExtras(model, label)}
     ${model.parseNotice === undefined ? "" : `<p class="detail-hint">${escapeHtml(model.parseNotice)}</p>`}
   </section>
-  ${renderActions(model, label)}
 </main>
 <footer class="detail-footer" role="note">${escapeHtml(model.dataSource)}</footer>
 <script nonce="${escapeHtml(assets.nonce)}">
@@ -495,8 +545,6 @@ export function decodeDetailMessage(raw: unknown): DetailMessage | undefined {
     return undefined;
   }
   switch (raw.type) {
-    case "ready":
-      return { type: "ready" };
     case "add":
       return nonEmptyString(raw.version) && typeof raw.dev === "boolean"
         ? { type: "add", version: raw.version, dev: raw.dev }

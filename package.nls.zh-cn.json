@@ -172,7 +172,7 @@
   "mcpp.ui.notifications.success.title": "报告成功操作",
   "mcpp.ui.numberFormat.description": "字节大小使用二进制单位（KiB、MiB）还是十进制单位（KB、MB）。",
   "mcpp.ui.numberFormat.title": "选择数字格式",
-  "mcpp.ui.statusBar.background.description": "VS Code 只允许状态栏项使用两种背景色——\"statusBarItem.warningBackground\" 与 \"statusBarItem.errorBackground\"——并会自动换成对比度足够的前景色，其他颜色会被丢弃。\"warning\" 用主题的琥珀色块给 mcpp 项上色，\"error\" 用红色，\"none\" 保持朴素。",
+  "mcpp.ui.statusBar.background.description": "VS Code 只允许状态栏项使用两种背景色——`statusBarItem.warningBackground` 与 `statusBarItem.errorBackground`——并会自动换上对比度足够的前景色，其他颜色会被丢弃。mcpp 状态项默认朴素无色；\"warning\" 给它主题的琥珀色块，\"error\" 给红色。",
   "mcpp.ui.statusBar.background.title": "高亮 mcpp 状态栏项",
   "mcpp.ui.statusBar.show.description": "显示 mcpp 的主状态栏项。",
   "mcpp.ui.statusBar.show.title": "显示 mcpp 状态栏项",

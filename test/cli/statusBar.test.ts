@@ -30,4 +30,8 @@ test("the setting offers exactly the values this function understands", () => {
   assert.ok(entry !== undefined, "mcpp.ui.statusBar.background is not in the registry");
   assert.deepEqual([...(entry.enum ?? [])].sort(), [...STATUS_BAR_BACKGROUNDS].sort());
   assert.ok(entry.enum?.includes(String(entry.default)), "the default must be one of the values");
+  // The mcpp item is plain out of the box: a permanent amber chip in the status
+  // bar reads as "something is wrong", and only VS Code's two status colours are
+  // legible anyway. The colour is opt-in.
+  assert.equal(entry.default, "none");
 });

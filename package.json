@@ -831,7 +831,7 @@
         },
         "mcpp.ui.statusBar.background": {
           "type": "string",
-          "default": "warning",
+          "default": "none",
           "enum": [
             "none",
             "warning",
@@ -1048,7 +1048,8 @@
           "contextualTitle": "%view.mcpp.library.name%",
           "description": "%view.mcpp.library.description%",
           "type": "webview",
-          "when": "!mcpp.sidebarHidden && mcpp.views.library"
+          "when": "!mcpp.sidebarHidden && mcpp.views.library",
+          "initialSize": 40
         },
         {
           "id": "mcpp.cache",

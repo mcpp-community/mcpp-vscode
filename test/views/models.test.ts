@@ -30,7 +30,10 @@ function text(label: Label | undefined): string {
 
 test("an empty workspace says so and suggests the fix", () => {
   const tree = buildProjectTree(undefined);
-  assert.deepEqual(ids(tree), ["project.none"]);
+  // The empty state names the situation and offers the one action that fits it:
+  // `mcpp new` cannot initialise a folder that already exists, so there is no
+  // "make this folder a project" row to add.
+  assert.deepEqual(ids(tree), ["project.none", "project.action.new"]);
   assert.match(tree[0].tooltip?.key ?? "", /mcpp: New Project/);
 });
 

@@ -241,13 +241,43 @@ details[open] > .viz-summary::before {
   fill: var(--vscode-mcpp-cacheStaleForeground, var(--vscode-charts-yellow, currentColor));
 }
 
-.project-bar g[data-segment="current"],
-[data-viz="age"] g[data-bucket] {
+.project-bar g[data-segment="current"] {
   fill: var(--vscode-mcpp-cacheOkForeground, var(--vscode-charts-green, currentColor));
 }
 
-[data-viz="age"] g[data-bucket="oldest"] {
-  fill: var(--vscode-mcpp-cacheStaleForeground, var(--vscode-charts-yellow, currentColor));
+/*
+ * The age bar is a **ramp**, not one colour per group.
+ *
+ * Every bucket used to be painted `mcpp.cacheOkForeground` except the overflow
+ * one, so four segments of 8% / 85% / 6% / 1% read as a single green block and
+ * the chart added nothing to the legend beneath it. The renderer now stamps
+ * `data-age-step` (0 = newest … 3 = oldest, `ageRampStep()` in
+ * `src/views/cachePanelHtml.ts`) and the four stops are cold → hot. The four
+ * `charts.*` tokens below are solid in every theme, unlike `charts.orange`,
+ * which resolves to a find-match highlight at 33% alpha.
+ */
+[data-viz="age"] g[data-age-step="0"],
+.swatch[data-age-step="0"] {
+  fill: var(--vscode-charts-blue, currentColor);
+  background-color: var(--vscode-charts-blue, currentColor);
+}
+
+[data-viz="age"] g[data-age-step="1"],
+.swatch[data-age-step="1"] {
+  fill: var(--vscode-charts-green, currentColor);
+  background-color: var(--vscode-charts-green, currentColor);
+}
+
+[data-viz="age"] g[data-age-step="2"],
+.swatch[data-age-step="2"] {
+  fill: var(--vscode-charts-yellow, currentColor);
+  background-color: var(--vscode-charts-yellow, currentColor);
+}
+
+[data-viz="age"] g[data-age-step="3"],
+.swatch[data-age-step="3"] {
+  fill: var(--vscode-charts-red, currentColor);
+  background-color: var(--vscode-charts-red, currentColor);
 }
 
 /* ------------------------------------------------------------------ legend */
@@ -293,8 +323,9 @@ details[open] > .viz-summary::before {
   background-color: var(--vscode-charts-blue, currentColor);
 }
 
+/* The age swatches are painted by `data-age-step` above; `data-bucket` only
+   survives as the marker for the overflow bucket, so it must not colour here. */
 .swatch[data-kind="pkg"],
-.swatch[data-bucket="recent"],
 .swatch[data-segment="current"] {
   background-color: var(--vscode-mcpp-cacheOkForeground, var(--vscode-charts-green, currentColor));
 }
@@ -308,7 +339,6 @@ details[open] > .viz-summary::before {
 }
 
 .swatch[data-kind="legacy"],
-.swatch[data-bucket="oldest"],
 .swatch[data-segment="stale"] {
   background-color: var(--vscode-mcpp-cacheStaleForeground, var(--vscode-charts-yellow, currentColor));
 }

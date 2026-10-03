@@ -130,8 +130,6 @@ async function handle(session: DetailSession, raw: unknown): Promise<void> {
     return;
   }
   switch (message.type) {
-    case "ready":
-      return;
     case "openUrl":
       // `decodeDetailMessage` already restricted this to https.
       void vscode.env.openExternal(vscode.Uri.parse(message.url));
@@ -331,6 +329,7 @@ function labels(): Record<string, string> {
     [DETAIL_UI.versionsAll]: t("Versions"),
     [DETAIL_UI.versionsCurrent]: t("this platform"),
     [DETAIL_UI.versionsNone]: t("This index publishes no version for any platform."),
+    [DETAIL_UI.versionsPick]: t("Click a version to aim the command above at it."),
     [DETAIL_UI.dependencies]: t("Dependencies"),
     [DETAIL_UI.dependenciesNone]: t("This descriptor declares no dependencies."),
     [DETAIL_UI.dependenciesHint]: t(

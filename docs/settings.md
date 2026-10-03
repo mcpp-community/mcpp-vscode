@@ -824,14 +824,14 @@ Show the C++ Modules language service state in the mcpp status bar item. Off by 
 
 ### `mcpp.ui.statusBar.background` — advanced
 
-VS Code accepts only two background colours for a status bar entry, "statusBarItem.warningBackground" and "statusBarItem.errorBackground", and it overrides the foreground so the text stays readable; any other colour is dropped. "warning" paints the mcpp item with the theme's amber chip, "error" with its red one, "none" leaves it plain.
+VS Code accepts only two background colours for a status bar entry, "statusBarItem.warningBackground" and "statusBarItem.errorBackground", and it overrides the foreground so the text stays readable; any other colour is dropped. The mcpp item is plain by default; "warning" gives it the theme's amber chip and "error" its red one.
 
-VS Code 只允许状态栏项使用两种背景色——"statusBarItem.warningBackground" 与 "statusBarItem.errorBackground"——并会自动换成对比度足够的前景色，其他颜色会被丢弃。"warning" 用主题的琥珀色块给 mcpp 项上色，"error" 用红色，"none" 保持朴素。
+VS Code 只允许状态栏项使用两种背景色——`statusBarItem.warningBackground` 与 `statusBarItem.errorBackground`——并会自动换上对比度足够的前景色，其他颜色会被丢弃。mcpp 状态项默认朴素无色；"warning" 给它主题的琥珀色块，"error" 给红色。
 
 | | |
 |---|---|
 | Type | `string`: `none` \| `warning` \| `error` |
-| Default | `"warning"` |
+| Default | `"none"` |
 | Scope | per window |
 | Applies | Takes effect immediately |
 | Since | 0.6.0 |

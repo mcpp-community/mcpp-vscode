@@ -535,6 +535,28 @@ interface AgeSource {
   index: number;
 }
 
+/** How many colours the age ramp has: cold/fresh through hot/old. */
+export const AGE_RAMP_STEPS = 4;
+
+/**
+ * Where one age bucket sits on the ramp, `0` (newest) to `3` (oldest).
+ *
+ * The bar used to paint every bucket but the last in one colour, so four
+ * segments read as a single block and the chart said nothing that the legend
+ * under it did not already say. The step is computed here, in the renderer,
+ * rather than in CSS, because the bucket count follows `mcpp.cache.staleDays`
+ * and the stylesheet cannot count. A two-bucket machine gets the two ends, a
+ * four-bucket one gets all four, and anything longer is dealt onto the same four
+ * stops — the ramp is a shape, not a promise about how many buckets exist.
+ */
+export function ageRampStep(index: number, count: number): number {
+  if (!Number.isFinite(index) || !Number.isFinite(count) || count <= 1) {
+    return 0;
+  }
+  const clamped = Math.min(Math.max(index, 0), count - 1);
+  return Math.round((clamped / (count - 1)) * (AGE_RAMP_STEPS - 1));
+}
+
 /** The age bar: one segment per bucket, `<1d` through the overflow. */
 function renderAge(model: CachePanelModel, label: UiLabel): string {
   const formatters = model.format;
@@ -586,7 +608,10 @@ function renderAge(model: CachePanelModel, label: UiLabel): string {
   const parts: BarPart[] = [];
   const items: string[] = [];
   for (const source of sources) {
-    const attributes = ` data-bucket="${source.oldest ? "oldest" : "recent"}" data-bucket-index="${source.index}"`;
+    const step = ageRampStep(source.index, sources.length);
+    const attributes =
+      ` data-bucket="${source.oldest ? "oldest" : "recent"}"` +
+      ` data-bucket-index="${source.index}" data-age-step="${step}"`;
     parts.push({ attributes, label: source.caption, bytes: source.bytes });
     const pct = percent(source.bytes, ageTotal);
     const detail = [

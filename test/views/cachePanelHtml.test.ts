@@ -5,6 +5,7 @@ import test from "node:test";
 
 import {
   CACHE_PANEL_UI,
+  ageRampStep,
   decodeCachePanelMessage,
   renderCachePanelHtml,
   type CachePanelAssets,
@@ -269,10 +270,33 @@ test("the stylesheet paints the groups the document actually marks", () => {
     '[data-viz="composition"] g[data-segment="legacy"]',
     '.project-bar g[data-segment="stale"]',
     '.project-bar g[data-segment="current"]',
-    '[data-viz="age"] g[data-bucket="oldest"]',
-    '[data-viz="age"] g[data-bucket]',
+    // The age bar is a four-stop ramp keyed by the step the renderer computes;
+    // `data-bucket` only marks the overflow bucket and paints nothing.
+    ...[0, 1, 2, 3].map((step) => `[data-viz="age"] g[data-age-step="${step}"]`),
   ]) {
     assert.match(css, new RegExp(`${selector.replace(/[[\]"]/g, "\\$&")}[^{]*\\{[^}]*fill:`), `no fill rule for ${selector}`);
+  }
+  assert.doesNotMatch(css, /\[data-bucket/, "data-bucket must not colour anything; the ramp owns the age colours");
+});
+
+test("the age bar is a ramp, so four buckets do not read as one block", () => {
+  // The step is a property of the *shape* of the ramp, not of how many buckets a
+  // machine happens to configure (`mcpp.cache.staleDays` can move the count).
+  assert.deepEqual([0, 1, 2, 3].map((index) => ageRampStep(index, 4)), [0, 1, 2, 3]);
+  assert.deepEqual([0, 1].map((index) => ageRampStep(index, 2)), [0, 3]);
+  assert.deepEqual([0, 1, 2].map((index) => ageRampStep(index, 3)), [0, 2, 3]);
+  assert.deepEqual([0, 1, 2, 3, 4].map((index) => ageRampStep(index, 5)), [0, 1, 2, 2, 3]);
+  // A single bucket cannot ramp, and nonsense is not a crash.
+  assert.equal(ageRampStep(0, 1), 0);
+  assert.equal(ageRampStep(0, 0), 0);
+  assert.equal(ageRampStep(Number.NaN, 4), 0);
+  assert.equal(ageRampStep(9, 4), 3, "out-of-range indexes clamp to the hot end");
+
+  // And the document really carries the steps: the fixture's four buckets.
+  const html = page();
+  for (const step of [0, 1, 2, 3]) {
+    assert.match(html, new RegExp(`<g[^>]*data-age-step="${step}"[^>]*>\\s*<rect`), `no segment at step ${step}`);
+    assert.match(html, new RegExp(`class="swatch"[^>]*data-age-step="${step}"`), `no legend swatch at step ${step}`);
   }
 });
 

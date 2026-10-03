@@ -28,7 +28,15 @@ interface PackageManifest {
     viewsContainers?: { activitybar?: Array<{ id: string; title?: string; icon?: string }> };
     views?: Record<
       string,
-      Array<{ id: string; name?: string; description?: string; when?: string; type?: string; visibility?: string }>
+      Array<{
+        id: string;
+        name?: string;
+        description?: string;
+        when?: string;
+        type?: string;
+        visibility?: string;
+        initialSize?: number;
+      }>
     >;
     viewsWelcome?: Array<{ view: string; contents: string; when?: string }>;
     colors?: Array<{ id: string; description?: string }>;
@@ -159,6 +167,16 @@ test("each view is gated by its own visibility setting", () => {
     undefined,
     undefined,
     "collapsed",
+  ]);
+  // `initialSize` becomes the view's split-view `weight`, and VS Code hands out
+  // the container height in proportion to it — defaulting every view to 20
+  // (`computeInitialSizes()`: `dimension.height * (weight || 20) / total`). Twice
+  // the default is what makes the library take the bottom two thirds and leaves
+  // the tree above it its third, which is the layout the sidebar is for.
+  assert.deepEqual(manifest.contributes?.views?.mcpp?.map((view) => view.initialSize), [
+    undefined,
+    40,
+    undefined,
   ]);
 });
 

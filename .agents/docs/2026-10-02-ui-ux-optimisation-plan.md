@@ -913,3 +913,122 @@ this._backgroundColor && (n = ALLOWED_BACKGROUND_COLORS.get(this._backgroundColo
   的 CPU 观测；"不抖了、能点了"需要你确认。
 - 活动栏彩色、状态栏 logo：API 层面不存在，已用一手源码说明。
 - e2e 仍未在本地跑通；索引定位的三条路径仍是打桩验证，不是 UI 验证。
+
+## 17. round 5：状态栏背景回退、侧边栏配比、库标签与详情页、年龄渐变、新建工程
+
+### 17.1 状态栏背景色默认关掉（反馈 1）
+
+`mcpp.ui.statusBar.background` 保留（它仍是唯一能做的两种背景），但默认值从 `warning` 改成
+`none`：一个常驻的琥珀色块会被读成"出问题了"。想要就设 `warning` / `error`，两个值都由
+VS Code 自己配好对比度（见 16.5 的扩展主机白名单）。
+
+### 17.2 侧边栏配比：库视图默认占下面 2/3（反馈 2）
+
+`contributes.views[].initialSize` 不是像素，它是**视图在容器里的配比权重**（一手证据
+`computeInitialSizes()`）：
+
+```js
+let t = this.viewContainerModel.visibleViewDescriptors.reduce((i,{weight:n}) => i + (n||20), 0);
+for (let i of this.viewContainerModel.visibleViewDescriptors)
+  e.set(i.id, this.dimension.height * (i.weight || 20) / t);   // 默认每个视图 20
+```
+
+所以给 `mcpp.library` 一个 `initialSize: 40`（默认 20 的两倍）就够：默认布局里项目视图拿 1/3、
+库视图拿 2/3，cache 又是折叠的（只剩标题栏，它的份额按比例回流给另外两个）。门禁在
+`test/artifacts.test.ts`：三个视图的 `initialSize` 必须恰好是 `[undefined, 40, undefined]`，
+注释里带上上面那段权重公式。
+
+### 17.3 库的标签去掉外框，详情页重排（反馈 3）
+
+**标签**（`.badge`）之前是"1px 外框 + 圆角"的小方块，一行的标签看起来像一排按钮。
+现在是不带任何框和底的**安静元数据**，相邻项之间用 `·` 分隔；只有必须被看见的两个状态
+（`Added`、`Descriptor not readable`）保留颜色并加粗——文字本身也在说同一件事，所以不靠颜色。
+**筛选 chip**（`.chip`）是交互控件，所以换成 VS Code 自己的 toggle 配色：
+未选中 = 透明底、`descriptionForeground`；选中 = `inputOption.activeBackground/Foreground/Border`。
+"未选中也描一圈边"正是让它像按钮的原因。
+
+**详情页**的结构问题更根本：读者来点的那颗按钮原本在**四个段落之后**（`renderActions` 在
+`<main>` 的最后）。现在顺序是：
+
+```
+标题 → 一句话描述 → 事实行（registry / surface / standard / 许可 / 徽章 / 仓库链接）
+→ 主操作块（[Add to mcpp.toml] [☐ dev-dependency] + 命令预览）
+→ 版本矩阵 → 用法示例 → 依赖 → 其它
+```
+
+同时把**版本矩阵变成选择器**：每个版本是一个 button（`data-version`），点它就把上面的命令
+指到那个版本，被选中的那枚用同一套 toggle 配色标出。原来 `<select>` 和版本清单是**两处**
+重复的版本 UI、只有 select 能点，现在只有一处、可点。分区标题也从"12px 大写＋字距"的微标签
+改成正常的 13px/600 小标题 + 每节一条 hairline，四个区不再像四条工具条。
+
+顺手修掉同一类陷阱：详情页客户端原本也 post `ready`，宿主 `case "ready": return;` 是**空实现**
+（所以没像库视图那样死循环），但这个形状正是库视图无限重载的成因——一并删除，并加了
+"内联脚本语法有效且不 post ready"的门禁（详情页此前没有这道门禁）。
+
+### 17.4 年龄分布条改成冷→热渐变（反馈 4）
+
+原因很直接：`[data-viz="age"] g[data-bucket]` 把所有桶画成同一个绿色，只有最后一个溢出桶是
+黄色，所以 `8.1% / 85.5% / 6.4% / …` 四段读起来是一整块。
+
+桶的数量由 `mcpp.cache.staleDays` 决定，**CSS 数不出桶**，所以在渲染器里算好再落到属性上：
+
+```ts
+export function ageRampStep(index, count) {   // 0 = 最新 … 3 = 最旧
+  if (count <= 1) return 0;
+  return Math.round((clamp(index) / (count - 1)) * 3);
+}
+```
+
+`<g>` 与图例色块都带 `data-age-step`，CSS 四档 = `charts.blue` → `charts.green` →
+`charts.yellow` → `charts.red`（都是实色；`charts.orange` 是 33% 透明，不能用）。
+两个桶的机器拿到两端，四个桶拿到四档，更长的桶数会被摊到同样这四档——渐变是一个形状，
+不是"桶一定有几个"的承诺。旧的两条 `data-bucket` 着色规则删掉了（否则它们会覆盖渐变），
+`data-bucket` 只留作"溢出桶"的语义标记。
+
+### 17.5 通用命令加「新建 mcpp 工程」；「初始化当前目录」做不到（反馈 5 后半）
+
+- `COMMON_COMMANDS` 增加第九行「New mcpp project…」（`mcpp.newProject`，`new-folder` 图标，
+  蓝色），排在**最前**：这一节是"能做什么"，而在一个空工作区里能做的只有建工程。
+- **没有工程时**的树原本只有一句话，现在那句话下面直接给出同一个入口（`newProjectNode()`，
+  两处共用一份定义，不会各自漂移）。
+- 「新建工程」第二步的目录选择加了 `defaultUri` = 当前工作区目录，从读者所在的地方开始。
+
+**「初始化某个目录」无法实现，这是 mcpp 自己的约束**（`mcpp/src/scaffold/create.cppm`）：
+
+```cpp
+const auto finalPath = parent / project.directoryName;
+if (std::filesystem::exists(finalPath, existenceError) || existenceError) {
+    mcpp::ui::error(... std::format("'{}' already exists", finalPath.string()));
+    return 1;
+}
+```
+
+`mcpp new` 拒绝任何**已存在**的目标目录（不只是非空），且没有 `--here` / `--force`；`mcpp --help`
+里也没有 `init` 子命令。所以"把当前目录变成 mcpp 工程"今天没有可执行的命令可调。你提到的
+"覆盖需要确认"也因此不适用——mcpp 根本不会覆盖，它会拒绝。这需要上游加一个 `mcpp init`
+（或让 `new` 允许空目录），我按约束没有改 mcpp。
+
+### 17.6 活动栏"在/不在 mcpp 工程用不同颜色"：做不到（反馈 5 前半）
+
+这一条和 16.4 是同一个结论，只是这次要的是**运行期变化**而不是配色开关，而它更不可能：
+
+1. 容器图标是**清单里的静态字符串**，没有任何运行时 API 能改（`viewsContainers` 只在激活时读一次）。
+2. `viewsContainers` 的条目 schema **没有 `when`**（round 2 的 §14 已证），
+   `hideIfEmpty` 只有 VS Code 内置容器能设，所以也不能"声明两个容器然后按工程状态显示其中一个"。
+3. 就算能改，图标是当 mask 画的（16.6），彩色也画不出来。
+
+**能表达"我在不在 mcpp 工程里"的地方是有的，而且位置更合适**：工程视图正文（没有工程时
+直接说"当前工作区没有 mcpp 工程"并给出新建入口）、以及状态栏项（不在工程里时整个隐藏）。
+这一轮把前者做得更可用了（17.5），活动栏保持单色剪影——那本来也是活动栏图标的画法。
+
+### 17.7 这一轮的状态
+
+- 655 个单元测试通过；`check:config`（69 设置 / 32 public）、`l10n-check`（383 运行串 /
+  203 清单键）、`check:icon`（活动栏图 + 40 个菜单图标）、`check:generators` 全过；
+  VSIX 134 文件 / 380 KiB。
+- dev profile 重装并重启（清 workspaceStorage，让新的配比与折叠默认值生效），日志确认激活、无错误。
+- **需要你的眼睛**：侧边栏 1/3 : 2/3 的实际手感（权重只在**没有**记住过布局时生效，我清了
+  workspaceStorage 所以这次是新布局）；库标签去掉外框后是否够"标签"；详情页新顺序是否顺手；
+  版本按钮点选是否明显；年龄条的冷→热渐变是否读得出差异。
+- 仍未做到：活动栏状态色、状态栏 logo、"初始化当前目录"（三条都是 API/上游约束，各有源码证据）；
+  e2e 仍未在本地跑通。

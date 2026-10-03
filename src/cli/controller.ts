@@ -788,6 +788,11 @@ export class McppCliController {
 
     const picked = await vscode.window.showOpenDialog({
       title: t("Choose the project location (2/2)"),
+      // Start where the reader already is: `mcpp new` creates a folder *inside*
+      // the chosen one, so the workspace folder is the useful default — the
+      // project itself cannot be created in it, because `mcpp new` refuses a
+      // destination that already exists.
+      defaultUri: vscode.workspace.workspaceFolders?.[0]?.uri,
       canSelectFiles: false,
       canSelectFolders: true,
       canSelectMany: false,

@@ -30,6 +30,7 @@ const UI: Record<string, string> = {
   [DETAIL_UI.versionsAll]: "Versions",
   [DETAIL_UI.versionsCurrent]: "this platform",
   [DETAIL_UI.versionsNone]: "This index publishes no version for any platform.",
+  [DETAIL_UI.versionsPick]: "Click a version to aim the command above at it.",
   [DETAIL_UI.dependencies]: "Dependencies",
   [DETAIL_UI.dependenciesNone]: "This descriptor declares no dependencies.",
   [DETAIL_UI.dependenciesHint]: "What the descriptor declares.",
@@ -124,11 +125,17 @@ test("the overview names the vocabulary the index site uses", () => {
 test("the version matrix marks the current platform, empty groups and all", () => {
   const html = renderDetailHtml(model(), ASSETS);
   assert.match(html, /Versions \(linux\)/);
+  // Each version is a button that aims the command at the top of the page at
+  // itself, and the one the page opens on is marked.
   assert.match(
     html,
-    /<span class="detail-version-group" data-current><span class="detail-platform">linux<\/span><span class="detail-version">3\.2<\/span><span class="detail-current">this platform<\/span>/,
+    /<li class="detail-version-group" data-current><span class="detail-platform">linux<\/span><span class="detail-version-list"><button type="button" class="detail-version" data-version="3\.2" data-selected>3\.2<\/button><\/span><span class="detail-current">this platform<\/span><\/li>/,
   );
-  assert.match(html, /<span class="detail-version-group"><span class="detail-platform">windows<\/span><span class="detail-version">—<\/span>/);
+  assert.match(
+    html,
+    /<li class="detail-version-group"><span class="detail-platform">windows<\/span><span class="detail-version-list"><span class="detail-version-empty">—<\/span><\/span><\/li>/,
+  );
+  assert.match(html, /Click a version to aim the command above at it\./);
 
   const none = renderDetailHtml(model({ versions: [], currentVersions: [], latest: undefined }), ASSETS);
   assert.match(none, /This index publishes no version for any platform\./);
@@ -183,15 +190,21 @@ test("dependencies are listed as declared, and the resolved column is left out w
 
 test("the add button carries the exact command, and is disabled when there is no version", () => {
   const html = renderDetailHtml(model(), ASSETS);
-  assert.match(html, /<select id="detail-version"[^>]*>/);
-  assert.match(html, /<option value="3\.2" selected>3\.2<\/option>/);
-  assert.match(html, /id="detail-command" data-template="mcpp add \{0\}@\{1\}"/);
+  // One place chooses the version (the matrix) and one place shows what the
+  // choice produces; there is no second, redundant `<select>` any more.
+  assert.doesNotMatch(html, /<select/);
+  assert.match(html, /id="detail-command" data-selected-version="3\.2" data-template="mcpp add \{0\}@\{1\}"/);
   assert.match(html, /data-template-dev="mcpp add \{0\}@\{1\} --dev"/);
-  assert.match(html, /<button type="button" id="detail-add">Add to mcpp\.toml<\/button>/);
+  assert.match(html, /<button type="button" id="detail-add" class="detail-add">Add to mcpp\.toml<\/button>/);
   assert.match(html, /<input id="detail-dev" type="checkbox"/);
 
+  // The primary block comes before the sections, right under the header.
+  const primary = html.indexOf('data-section="add"');
+  const versions = html.indexOf('data-section="versions"');
+  assert.ok(primary !== -1 && versions !== -1 && primary < versions, "the action must sit above the version matrix");
+
   const none = renderDetailHtml(model({ latest: undefined, currentVersions: [] }), ASSETS);
-  assert.match(none, /<button type="button" id="detail-add" disabled>/);
+  assert.match(none, /<button type="button" id="detail-add" class="detail-add" disabled>/);
   assert.match(none, /This index publishes no version for this platform\./);
 });
 
@@ -212,8 +225,7 @@ test("an index url is optional: a registry without a site gets no link", () => {
   assert.match(html, /<a href="https:\/\/github\.com\/p-ranav\/argparse"/);
 });
 
-test("decodeDetailMessage accepts exactly three shapes, and only https urls", () => {
-  assert.deepEqual(decodeDetailMessage({ type: "ready" }), { type: "ready" });
+test("decodeDetailMessage accepts exactly two shapes, and only https urls", () => {
   assert.deepEqual(decodeDetailMessage({ type: "add", version: "3.2", dev: false }), {
     type: "add",
     version: "3.2",
@@ -237,9 +249,26 @@ test("decodeDetailMessage accepts exactly three shapes, and only https urls", ()
     { type: "openUrl", url: "file:///etc/passwd" },
     { type: "openUrl", url: "command:mcpp.build" },
     { type: "openUrl" },
+    // The page used to announce its own load. The host answered with an empty
+    // `return`, so nothing looped here — but the shape is the one that made the
+    // library view reload itself forever, so the message is gone.
+    { type: "ready" },
   ]) {
     assert.equal(decodeDetailMessage(raw), undefined, `unexpected decode of ${JSON.stringify(raw)}`);
   }
+});
+
+test("the client script is syntactically valid JavaScript, and posts no ready", () => {
+  // A syntax error in the inline script would leave a page that renders
+  // perfectly and does nothing, and no other test would notice.
+  const html = renderDetailHtml(model(), ASSETS);
+  const script = /<script nonce="[^"]*">([\s\S]*)<\/script>/.exec(html);
+  assert.ok(script !== null, "the document must carry its inline script");
+  assert.doesNotThrow(() => new Function(script[1]));
+  assert.doesNotMatch(script[1], /innerHTML/);
+  assert.doesNotMatch(script[1], /"ready"/);
+  assert.match(script[1], /data-version/);
+  assert.match(script[1], /textContent/);
 });
 
 test("the page reuses the sidebar's stylesheet and token classes", () => {

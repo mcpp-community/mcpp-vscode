@@ -859,7 +859,7 @@
     {
       "key": "mcpp.ui.statusBar.background",
       "type": "string",
-      "default": "warning",
+      "default": "none",
       "enum": [
         "none",
         "warning",
@@ -872,7 +872,7 @@
       "applies": "immediate",
       "since": "0.6.0",
       "title": "Highlight the mcpp status bar item",
-      "description": "VS Code accepts only two background colours for a status bar entry, \"statusBarItem.warningBackground\" and \"statusBarItem.errorBackground\", and it overrides the foreground so the text stays readable; any other colour is dropped. \"warning\" paints the mcpp item with the theme's amber chip, \"error\" with its red one, \"none\" leaves it plain."
+      "description": "VS Code accepts only two background colours for a status bar entry, \"statusBarItem.warningBackground\" and \"statusBarItem.errorBackground\", and it overrides the foreground so the text stays readable; any other colour is dropped. The mcpp item is plain by default; \"warning\" gives it the theme's amber chip and \"error\" its red one."
     },
     {
       "key": "mcpp.ui.notifications.success",

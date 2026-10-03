@@ -125,38 +125,40 @@ main {
   flex: 1 1 100%;
 }
 
+/* A filter is a *toggle*, so it is drawn with the host's own toggle colours and
+   carries no outline until it is on. The old chip was a filled pill with a 1 px
+   border in every state, which made an unselected row of them read as a row of
+   buttons instead of as "these are the filters, none of them is applied". */
 .chip {
   display: inline-flex;
   align-items: baseline;
   gap: 4px;
-  padding: 1px 6px;
+  padding: 2px 8px;
   font-family: inherit;
   font-size: 11px;
-  color: var(--vscode-foreground);
-  background-color: var(--vscode-badge-background, transparent);
-  border: 1px solid var(--vscode-contrastBorder, transparent);
-  border-radius: 8px;
+  color: var(--vscode-descriptionForeground);
+  background-color: transparent;
+  border: 0;
+  border-radius: 4px;
   cursor: pointer;
 }
 
 .chip:hover {
+  color: var(--vscode-foreground);
   background-color: var(--vscode-toolbar-hoverBackground, transparent);
 }
 
 .chip[data-active] {
-  color: var(--vscode-badge-foreground);
-  background-color: var(--vscode-badge-background);
-  border-color: var(--vscode-focusBorder, transparent);
+  color: var(--vscode-inputOption-activeForeground, var(--vscode-foreground));
+  background-color: var(--vscode-inputOption-activeBackground, var(--vscode-toolbar-hoverBackground, transparent));
+  outline: 1px solid var(--vscode-inputOption-activeBorder, transparent);
+  outline-offset: -1px;
   font-weight: 600;
 }
 
 .chip-count {
-  color: var(--vscode-descriptionForeground);
-  font-size: 10px;
-}
-
-.chip[data-active] .chip-count {
   color: inherit;
+  font-size: 10px;
 }
 
 .network-toggle {
@@ -238,21 +240,38 @@ main {
   color: var(--vscode-descriptionForeground);
 }
 
+/*
+ * A badge is *metadata*, not a control: no box, no fill, no outline — a quiet
+ * label separated from its neighbours by `·`. The outline was the whole problem:
+ * a bounded rectangle in a sidebar reads as something you can press.
+ *
+ * The two states that must not be missed (`Added`, `Descriptor not readable`)
+ * keep their colour and gain weight, so they still stand out without a border —
+ * and the text beside them says the same thing, which is the house rule.
+ */
 .badge {
-  padding: 0 4px;
+  padding: 0;
   font-size: 10px;
   color: var(--vscode-descriptionForeground);
-  border: 1px solid var(--vscode-badge-background, currentColor);
-  border-radius: 3px;
+  border: 0;
   white-space: nowrap;
+}
+
+.badge + .badge::before,
+.row-surface + .badge::before {
+  content: "·";
+  margin-right: 4px;
+  color: var(--vscode-descriptionForeground);
 }
 
 .badge-added {
   color: var(--vscode-charts-green, var(--vscode-foreground));
+  font-weight: 600;
 }
 
 .badge-warn {
   color: var(--vscode-charts-yellow, var(--vscode-foreground));
+  font-weight: 600;
 }
 
 /* Two lines, then an ellipsis: the row stays self-sufficient without a wall of text. */
@@ -342,42 +361,98 @@ body.detail {
   color: var(--vscode-textLink-foreground);
 }
 
+/*
+ * The detail page is a *document*, so its sections are separated by a hairline
+ * and a heading that reads as a heading rather than as a micro-label: the
+ * uppercase/letterspaced 12 px version made four sections look like four
+ * toolbars. The page opens with the thing it is for (`detail-primary`), then
+ * the facts, then the prose.
+ */
 .detail-section {
-  margin-top: 18px;
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--vscode-panel-border, transparent);
 }
 
 .detail-section > h2 {
-  margin: 0 0 6px;
-  font-size: 12px;
+  margin: 0 0 8px;
+  font-size: 13px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--vscode-descriptionForeground);
+  color: var(--vscode-foreground);
 }
 
+.detail-primary {
+  margin-top: 14px;
+}
+
+.detail-primary .detail-actions {
+  margin-top: 0;
+}
+
+/* The version matrix is the page's selector: one row per platform, one button
+   per version, the aim of the command shown at the top of the page. */
 .detail-versions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 14px;
   margin: 0;
+  padding: 0;
+  list-style: none;
   font-size: 11px;
 }
 
 .detail-version-group {
   display: flex;
-  gap: 5px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  padding: 3px 0;
+}
+
+.detail-version-group + .detail-version-group {
+  border-top: 1px solid var(--vscode-panel-border, transparent);
+}
+
+.detail-version-group[data-current] .detail-platform {
+  color: var(--vscode-foreground);
+  font-weight: 600;
 }
 
 .detail-platform {
+  flex: 0 0 auto;
+  min-width: 7em;
   color: var(--vscode-descriptionForeground);
 }
 
-.detail-version {
-  font-family: var(--vscode-editor-font-family, monospace);
+.detail-version-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
-.detail-version[data-current] {
+.detail-version {
+  padding: 1px 7px;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  background-color: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.detail-version:hover {
+  color: var(--vscode-foreground);
+  background-color: var(--vscode-toolbar-hoverBackground, transparent);
+}
+
+.detail-version[data-selected] {
+  color: var(--vscode-inputOption-activeForeground, var(--vscode-foreground));
+  background-color: var(--vscode-inputOption-activeBackground, var(--vscode-toolbar-hoverBackground, transparent));
+  outline: 1px solid var(--vscode-inputOption-activeBorder, transparent);
+  outline-offset: -1px;
   font-weight: 600;
+}
+
+.detail-version-empty {
+  color: var(--vscode-descriptionForeground);
 }
 
 .detail-current {
@@ -462,7 +537,7 @@ pre.detail-code code {
 }
 
 .detail-actions button {
-  padding: 3px 10px;
+  padding: 4px 12px;
   font: inherit;
   color: var(--vscode-button-foreground);
   background-color: var(--vscode-button-background);

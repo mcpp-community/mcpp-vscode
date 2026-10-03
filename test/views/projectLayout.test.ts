@@ -75,9 +75,11 @@ const MANIFEST = JSON.parse(readFileSync(path.join(process.cwd(), "package.json"
 const BINDINGS = MANIFEST.contributes?.keybindings ?? [];
 const HINTS = keybindingsFromPackage(MANIFEST);
 
-test("the command section holds the eight common commands, in order", () => {
+test("the command section holds the nine common commands, in order", () => {
   const tree = buildProjectTree({ root: "/w" }, { keybindings: HINTS, platform: "mac" });
   assert.deepEqual(ids(find(tree, "project.section.commands")?.children ?? []), [
+    // Creation first: it is the only row that does not act on *this* project.
+    "project.action.new",
     "project.action.build",
     "project.action.run",
     "project.action.test",
@@ -90,6 +92,7 @@ test("the command section holds the eight common commands, in order", () => {
   for (const child of find(tree, "project.section.commands")?.children ?? []) {
     assert.ok(child.command, `${child.id} must be clickable`);
   }
+  assert.equal(find(tree, "project.action.new")?.command?.command, "mcpp.newProject");
   assert.equal(find(tree, "project.action.librarySearch")?.command?.command, "mcpp.library.search");
   assert.equal(find(tree, "project.action.clean")?.command?.command, "mcpp.cleanProjectArtifacts");
   assert.equal(find(tree, "project.action.selfCheck")?.command?.command, "mcpp.selfCheck");

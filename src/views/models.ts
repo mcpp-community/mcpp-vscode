@@ -572,6 +572,12 @@ export interface ProjectTreeOptions {
 /** The project view: two labelled sections — what this is, then what to do with it. */
 export function buildProjectTree(project: ProjectSummary | undefined, options: ProjectTreeOptions = {}): TreeNode[] {
   if (project === undefined) {
+    // An empty workspace gets the one thing that can be done in it, next to the
+    // sentence that says why the view is otherwise empty. 「初始化当前目录」 is
+    // deliberately absent: `mcpp new` refuses a destination that already exists
+    // (`scaffold/create.cppm`: `"'{}' already exists"`) and has no `--here`, so
+    // there is nothing to run for "make this folder a project" — see §17 of
+    // `.agents/docs/2026-10-02-ui-ux-optimisation-plan.md`.
     return [
       {
         id: "project.none",
@@ -579,6 +585,7 @@ export function buildProjectTree(project: ProjectSummary | undefined, options: P
         icon: "info",
         tooltip: plain("Open a folder containing mcpp.toml, or create a project with mcpp: New Project."),
       },
+      newProjectNode(),
     ];
   }
   if (project.error !== undefined) {
@@ -646,7 +653,9 @@ interface CommandRow {
 }
 
 /**
- * The eight rows of 「常用命令」, in the order the prototype fixes them.
+ * The nine rows of 「常用命令」, in the order the prototype fixes them, with
+ * creation first: the section is what the view offers to *do*, and in a new
+ * workspace the only thing to do is make a project.
  *
  * The colours are a small, explainable palette grouped by **what the row acts
  * on**, not by decoration: blue builds or adds, green runs or verifies, purple
@@ -661,6 +670,7 @@ interface CommandRow {
  * `src/commands/menu.ts`.
  */
 const COMMON_COMMANDS: readonly CommandRow[] = [
+  { id: "project.action.new", label: "New mcpp project…", icon: "new-folder", iconColor: "charts.blue", command: "mcpp.newProject" },
   { id: "project.action.build", label: "Build", icon: "tools", iconColor: "charts.blue", command: "mcpp.build" },
   { id: "project.action.run", label: "Run", icon: "play", iconColor: "charts.green", command: "mcpp.run" },
   { id: "project.action.test", label: "Test", icon: "beaker", iconColor: "charts.purple", command: "mcpp.test" },
@@ -670,6 +680,20 @@ const COMMON_COMMANDS: readonly CommandRow[] = [
   { id: "project.action.selfCheck", label: "Environment self-check", icon: "heart", iconColor: "charts.green", command: "mcpp.selfCheck" },
   { id: "project.action.settings", label: "Settings", icon: "settings-gear", iconColor: "", command: "mcpp.openSettings" },
 ];
+
+/** The creation row, built once so the empty state and the section agree. */
+function newProjectNode(): TreeNode {
+  const row = COMMON_COMMANDS[0];
+  const label = plain(row.label);
+  return {
+    id: row.id,
+    label,
+    icon: row.icon,
+    iconColor: row.iconColor,
+    contextValue: "mcppProjectCommand",
+    command: { command: row.command, title: label },
+  };
+}
 
 function commandNodes(options: ProjectTreeOptions): TreeNode[] {
   return COMMON_COMMANDS.map((row): TreeNode => {
