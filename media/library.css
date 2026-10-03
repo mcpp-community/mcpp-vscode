@@ -399,6 +399,14 @@ body.detail {
   background-color: var(--vscode-toolbar-hoverBackground, transparent);
 }
 
+/* The version the project already asks for, marked by a word as well as a hue. */
+.detail-installed {
+  padding: 0 5px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--vscode-charts-green, var(--vscode-foreground));
+}
+
 .detail-version[data-selected] {
   color: var(--vscode-inputOption-activeForeground, var(--vscode-foreground));
   background-color: var(--vscode-inputOption-activeBackground, var(--vscode-toolbar-hoverBackground, transparent));
@@ -534,6 +542,11 @@ pre.detail-code code {
 
 .detail-result[data-state="error"] {
   color: var(--vscode-errorForeground);
+}
+
+/* The client's own line while the host is being asked, so a click is never silent. */
+.detail-result[data-state="pending"] {
+  color: var(--vscode-descriptionForeground);
 }
 
 .detail-footer {

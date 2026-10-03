@@ -41,6 +41,10 @@ const UI: Record<string, string> = {
   [DETAIL_UI.codeSource]: "{0} · line {1}",
   [DETAIL_UI.codeProject]: "Example project: {0} — built and run by the index's CI.",
   [DETAIL_UI.add]: "Add to mcpp.toml",
+  [DETAIL_UI.switchTo]: "Switch to {0}",
+  [DETAIL_UI.alreadyAdded]: "Already added",
+  [DETAIL_UI.installed]: "added",
+  [DETAIL_UI.opening]: "Opening {0}…",
   [DETAIL_UI.addDev]: "dev dependency",
   [DETAIL_UI.addLatest]: "The version is required.",
   [DETAIL_UI.addNoVersion]: "This index publishes no version for this platform.",
@@ -217,6 +221,49 @@ test("the add button carries the exact command, and is disabled when there is no
   const none = renderDetailHtml(model({ latest: undefined, currentVersions: [] }), ASSETS);
   assert.match(none, /<button type="button" id="detail-add" class="detail-add" disabled>/);
   assert.match(none, /This index publishes no version for this platform\./);
+});
+
+test("a package the project already has says so, and the button offers the switch", () => {
+  // Same version as the manifest: nothing to do, and the button says so.
+  const same = renderDetailHtml(model({ installed: { version: "3.2", dev: false } }), ASSETS);
+  assert.match(same, /<button type="button" id="detail-add" class="detail-add" disabled>Already added<\/button>/);
+  assert.match(same, /data-version="3\.2" data-selected data-installed>3\.2<\/button><span class="detail-installed">added<\/span>/);
+
+  // A different version: the button names the switch, and the marker stays on the
+  // version the project actually has.
+  const other = renderDetailHtml(
+    model({
+      latest: "3.3",
+      currentVersions: ["3.3", "3.2"],
+      versions: [{ platform: "linux", versions: ["3.3", "3.2"], current: true }],
+      installed: { version: "3.2", dev: false },
+    }),
+    ASSETS,
+  );
+  assert.match(other, /<button type="button" id="detail-add" class="detail-add">Switch to 3\.3<\/button>/);
+  assert.doesNotMatch(other, /id="detail-add"[^>]*disabled/);
+  assert.match(other, /data-version="3\.2"[^>]*data-installed>3\.2<\/button><span class="detail-installed">added<\/span>/);
+
+  // Not a dependency at all: the original label, and no marker anywhere.
+  const fresh = renderDetailHtml(model(), ASSETS);
+  assert.match(fresh, />Add to mcpp\.toml<\/button>/);
+  // The script can move a marker, so the check is on the markup, not the page.
+  assert.doesNotMatch(fresh, /class="detail-installed"/);
+});
+
+test("the client can re-decide the button, and a link click is never silent", () => {
+  const html = renderDetailHtml(model({ installed: { version: "3.1", dev: false } }), ASSETS);
+  // The labels and the installed version travel with the page: the button's
+  // meaning changes with the selection, and the selection lives in the client.
+  assert.match(html, /"installed":"3\.1"/);
+  assert.match(html, /"switchTo":"Switch to \{0\}"/);
+  assert.match(html, /"alreadyAdded":"Already added"/);
+  assert.match(html, /"opening":"Opening \{0\}…"/);
+  const script = /<script nonce="[^"]*">([\s\S]*)<\/script>/.exec(html);
+  assert.ok(script !== null);
+  assert.match(script[1], /function updateButton\(\)/);
+  assert.match(script[1], /showResult\(\{ state: "pending"/);
+  assert.match(script[1], /updateButton\(\);/);
 });
 
 test("a parse failure is stated on the page instead of leaving it blank", () => {

@@ -1186,3 +1186,73 @@ webview 的 `localResourceRoots` 并在文档里放一个 `<img>`。这是一次
 - dev profile 重装并重启，日志确认激活、无错误。
 - **需要你验证**：库视图搜索框下面应该直接是列表（没有标签行），输入 `compat` 仍能按命名空间过滤；
   详情页顶部是一行三颗按钮；活动栏那枚图标 hover 时会变亮（这就是"它是模板"的证据）。
+
+## 20. round 7：详情页显示"已添加/已安装版本"、按钮变成切换版本；链接点击不再无声
+
+### 20.1 详情页认识"这个工程已经有什么"（反馈 2）
+
+列表行的 `Added` 徽标来自工程 `mcpp.toml` 的声明，而详情页什么都没读——所以同一个包，列表说
+"已添加"，详情页却像从没见过。现在详情页在构建模型时读一次工程自己的答案
+（`detailPanel.readInstalled`）：
+
+1. **`mcpp.toml` 优先**：`[dependencies]` / `[dev-dependencies]` 里这个包声明的精确版本。
+   实测过 mcpp 写进去的键是**短名**（`mcpp add compat.argparse@3.2` → `argparse = "3.2"`），
+   而索引里的 id 是 `compat.argparse`，所以匹配规则是"等于 id 或是它的最后一段"——与
+   `indexModel.declaredDependencies` 给行打 `Added` 用的规则一致。
+2. **`mcpp.lock` 兜底**：清单里没有版本（path/git 依赖）或工程解析过但没走 `mcpp add` 时，
+   用锁文件里 resolved 的版本。
+
+于是版本矩阵里**那个版本自己带标记**（`data-installed` + 一个 `added` 文字标签，文字而不是
+只有颜色），主按钮的文案与状态跟着走：
+
+| 工程的状况 | 选中的版本 | 按钮 |
+| --- | --- | --- |
+| 没有这个依赖 | 任意 | `Add to mcpp.toml` |
+| 已有 3.2 | 3.2（默认） | `Already added`，**禁用** |
+| 已有 3.2 | 3.3 | `Switch to 3.3`，可点 |
+
+"切换版本"是**真的能切换**，不是猜的：我在 `/tmp` 的副本里实测过
+`mcpp add compat.argparse@3.2` → `argparse = "3.2"`，再 `mcpp add compat.argparse@3.1` →
+**同一条依赖被就地改成 3.1，退出码 0**。所以不需要 remove+add 两步，也不需要新的确认弹窗。
+
+按钮的文案有两个来源：首屏由宿主按默认选择渲染，之后由客户端按当前选择重算（标签随
+`clientState` 一起下发，与命令预览同一个机制）——否则按钮的含义会跟不上版本选择。
+
+**还修了一处随之而来的不一致**：`mcpp add` 成功后页面**不会**重建（这是刻意的：重建会丢掉
+滚动位置和读者选中的版本），所以原来"加完还在显示 Add"。现在结果消息带上
+`added.version`，客户端就地移动 `added` 标记并重算按钮（`markInstalled()`，用
+`createElement`/`textContent`，不碰 `innerHTML`）。
+
+### 20.2 链接点击不再无声（反馈 3）
+
+根因就一行：
+
+```ts
+void vscode.env.openExternal(vscode.Uri.parse(message.url));   // 返回的 boolean 被丢掉
+```
+
+`openExternal` 解析成"是否成功打开"，而这里用 `void` 扔掉，于是**打不开的时候用户看到的是
+零反馈**——和按钮坏掉无法区分。现在：
+
+1. **客户端先说话**：点下去立刻在页面的状态行写 `Opening <url>…`（`data-state="pending"`），
+   宿主的结果再覆盖它。这样即使宿主那侧出问题，你也能看到"点击到了、但没有回音"。
+2. **宿主按结果回答**：成功 → `Opened <url> in your browser.`；失败 → 把 URL **复制到剪贴板**
+   并在状态行说明（`VS Code could not open …; the link is on your clipboard.`），
+   同时在 `mcpp` 输出通道留一行记录，便于诊断（这台机器上 `xdg-open` 与
+   `google-chrome.desktop` 都在，所以更可能是打开成功而你只看到"没有反馈"——这条修复让两种
+   结果都可见）。
+
+`DetailResult.state` 因此多了第三个取值 `pending`（客户端自己的那一行），CSS 也有对应的一条。
+
+### 20.3 状态
+
+- 660 个单元测试通过（新增：已添加/切换版本的三种按钮状态与标记位置、客户端能重算按钮且点击先
+  给 pending、源码门禁"不再 `void openExternal` 且两条结果都 post"）；
+  `check:config`（69 设置）、`l10n-check`（389 运行串 / 205 清单键）、`check:icon`、
+  `check:generators` 全过；VSIX 142 文件 / 387 KiB。
+- dev profile 重装并重启，日志确认激活、无错误。
+- **需要你验证**：打开一个**已经在 `mcpp.toml` 里**的包 → 版本行里那一版应有 `added` 标记、
+  按钮应是 `Already added`（禁用）；点另一个版本 → 按钮变 `Switch to <ver>`；点它 → 成功后
+  标记与按钮**原地**更新。再点 `Open the repository` / `Open on the index site` → 状态行
+  应立刻出现 `Opening …`，随后变成 `Opened …`（或"无法打开，已复制链接"）。
+- 仍未做到：活动栏彩色 logo（§19.3 三条独立理由）、状态栏 logo、"初始化当前目录"（上游无 `init`）。

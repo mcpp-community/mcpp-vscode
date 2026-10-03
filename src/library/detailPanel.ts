@@ -130,10 +130,11 @@ async function handle(session: DetailSession, raw: unknown): Promise<void> {
     return;
   }
   switch (message.type) {
-    case "openUrl":
+    case "openUrl": {
       // `decodeDetailMessage` already restricted this to https.
-      void vscode.env.openExternal(vscode.Uri.parse(message.url));
+      await openExternal(session, message.url);
       return;
+    }
     case "add": {
       if (session.busy || session.id === undefined) {
         return;
@@ -160,12 +161,62 @@ async function handle(session: DetailSession, raw: unknown): Promise<void> {
       if (session.panel === undefined) {
         return;
       }
-      void session.panel.webview.postMessage({ type: "result", result });
+      postResult(session, result, result.state === "ok" ? message.version : undefined);
       return;
     }
     default:
       return;
   }
+}
+
+/**
+ * Open a link, and say what happened.
+ *
+ * This used to be `void vscode.env.openExternal(…)`: the boolean it resolves to
+ * was dropped, so a host with no browser (or no way to reach one) answered a
+ * click with nothing at all — indistinguishable from a dead button. Now the page
+ * is told either way, a failure is copied to the clipboard so the click is still
+ * worth something, and the output channel keeps a record.
+ */
+async function openExternal(session: DetailSession, url: string): Promise<void> {
+  let opened = false;
+  try {
+    opened = await vscode.env.openExternal(vscode.Uri.parse(url));
+  } catch (error) {
+    session.deps.output?.appendLine(
+      `mcpp library: opening ${url} failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (opened) {
+    postResult(session, { state: "ok", message: t("Opened {0} in your browser.", url) });
+    return;
+  }
+  session.deps.output?.appendLine(`mcpp library: VS Code could not open ${url}; copying it instead.`);
+  try {
+    await vscode.env.clipboard.writeText(url);
+  } catch {
+    // A clipboard that refuses is not worth a second error.
+  }
+  postResult(session, {
+    state: "error",
+    message: t("VS Code could not open {0}. The link is on your clipboard.", url),
+  });
+}
+
+/**
+ * The page's status line, in the same shape the add flow uses.
+ *
+ * `added` tells the page that the project now depends on that version, so it can
+ * move its "added" marker and re-label the button without rebuilding the
+ * document — which would throw away the reader's scroll position and their
+ * version selection, the one thing running `mcpp add` must not do.
+ */
+function postResult(session: DetailSession, result: DetailResult, added?: string): void {
+  void session.panel?.webview.postMessage({
+    type: "result",
+    result,
+    ...(added === undefined ? {} : { added: { version: added } }),
+  });
 }
 
 async function render(session: DetailSession, id: string): Promise<void> {
@@ -344,6 +395,10 @@ function labels(): Record<string, string> {
     [DETAIL_UI.add]: t("Add to mcpp.toml"),
     [DETAIL_UI.addDev]: t("dev dependency"),
     [DETAIL_UI.addLatest]: t("The version is required: mcpp accepts an exact version only."),
+    [DETAIL_UI.switchTo]: t("Switch to {0}"),
+    [DETAIL_UI.alreadyAdded]: t("Already added"),
+    [DETAIL_UI.installed]: t("added"),
+    [DETAIL_UI.opening]: t("Opening {0}…"),
     [DETAIL_UI.addNoVersion]: t("This index publishes no version for this platform, so there is nothing to add."),
     [DETAIL_UI.command]: t("Command"),
     [DETAIL_UI.indexLink]: t("Open on the index site"),

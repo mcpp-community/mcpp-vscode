@@ -53,8 +53,16 @@ export interface DetailSnippet {
 
 /** The outcome of the last `mcpp add`, shown in place. */
 export interface DetailResult {
-  state: "ok" | "error";
+  /** `pending` is the client's own "I asked the host" line, replaced by the answer. */
+  state: "ok" | "error" | "pending";
   message: string;
+}
+
+/** The workspace's own answer about one package. */
+export interface DetailInstalled {
+  version: string;
+  /** Declared under `[dev-dependencies]`. */
+  dev: boolean;
 }
 
 export interface DetailModel {
@@ -75,6 +83,13 @@ export interface DetailModel {
   currentVersions: string[];
   /** What `mcpp add` would use by default. */
   latest?: string;
+  /**
+   * The version this workspace already asks for — `mcpp.toml` first, then
+   * `mcpp.lock` — so the page can say "you have this one" and offer the switch
+   * instead of a blind add. Absent when the project does not depend on the
+   * package, or when the dependency names no version (a path or git entry).
+   */
+  installed?: DetailInstalled;
   standard?: string;
   dependencies: DetailDependency[];
   includeDirs: string[];
@@ -128,6 +143,10 @@ export const DETAIL_UI = {
   codeProject: "detail.code.project",
   add: "detail.add",
   addDev: "detail.addDev",
+  switchTo: "detail.switchTo",
+  alreadyAdded: "detail.alreadyAdded",
+  installed: "detail.installed",
+  opening: "detail.opening",
   addLatest: "detail.addLatest",
   addNoVersion: "detail.add.noVersion",
   command: "detail.command",
@@ -246,11 +265,17 @@ function renderVersions(model: DetailModel, label: UiLabel): string {
         group.versions.length === 0
           ? `<span class="detail-version-empty">—</span>`
           : group.versions
-              .map(
-                (version) =>
+              .map((version) => {
+                const installed = model.installed !== undefined && model.installed.version === version;
+                return (
                   `<button type="button" class="detail-version" data-version="${escapeHtml(version)}"` +
-                  `${flag("data-selected", version === model.latest)}>${escapeHtml(version)}</button>`,
-              )
+                  `${flag("data-selected", version === model.latest)}${flag("data-installed", installed)}>` +
+                  `${escapeHtml(version)}</button>` +
+                  // The word, not the colour: a reader who cannot see the hue still
+                  // learns that this is the version in their manifest.
+                  (installed ? `<span class="detail-installed">${escapeHtml(label(DETAIL_UI.installed))}</span>` : "")
+                );
+              })
               .join("");
       return (
         `<li class="detail-version-group"${flag("data-current", group.current)}>` +
@@ -344,12 +369,20 @@ function renderExtras(model: DetailModel, label: UiLabel): string {
 function renderActions(model: DetailModel, label: UiLabel): string {
   const disabled = model.latest === undefined;
   const command = fill(label, DETAIL_UI.command, [model.id, model.latest ?? "?"]);
+  // The label the reader first sees is the one the *client* would compute for the
+  // same selection, so the button never changes meaning under the pointer.
+  const alreadyInstalled = model.installed !== undefined && model.installed.version === model.latest;
+  const addLabel = alreadyInstalled
+    ? label(DETAIL_UI.alreadyAdded)
+    : model.installed === undefined || model.latest === undefined
+      ? label(DETAIL_UI.add)
+      : fill(label, DETAIL_UI.switchTo, [model.latest]);
   const link = (url: string, text: string): string =>
     `    <button type="button" data-secondary data-open-url="${escapeHtml(url)}">${escapeHtml(text)}</button>`;
   return [
     `<section class="detail-primary" data-section="add">`,
     `  <div class="detail-actions">`,
-    `    <button type="button" id="detail-add" class="detail-add"${flag("disabled", disabled)}>${escapeHtml(label(DETAIL_UI.add))}</button>`,
+    `    <button type="button" id="detail-add" class="detail-add"${flag("disabled", disabled || alreadyInstalled)}>${escapeHtml(addLabel)}</button>`,
     `    <label class="detail-toggle"><input id="detail-dev" type="checkbox"><span>${escapeHtml(label(DETAIL_UI.addDev))}</span></label>`,
     ...(model.repo === undefined ? [] : [link(model.repo, label(DETAIL_UI.openRepo))]),
     ...(model.indexUrl === undefined ? [] : [link(model.indexUrl, label(DETAIL_UI.indexLink))]),
@@ -378,7 +411,10 @@ function clientScript(initialModel: string): string {
   var devInput = document.getElementById("detail-dev");
   var command = document.getElementById("detail-command");
   var result = document.getElementById("detail-result");
+  var addButton = document.getElementById("detail-add");
   var version = command ? (command.getAttribute("data-selected-version") || "") : "";
+  var labels = (state && state.labels) || {};
+  var installed = state && state.installed ? state.installed : "";
 
   function post(message) {
     if (api) { api.postMessage(message); }
@@ -402,6 +438,29 @@ function clientScript(initialModel: string): string {
     command.textContent = fillTemplate(template, [state.id, version || "?"]);
   }
 
+  /**
+   * The button's label and enabled state follow the selection: adding a new
+   * package, switching the version of one that is already there, or nothing to do
+   * because this is the version the manifest already asks for.
+   */
+  function updateButton() {
+    if (!addButton) { return; }
+    if (!version) {
+      addButton.textContent = labels.add || "";
+      addButton.disabled = true;
+      return;
+    }
+    if (installed && version === installed) {
+      addButton.textContent = labels.alreadyAdded || "";
+      addButton.disabled = true;
+      return;
+    }
+    addButton.textContent = installed
+      ? (labels.switchTo || "{0}").split("{0}").join(version)
+      : (labels.add || "");
+    addButton.disabled = false;
+  }
+
   /** One version button is the selection; the rest are alternatives. */
   function selectVersion(next) {
     version = next;
@@ -415,12 +474,16 @@ function clientScript(initialModel: string): string {
       }
     }
     updateCommand();
+    updateButton();
   }
 
   function showResult(payload) {
     if (!result) { return; }
     result.hidden = false;
-    result.setAttribute("data-state", payload.state === "ok" ? "ok" : "error");
+    result.setAttribute(
+      "data-state",
+      payload.state === "ok" ? "ok" : payload.state === "pending" ? "pending" : "error",
+    );
     result.textContent = payload.message || "";
   }
 
@@ -432,7 +495,11 @@ function clientScript(initialModel: string): string {
     var link = target.closest("[data-open-url]");
     if (link) {
       event.preventDefault();
-      post({ type: "openUrl", url: link.getAttribute("data-open-url") });
+      var url = link.getAttribute("data-open-url") || "";
+      // Say something the instant the click lands: the host's answer replaces
+      // this line, and if it never arrives the reader can see that too.
+      showResult({ state: "pending", message: (labels.opening || "{0}").split("{0}").join(url) });
+      post({ type: "openUrl", url: url });
       return;
     }
     var pick = target.closest("[data-version]");
@@ -447,18 +514,54 @@ function clientScript(initialModel: string): string {
     }
   });
 
+  /** Move the "added" marker onto the version the project now asks for. */
+  function markInstalled(next) {
+    installed = next;
+    var marks = document.querySelectorAll(".detail-installed");
+    for (var index = 0; index < marks.length; index += 1) { marks[index].parentNode.removeChild(marks[index]); }
+    var buttons = document.querySelectorAll("[data-version]");
+    for (var index2 = 0; index2 < buttons.length; index2 += 1) {
+      var button = buttons[index2];
+      if (button.getAttribute("data-version") !== next) {
+        button.removeAttribute("data-installed");
+        continue;
+      }
+      button.setAttribute("data-installed", "");
+      var mark = document.createElement("span");
+      mark.className = "detail-installed";
+      mark.textContent = labels.installed || "";
+      button.parentNode.insertBefore(mark, button.nextSibling);
+    }
+    updateButton();
+  }
+
   window.addEventListener("message", function (event) {
     var data = event.data;
     if (data && data.type === "result" && data.result) { showResult(data.result); }
+    if (data && data.added && data.added.version) { markInstalled(data.added.version); }
   });
 
   updateCommand();
+  updateButton();
 })();`;
 }
 
 /** The little state the client needs; the page is already rendered from the rest. */
 function clientState(model: DetailModel): Record<string, unknown> {
-  return { id: model.id, ...(model.latest === undefined ? {} : { latest: model.latest }) };
+  return {
+    id: model.id,
+    ...(model.latest === undefined ? {} : { latest: model.latest }),
+    // The three labels the button can wear, and the version the project already
+    // has: the client re-decides the label every time the selection changes, so
+    // the host cannot be the only one that knows what the button means.
+    labels: {
+      add: model.ui[DETAIL_UI.add] ?? "",
+      switchTo: model.ui[DETAIL_UI.switchTo] ?? "",
+      alreadyAdded: model.ui[DETAIL_UI.alreadyAdded] ?? "",
+      opening: model.ui[DETAIL_UI.opening] ?? "",
+    },
+    ...(model.installed === undefined ? {} : { installed: model.installed.version }),
+  };
 }
 
 /** A model embedded in the page's own script; `<` is escaped so it cannot close it. */

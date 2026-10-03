@@ -222,6 +222,27 @@ test("the library view cannot reload itself in a loop", () => {
   assert.match(view, /this\.document = undefined;/);
 });
 
+test("opening a link always produces an answer", () => {
+  // The comment above `openExternal` quotes the old call, so comments are
+  // stripped before the check — the point is the code, not the prose.
+  const panel = readFileSync(path.join(root, "src", "library", "detailPanel.ts"), "utf8").replace(
+    /\/\*[\s\S]*?\*\//g,
+    "",
+  );
+  // `void vscode.env.openExternal(…)` drops the boolean it resolves to, so a host
+  // that cannot open a browser answered a click with nothing at all. The call is
+  // awaited, both outcomes are posted to the page, and a failure leaves the URL
+  // somewhere the reader can use it.
+  assert.doesNotMatch(panel, /void vscode\.env\.openExternal/);
+  assert.match(panel, /opened = await vscode\.env\.openExternal\(/);
+  assert.match(panel, /postResult\(session, \{ state: "ok", message: t\("Opened \{0\} in your browser\."/);
+  assert.match(panel, /postResult\(session, \{\s*state: "error",/);
+  assert.match(panel, /vscode\.env\.clipboard\.writeText\(url\)/);
+  // The client's own line, so the click is visible before the host answers.
+  const html = readFileSync(path.join(root, "src", "library", "detailHtml.ts"), "utf8");
+  assert.match(html, /state: "pending"/);
+});
+
 /** `src/**\/*.ts`, relative path and text, for the source-level gates. */
 function sourceFiles(directory = path.join(root, "src")): Array<[string, string]> {
   const out: Array<[string, string]> = [];
