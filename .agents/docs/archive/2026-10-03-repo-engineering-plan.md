@@ -36,13 +36,13 @@
 - name: 发布到 Open VSX
   shell: bash
   env:
-    OVSX_PAT: ${{ secrets.OVSX_PAT }}
+    OPENVSX_TOKEN: ${{ secrets.OPENVSX_TOKEN }}
   run: |
     set -euo pipefail
-    if [ -z "${OVSX_PAT:-}" ]; then
-      echo "缺少 OVSX_PAT：Open VSX 是必发目标，发布 tag 不能没有它。"
+    if [ -z "${OPENVSX_TOKEN:-}" ]; then
+      echo "缺少 OPENVSX_TOKEN：Open VSX 是必发目标，发布 tag 不能没有它。"
       echo "到 open-vsx.org → Settings → Access Tokens 创建 publish 作用域的 token，"
-      echo "再配到本仓库 Settings → Secrets and variables → Actions 的 OVSX_PAT。"
+      echo "再配到本仓库 Settings → Secrets and variables → Actions 的 OPENVSX_TOKEN。"
       exit 1
     fi
     npx ovsx publish "mcpp-vscode-${PACKAGE_VERSION}.vsix"
@@ -73,7 +73,7 @@
 ### A3 一次性人工步骤（作者操作）
 
 1. open-vsx.org 注册/登录（Eclipse 账号）→ Settings → Access Tokens → 新建（publish 作用域）→
-   配成仓库 secret `OVSX_PAT`。
+   配成仓库 secret `OPENVSX_TOKEN`。
 2. dev.azure.com → Personal Access Tokens → 新建（Organization: 所有可访问组织；Scopes:
    Marketplace → Manage）→ 配成 secret `VSCE_PAT`。
 3. 首次 `ovsx publish` 会自动认领 `mcpp-community` namespace（除非已被占用；发布前可在
@@ -83,7 +83,7 @@
 
 `test/artifacts.test.ts` 追加对 release.yml 的断言：
 
-- 含 `ovsx publish` 与 `vsce publish --packagePath` 两个步骤，且各自引用 `secrets.OVSX_PAT` /
+- 含 `ovsx publish` 与 `vsce publish --packagePath` 两个步骤，且各自引用 `secrets.OPENVSX_TOKEN` /
   `secrets.VSCE_PAT`——将来重构工作流时不能无声丢掉发布；
 - `package.json` devDependencies 含 `ovsx`——`npx` 永远离线可用。
 

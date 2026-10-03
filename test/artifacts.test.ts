@@ -622,12 +622,13 @@ test("the release workflow guards the published artefact against local leakage",
 
 test("tag release 同时发布两个市场：Open VSX 必发，Marketplace 未配 token 则跳过", () => {
   const workflow = readFileSync(path.join(root, ".github/workflows/release.yml"), "utf8");
-  // 两个市场收到的都是 GitHub Release 上的那只 VSIX，不重新打包。
-  assert.match(workflow, /npx ovsx publish "mcpp-vscode-\$\{PACKAGE_VERSION\}\.vsix"/);
+  // 两个市场收到的都是 GitHub Release 上的那只 VSIX，不重新打包。Open VSX 的
+  // secret 名就是仓库实际配置的 OPENVSX_TOKEN（曾写成 OVSX_PAT，首版必然失败）。
+  assert.match(workflow, /npx ovsx publish "mcpp-vscode-\$\{PACKAGE_VERSION\}\.vsix" --pat "\$OPENVSX_TOKEN"/);
   assert.match(workflow, /npx vsce publish --packagePath "mcpp-vscode-\$\{PACKAGE_VERSION\}\.vsix"/);
   // Open VSX 是必发目标：缺 token 显式失败。
-  assert.match(workflow, /OVSX_PAT: \$\{\{ secrets\.OVSX_PAT \}\}/);
-  assert.match(workflow, /if \[ -z "\$\{OVSX_PAT:-\}" \]; then[\s\S]*?exit 1/);
+  assert.match(workflow, /OPENVSX_TOKEN: \$\{\{ secrets\.OPENVSX_TOKEN \}\}/);
+  assert.match(workflow, /if \[ -z "\$\{OPENVSX_TOKEN:-\}" \]; then[\s\S]*?exit 1/);
   // Marketplace 机会发布：缺 token 打一行说明就过，Release 不失败。
   assert.match(workflow, /VSCE_PAT: \$\{\{ secrets\.VSCE_PAT \}\}/);
   assert.match(workflow, /if \[ -z "\$\{VSCE_PAT:-\}" \]; then[\s\S]*?exit 0/);
