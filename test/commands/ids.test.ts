@@ -51,7 +51,7 @@ test("every 0.4.x id is still contributed", () => {
   }
 });
 
-test("the C++ Modules view forwards one command per capability", () => {
+test("the C++ Modules group lists every id it registers", () => {
   assert.deepEqual(Object.values(LANGUAGE_SERVER_COMMANDS), [
     "mcpp.languageServer.refreshState",
     "mcpp.languageServer.restart",
@@ -62,6 +62,10 @@ test("the C++ Modules view forwards one command per capability", () => {
     "mcpp.languageServer.showLogs",
     "mcpp.languageServer.collectReport",
     "mcpp.languageServer.exportDiagnosticBundle",
+    // Not every id here maps to an mcppls capability: `revealBundle` reveals the
+    // zip the last capture wrote, which is this extension's own bookkeeping.
+    "mcpp.languageServer.revealBundle",
+    "mcpp.languageServer.openLogFolder",
     "mcpp.languageServer.runBuildToolInTerminal",
     "mcpp.languageServer.manageConflicts",
     "mcpp.languageServer.toggleInWorkspace",

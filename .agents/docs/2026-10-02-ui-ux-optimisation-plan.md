@@ -1032,3 +1032,66 @@ if (std::filesystem::exists(finalPath, existenceError) || existenceError) {
   版本按钮点选是否明显；年龄条的冷→热渐变是否读得出差异。
 - 仍未做到：活动栏状态色、状态栏 logo、"初始化当前目录"（三条都是 API/上游约束，各有源码证据）；
   e2e 仍未在本地跑通。
+
+## 18. round 5 补：快捷菜单的 C++ Modules 分组补上"抓日志"和"日志/压缩包在哪"
+
+反馈原话：C++ Modules 分组下面应当有**触发抓 log** 的选项，以及**打开 log 压缩包目录**的选项。
+
+先说清上游有什么（读了 mcppls 源码 `editors/vscode/src/commands.ts`，不是猜的）：
+
+| 上游命令 | 实际行为 | 返回 |
+| --- | --- | --- |
+| `mcppls.collectReport` | 打开一份 JSON 诊断报告（版本/设置/环境/服务端报告，已脱敏），并给出复制/导出/看日志三个按钮 | 无 |
+| `mcppls.exportDiagnosticBundle` | **抓取日志**（上游自己的中文标签就是「抓取日志（含报告）」）：把报告、环境、最近几次会话的日志、incident、引擎数据库写成一个 zip；写完自己弹提示，带「Reveal in Folder」「Copy Path」 | **zip 的路径字符串** |
+| `mcppls.showLogs` | 打开 Output 面板里的日志 | 无 |
+| `mcppls.revealCacheDirectory(which)` | `which === 'logs'` → `revealFileInOS(paths.logDirectory)`，否则 → 工作区 cache 根 | 无 |
+
+也就是说"抓 log"和"打开日志目录"上游**都有**，只是我们的快捷菜单一条都没挂。这一轮挂上四条：
+
+- `C++ Modules: capture the logs (report + bundle)`（`file-zip`）→ `exportDiagnosticBundle`
+- `C++ Modules: show the diagnostic report`（`report`）→ `collectReport`
+- `C++ Modules: open the log folder`（`folder-opened`）→ **新命令** `mcpp.languageServer.openLogFolder`，
+  转发 `mcppls.revealCacheDirectory` 并带参数 `["logs"]`
+- `C++ Modules: show the last captured bundle`（`folder`）→ **新命令** `mcpp.languageServer.revealBundle`
+
+两处新东西值得说明：
+
+**1. 命令的返回值以前被丢掉。** `CapabilityRegistry.invoke` 写的是
+`await executeCommand(candidate, ...args)`——返回值直接扔了。而"压缩包在哪"**只有**那个返回值知道
+（zip 写在 `<平台 cache>/bundles/mcppls-bundle-<UTC>.zip`，见 mcppls `src/bundle/writer.cpp`；
+我们**不能**自己去拼这个路径，那是把上游的私有布局复制到客户端）。所以 `InvokeResult` 增加了
+可选的 `value`，原样透传、不做任何解释；`exportDiagnosticBundle` 收到路径就记进
+`globalState`（压缩包目录本来就是机器级的），`revealBundle` 再用 `revealFileInOS` 定位它。
+没抓过就直说，并给出「现在抓取」按钮；文件被删了也走同一条提示。
+
+**2. `mcppls.revealCacheDirectory` 的参数由我们传。** 能力表里只登记命令 id，
+参数留给调用方（`args: ["logs"]`），所以一条 `logsDirectory` 能力就能覆盖上游那一个命令。
+
+### 18.1 顺手抓到一个我自己刚要犯的错
+
+把 `exportDiagnosticBundle` 从"通用 forward 表"改成手写 `register`（为了拿到返回值）时，我**没有**
+删掉下面那行 `forward(LANGUAGE_SERVER_COMMANDS.exportDiagnosticBundle, "diagnosticBundle")`。
+`vscode.commands.registerCommand` 对重复 id 会**抛异常**，而它发生在 `activate()` 里——整个扩展都
+起不来，不是只坏第二个注册。
+
+这种错靠 review 很容易漏（两处相隔 40 行），所以加了可执行的门禁：`test/config/wiring.test.ts`
+新增「no command id is registered twice」——把 `ids.ts` 的 `<GROUP>_COMMANDS.<name>` 解析回真实 id，
+再扫 `src/**` 里所有 `register(` / `forward(` / `.registerCommand(` 的首参，任何 id 出现两次就失败。
+**并且我把这个 bug 人为放回去验证过门禁真的会红**：
+
+```
+✖ no command id is registered twice
+  registered more than once: [["mcpp.languageServer.exportDiagnosticBundle",
+                              ["src/views/languageServerView.ts","src/views/languageServerView.ts"]]]
+```
+
+### 18.2 状态
+
+- 658 个单元测试通过（新增：返回值透传 + 参数透传、菜单覆盖这四条且都能找到注册点、重复注册门禁）；
+  `check:config`（69 设置）、`l10n-check`（385 运行串 / 205 清单键）、`check:icon`（48 个菜单图标）、
+  `check:generators` 全过；VSIX 142 文件 / 386 KiB。
+- dev profile 重装并重启，日志确认激活、无错误。
+- **需要你验证**：`$(tools) mcpp` 菜单里 C++ Modules 那一段现在有 9 条；抓一次日志，看上游的
+  「Reveal in Folder」是否出现；再点 `show the last captured bundle` 是否**直接定位到那个 zip**；
+  `open the log folder` 是否打开系统文件管理器的日志目录。
+  未安装/未启用 mcppls 时这四条应给"上游不提供该动作"的降级提示而不是报错（能力表 `required: false`）。

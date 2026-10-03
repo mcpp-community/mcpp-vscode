@@ -21,6 +21,8 @@
  * whether the block appears in the project view at all.
  */
 
+import { existsSync } from "node:fs";
+
 import * as vscode from "vscode";
 
 import { LANGUAGE_SERVER_COMMANDS, LEGACY_LANGUAGE_SERVER_COMMANDS, TOOL_COMMANDS } from "../commands/ids";
@@ -72,13 +74,13 @@ export async function runLanguageServerCommand(
   output: vscode.OutputChannel,
   key: string,
   options: { args?: unknown[]; value?: unknown; extraConfirmation?: string } = {},
-): Promise<void> {
+): Promise<{ message: string; value?: unknown } | undefined> {
   const confirmation = confirmationFor(key, options.value);
   if (confirmation !== undefined) {
     const run = t("Run");
     const choice = await vscode.window.showWarningMessage(confirmation, { modal: true }, run);
     if (choice !== run) {
-      return;
+      return undefined;
     }
   }
   // A setting may ask once more; it never replaces the capability's own modal.
@@ -90,7 +92,7 @@ export async function runLanguageServerCommand(
       run,
     );
     if (choice !== run) {
-      return;
+      return undefined;
     }
   }
   const result = await bridge.invoke(key, ...(options.args ?? []));
@@ -105,6 +107,9 @@ export async function runLanguageServerCommand(
   } else if (formatted.severity === "warning") {
     void vscode.window.showWarningMessage(formatted.message);
   }
+  return result.value === undefined
+    ? { message: formatted.message }
+    : { message: formatted.message, value: result.value };
 }
 
 /**
@@ -216,6 +221,53 @@ export function registerLanguageServerCommands(
     refresh();
   });
 
+  /**
+   * Where the last bundle was written.
+   *
+   * `mcppls.exportDiagnosticBundle` resolves to the zip it wrote, and that path
+   * is the only reliable answer to "where is it?" — the directory is
+   * `<platform cache>/bundles` on the server's own terms, which this extension
+   * must not guess at. Remembered machine-wide, because the bundle directory is
+   * machine-wide too.
+   */
+  const BUNDLE_PATH_KEY = "mcpp.languageServer.lastDiagnosticBundle";
+  const bundleFrom = (value: unknown): string | undefined => {
+    const path = value instanceof vscode.Uri ? value.fsPath : typeof value === "string" ? value : undefined;
+    return path !== undefined && path.length > 0 ? path : undefined;
+  };
+
+  register(LANGUAGE_SERVER_COMMANDS.exportDiagnosticBundle, async () => {
+    const result = await runLanguageServerCommand(deps.bridge, deps.output, "diagnosticBundle");
+    const bundle = bundleFrom(result?.value);
+    if (bundle !== undefined) {
+      await context.globalState.update(BUNDLE_PATH_KEY, bundle);
+    }
+    refresh();
+  });
+
+  register(LANGUAGE_SERVER_COMMANDS.revealBundle, async () => {
+    const remembered = context.globalState.get<string>(BUNDLE_PATH_KEY);
+    if (remembered === undefined || !existsSync(remembered)) {
+      const exportNow = t("Capture logs now");
+      const choice = await vscode.window.showInformationMessage(
+        t("No diagnostic bundle has been written yet. Capturing the logs writes one zip with the report, the environment and the recent logs."),
+        exportNow,
+      );
+      if (choice === exportNow) {
+        await vscode.commands.executeCommand(LANGUAGE_SERVER_COMMANDS.exportDiagnosticBundle);
+      }
+      return;
+    }
+    await vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(remembered));
+  });
+
+  register(LANGUAGE_SERVER_COMMANDS.openLogFolder, async () => {
+    // Upstream owns the path: `revealCacheDirectory('logs')` asks the server's own
+    // detail for `paths.logDirectory` and reveals it, falling back to the output
+    // channel when the server cannot answer. Nothing here reconstructs a path.
+    await runLanguageServerCommand(deps.bridge, deps.output, "logsDirectory", { args: ["logs"] });
+  });
+
   forward(LANGUAGE_SERVER_COMMANDS.restart, "restartServer");
   forward(LANGUAGE_SERVER_COMMANDS.restartEngine, "restartEngine");
   forward(LANGUAGE_SERVER_COMMANDS.resetWorkspaceCache, "resetCache");
@@ -223,7 +275,8 @@ export function registerLanguageServerCommands(
   forward(LANGUAGE_SERVER_COMMANDS.showModuleGraph, "moduleGraph");
   forward(LANGUAGE_SERVER_COMMANDS.showLogs, "logs");
   forward(LANGUAGE_SERVER_COMMANDS.collectReport, "report");
-  forward(LANGUAGE_SERVER_COMMANDS.exportDiagnosticBundle, "diagnosticBundle");
+  // `exportDiagnosticBundle` is registered above rather than forwarded: its
+  // answer is the zip's path, and the caller has to keep it.
   forward(LANGUAGE_SERVER_COMMANDS.runBuildToolInTerminal, "runBuildTool");
   forward(LANGUAGE_SERVER_COMMANDS.installTools, "installTools");
   forward(LANGUAGE_SERVER_COMMANDS.manageConflicts, "manageConflicts", () => [true]);

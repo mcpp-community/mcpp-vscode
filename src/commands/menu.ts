@@ -89,6 +89,10 @@ export const quickMenuItems: readonly QuickMenuItem[] = [
   { labelKey: "C++ Modules: select the analysis context", command: LANGUAGE_SERVER_COMMANDS.selectContext, icon: "symbol-interface", iconColor: "neutral", group: "languageServer" },
   { labelKey: "C++ Modules: show the module graph", command: LANGUAGE_SERVER_COMMANDS.showModuleGraph, icon: "type-hierarchy", iconColor: "neutral", group: "languageServer" },
   { labelKey: "C++ Modules: open the log", command: LANGUAGE_SERVER_COMMANDS.showLogs, icon: "output", iconColor: "neutral", group: "languageServer" },
+  { labelKey: "C++ Modules: capture the logs (report + bundle)", command: LANGUAGE_SERVER_COMMANDS.exportDiagnosticBundle, icon: "file-zip", iconColor: "neutral", group: "languageServer" },
+  { labelKey: "C++ Modules: show the diagnostic report", command: LANGUAGE_SERVER_COMMANDS.collectReport, icon: "report", iconColor: "neutral", group: "languageServer" },
+  { labelKey: "C++ Modules: open the log folder", command: LANGUAGE_SERVER_COMMANDS.openLogFolder, icon: "folder-opened", iconColor: "neutral", group: "languageServer" },
+  { labelKey: "C++ Modules: show the last captured bundle", command: LANGUAGE_SERVER_COMMANDS.revealBundle, icon: "folder", iconColor: "neutral", group: "languageServer" },
   { labelKey: "C++ Modules: reset this workspace's cache", command: LANGUAGE_SERVER_COMMANDS.resetWorkspaceCache, icon: "trash", iconColor: "neutral", group: "languageServer" },
 
   { labelKey: "Build and refresh the language service", command: CLI_COMMANDS.autoConfigureModules, icon: "refresh", iconColor: "blue", group: "settings" },

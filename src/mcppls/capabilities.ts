@@ -53,6 +53,16 @@ export interface InvokeResult {
   command?: string;
   /** Error text from the failed call, verbatim. */
   error?: string;
+  /**
+   * Whatever the command answered with, when it answered with anything.
+   *
+   * A few mcppls commands return a path — `mcppls.exportDiagnosticBundle`
+   * resolves to the zip it wrote (`exportDiagnosticBundle(): Promise<string |
+   * undefined>` upstream) — and that is the only reliable way to point at the
+   * file afterwards. Most commands return nothing, and the caller must treat this
+   * as unknown: it is passed on untouched, never parsed.
+   */
+  value?: unknown;
 }
 
 /** `command 'x' not found` in the several spellings VS Code has used. */
@@ -157,9 +167,14 @@ export class CapabilityRegistry {
 
     try {
       await this.environment.activateExtension?.(MCPPLS_EXTENSION_ID);
-      await this.environment.executeCommand(candidate, ...args);
+      const value = await this.environment.executeCommand(candidate, ...args);
       this.statuses.set(key, { key, state: "available", command: candidate });
-      return { state: "completed", capabilityKey: key, command: candidate };
+      return {
+        state: "completed",
+        capabilityKey: key,
+        command: candidate,
+        ...(value === undefined ? {} : { value }),
+      };
     } catch (error) {
       const failure = classifyCommandError(error);
       if (failure === "missing") {
@@ -168,9 +183,14 @@ export class CapabilityRegistry {
         const next = entry.commands.find((other) => other !== candidate);
         if (next !== undefined) {
           try {
-            await this.environment.executeCommand(next, ...args);
+            const value = await this.environment.executeCommand(next, ...args);
             this.statuses.set(key, { key, state: "available", command: next });
-            return { state: "completed", capabilityKey: key, command: next };
+            return {
+              state: "completed",
+              capabilityKey: key,
+              command: next,
+              ...(value === undefined ? {} : { value }),
+            };
           } catch (second) {
             if (classifyCommandError(second) === "missing") {
               this.statuses.set(key, { key, state: "missing" });

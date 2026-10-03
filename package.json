@@ -223,6 +223,16 @@
         "category": "%category%"
       },
       {
+        "command": "mcpp.languageServer.revealBundle",
+        "title": "%command.mcpp.languageServer.revealBundle.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.languageServer.openLogFolder",
+        "title": "%command.mcpp.languageServer.openLogFolder.title%",
+        "category": "%category%"
+      },
+      {
         "command": "mcpp.languageServer.runBuildToolInTerminal",
         "title": "%command.mcpp.languageServer.runBuildToolInTerminal.title%",
         "category": "%category%"

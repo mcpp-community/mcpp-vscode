@@ -46,6 +46,8 @@ export const LANGUAGE_SERVER_COMMANDS = {
   showLogs: "mcpp.languageServer.showLogs",
   collectReport: "mcpp.languageServer.collectReport",
   exportDiagnosticBundle: "mcpp.languageServer.exportDiagnosticBundle",
+  revealBundle: "mcpp.languageServer.revealBundle",
+  openLogFolder: "mcpp.languageServer.openLogFolder",
   runBuildToolInTerminal: "mcpp.languageServer.runBuildToolInTerminal",
   manageConflicts: "mcpp.languageServer.manageConflicts",
   toggleInWorkspace: "mcpp.languageServer.toggleInWorkspace",

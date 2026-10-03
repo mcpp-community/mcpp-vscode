@@ -14,6 +14,8 @@ function harness(options: {
   installed?: boolean;
   declared?: readonly string[] | undefined;
   behaviour?: (command: string, attempt: number) => void;
+  /** What the command answers with, for the few that answer at all. */
+  result?: (command: string) => unknown;
 } = {}): Harness {
   const installed = options.installed ?? true;
   const calls: Array<{ command: string; args: unknown[] }> = [];
@@ -30,7 +32,7 @@ function harness(options: {
       const attempt = (attempts.get(command) ?? 0) + 1;
       attempts.set(command, attempt);
       options.behaviour?.(command, attempt);
-      return undefined as T;
+      return (options.result === undefined ? undefined : options.result(command)) as T;
     },
   };
   return { registry: new CapabilityRegistry(environment), calls, activations };
@@ -63,6 +65,29 @@ test("a statically undeclared command is only greyed out, never hidden", () => {
   assert.equal(registry.status("moduleGraph").state, "undeclared");
   assert.equal(registry.isUnconfirmed("moduleGraph"), true);
   assert.equal(registry.isGone("moduleGraph"), false);
+});
+
+test("the command's own answer is passed back untouched", async () => {
+  // `mcppls.exportDiagnosticBundle` resolves to the zip it wrote, and that path
+  // is the only reliable pointer at the file afterwards; most commands answer
+  // with nothing, so the field is optional and never interpreted here.
+  const { registry, calls } = harness({
+    declared: ["mcppls.exportDiagnosticBundle", "mcppls.revealCacheDirectory"],
+    result: (command) => (command === "mcppls.exportDiagnosticBundle" ? "/cache/bundles/x.zip" : undefined),
+  });
+
+  const answered = await registry.invoke("diagnosticBundle");
+  assert.equal(answered.state, "completed");
+  assert.equal(answered.value, "/cache/bundles/x.zip");
+
+  // The reveal command takes its target as an argument; the table only names the
+  // command, so the caller's `'logs'` has to arrive as-is.
+  await registry.invoke("logsDirectory", "logs");
+  assert.deepEqual(calls[calls.length - 1], { command: "mcppls.revealCacheDirectory", args: ["logs"] });
+
+  const silent = await registry.invoke("logsDirectory");
+  assert.equal(silent.state, "completed");
+  assert.ok(!("value" in silent), "a command that answered nothing must not invent a value");
 });
 
 test("an uninstalled dependency makes every capability unavailable without calling anything", async () => {

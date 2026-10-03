@@ -125,6 +125,21 @@ export const CAPABILITIES: readonly Capability[] = [
       "This discards the language server's model cache for this workspace and prepares it again, which can take minutes. mcpp's own build cache and the project's target/ directory are not touched.",
   },
   {
+    key: "logsDirectory",
+    // Verified upstream: `mcppls.revealCacheDirectory(which)` takes `'logs'` for
+    // `paths.logDirectory` and anything else for the workspace cache root
+    // (`editors/vscode/src/commands.ts` -> `revealCacheDirectory`), and the log
+    // directory is `<platform cache>/logs` (`src/orchestrator/workspace.cpp`).
+    // The argument is passed by the caller, so the chain stays one command.
+    kind: "forward",
+    title: "Open the C++ Modules log folder",
+    commands: ["mcppls.revealCacheDirectory"],
+    required: false,
+    danger: "none",
+    degradedHint:
+      "Installed C++ Modules does not offer a reveal command; its log lives in the mcppls cache directory.",
+  },
+  {
     key: "report",
     kind: "forward",
     title: "Collect a C++ Modules diagnostic report",

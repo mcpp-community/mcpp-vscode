@@ -143,3 +143,46 @@ test("the parameterised test uses real files, not an empty scan", () => {
   assert.ok(statSync(path.join(process.cwd(), "src")).isDirectory());
   assert.ok(readKeys().size > 10, "the accessor scan found almost nothing, so it is broken");
 });
+
+/**
+ * A command registered twice is a command that never registers.
+ *
+ * `vscode.commands.registerCommand` throws on a duplicate id, and the throw
+ * happens during `activate()` — so the whole extension stops activating, not just
+ * the second registrant. It is an easy mistake to make when a command moves from
+ * a generic `forward(...)` table to a hand-written `register(...)` and the old
+ * line is left behind, which is exactly how `exportDiagnosticBundle` was nearly
+ * shipped twice.
+ *
+ * The scan resolves `<GROUP>_COMMANDS.<name>` references back through `ids.ts`,
+ * so a rename cannot hide a duplicate, and it only counts the expressions that
+ * actually register something.
+ */
+test("no command id is registered twice", () => {
+  const ids = readFileSync(path.join(process.cwd(), "src", "commands", "ids.ts"), "utf8");
+  const byName = new Map<string, string>();
+  for (const group of ids.matchAll(/export const (\w+_COMMANDS) = \{([\s\S]*?)\n\} as const;/g)) {
+    for (const entry of group[2].matchAll(/(\w+):\s*"([^"]+)"/g)) {
+      byName.set(`${group[1]}.${entry[1]}`, entry[2]);
+    }
+  }
+  assert.ok(byName.size > 20, `the id table must be parsed, found ${byName.size}`);
+
+  // A registration site: `register(<id>`, `forward(<id>`, or
+  // `vscode.commands.registerCommand(<id>`.
+  const registration = /(?:\bregister|\bforward|\.registerCommand)\(\s*([A-Z_]+_COMMANDS\.\w+)/g;
+  const seen = new Map<string, string[]>();
+  for (const file of sourceFiles(path.join(process.cwd(), "src"))) {
+    const relative = path.relative(process.cwd(), file);
+    for (const match of readFileSync(file, "utf8").matchAll(registration)) {
+      const id = byName.get(match[1]);
+      if (id === undefined) {
+        continue;
+      }
+      seen.set(id, [...(seen.get(id) ?? []), relative]);
+    }
+  }
+  const twice = [...seen].filter(([, files]) => files.length > 1);
+  assert.deepEqual(twice, [], `registered more than once: ${JSON.stringify(twice)}`);
+  assert.ok(seen.size > 20, `the scan must find the registrations, found ${seen.size}`);
+});

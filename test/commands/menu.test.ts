@@ -9,6 +9,7 @@ import {
   quickMenuIconAsset,
   quickMenuItems,
 } from "../../src/commands/menu";
+import { LANGUAGE_SERVER_COMMANDS } from "../../src/commands/ids";
 import { buildProjectTree } from "../../src/views/models";
 
 /**
@@ -60,6 +61,32 @@ test("every menu label has a translation, headings included", () => {
 test("every entry carries a codicon id, not a rendered icon", () => {
   for (const item of quickMenuItems) {
     assert.match(item.icon, /^[a-z0-9-]+$/, `${item.command} has the icon ${JSON.stringify(item.icon)}`);
+  }
+});
+
+test("the C++ Modules section offers the log capture and where it lands", () => {
+  // The section is the only place the whole language-service story is assembled,
+  // so it has to carry both halves of a bug report: capture the logs, and get
+  // back to what was captured. `exportDiagnosticBundle` is the capture (upstream
+  // labels it 抓取日志（含报告）), and the two folders are the log directory the
+  // server writes to and the zip the last capture wrote.
+  const services = quickMenuItems.filter((item) => item.group === "languageServer").map((item) => item.command);
+  for (const command of [
+    LANGUAGE_SERVER_COMMANDS.exportDiagnosticBundle,
+    LANGUAGE_SERVER_COMMANDS.collectReport,
+    LANGUAGE_SERVER_COMMANDS.openLogFolder,
+    LANGUAGE_SERVER_COMMANDS.revealBundle,
+  ]) {
+    assert.ok(services.includes(command), `the menu does not offer ${command}`);
+  }
+  // And every id the section names is registered by the view that owns it.
+  const view = readFileSync(path.join(process.cwd(), "src", "views", "languageServerView.ts"), "utf8");
+  for (const command of services) {
+    const name = Object.entries(LANGUAGE_SERVER_COMMANDS).find(([, id]) => id === command)?.[0];
+    assert.ok(
+      name !== undefined && view.includes(`LANGUAGE_SERVER_COMMANDS.${name}`),
+      `${command} is in the menu but nothing registers it`,
+    );
   }
 });
 
