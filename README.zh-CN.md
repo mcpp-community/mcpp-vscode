@@ -43,7 +43,7 @@
 
 1. 打开包含 `mcpp.toml` 的文件夹（或运行 **mcpp: 新建工程**）。
 2. 运行 **mcpp: 构建**（`mcpp.build`）；它会在专用任务终端里执行。
-3. 打开活动栏的 **mcpp** 容器，查看 **工程**、**缓存** 与 **C++ Modules** 三个视图。
+3. 打开活动栏的 **mcpp** 容器，查看 **工程**、**mcpp 库生态** 与 **缓存** 三个视图。C++ Modules 的状态与操作在 **工程 → 基本信息** 里。
 
 打开工程本身不会执行 `mcpp`，也不会下载或切换工具链。
 
@@ -52,8 +52,9 @@
 - **mcpp CLI 与任务** —— 构建、运行、测试、清理、快捷菜单、工具链：[docs/commands.md](docs/commands.md)。
 - **`mcpp.toml` 编辑** —— 结构补全与七条结构诊断：[docs/mcpp-toml.md](docs/mcpp-toml.md)。
 - **`build.mcpp` 智能** —— 补全、悬停、七条 SPEC-007 诊断，且永不误报「模块找不到」：[docs/build-script.md](docs/build-script.md)。
-- **缓存视图与清理** —— 工程产物与共享缓存，删除前一律先给出预览：[docs/cache.md](docs/cache.md)。
-- **C++ Modules 视图** —— 对方扩展的状态与操作集中在一处，只转发不重写：[docs/commands.md](docs/commands.md)。
+- **缓存视图与清理** —— 工程产物与共享缓存（侧边栏默认折叠），删除前一律先给出预览：[docs/cache.md](docs/cache.md)。
+- **mcpp 库生态** —— 离线浏览本机已刷新的包索引，打开包详情页看真实示例代码与版本矩阵：[docs/settings.md](docs/settings.md)。
+- **C++ Modules** —— 对方扩展的状态与操作集中在 **工程** 视图与状态栏快捷菜单里，只转发不重写：[docs/commands.md](docs/commands.md)。
 - **设置与诊断** —— 由注册表驱动的设置面板与可复制的环境自检：[docs/settings.md](docs/settings.md)。
 
 ## 命令

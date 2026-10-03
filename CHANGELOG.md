@@ -10,32 +10,86 @@ next to it, and the two are visually separate.**
   default. **The collapsed row always carries a status icon**, so a degraded language
   service is visible without expanding it.
 - **The project view** is two labelled sections: 基本信息 (identity, target, toolchain,
-  dependencies, the language service) and 常用命令 (build/run/test/clean/toolchain/
-  search-and-add/self-check/settings, each with its keybinding).
+  dependencies, the language service) — collapsed by default — and 常用命令, which opens
+  with the nine things you can do, creation first (`new project`, then build/run/test/
+  clean/toolchain/search-and-add/self-check/settings). Rows carry a keybinding hint where
+  one exists, and their icons are coloured by what they act on (blue builds or adds, green
+  runs or verifies, purple tests, red deletes, yellow manages the toolchain).
 - **Dependencies are shown as two levels**: what `mcpp.toml` declares, and the version
   `mcpp.lock` resolved for it. No connector lines — `mcpp.lock` has no parent/child
   edges, and drawing them would be inventing a tree.
-- **The cache view is a sidebar webview**, not an editor tab. 项目缓存 is always
-  visible; 全局缓存 is collapsed and shows its summary on one line. One 6px bar and a
-  single-line legend replace the previous stack.
-- **The activity bar can be switched off** with `mcpp.views.enabled`; the icon
-  disappears with the last visible view.
-- The extension icon is now mcpp's official logo — the same file the C++ Modules
-  extension uses.
+- **The cache view is a sidebar webview**, not an editor tab, and it starts **collapsed**
+  so the library list gets the height. 项目缓存 is always visible inside it; 全局缓存 is
+  collapsed and shows its summary on one line. The composition and age bars are drawn once,
+  with a single-line legend, and the age bar is a four-stop ramp (blue → green → yellow →
+  red) so four buckets do not read as one block.
+- **The mcpp status bar menu** groups its commands under one heading per area (project /
+  library / toolchain / cache / C++ Modules / settings) with a codicon per command, and it
+  carries the C++ Modules actions that used to be reachable only from the removed view —
+  including **capture the logs** (`mcppls.exportDiagnosticBundle`) and the two places the
+  logs and the last bundle live.
+- **`mcpp.views.enabled` hides the mcpp views' contents.** It does *not* remove the
+  activity bar icon: VS Code only hides a container that a built-in registered with
+  `hideIfEmpty`, and an extension cannot mark its own container that way. Right-click the
+  icon to remove it from the activity bar.
+- `package.json`'s marketplace icon is still mcpp's official logo — the same file the C++
+  Modules extension uses. The **activity bar** icon is a derived monochrome stencil of that
+  logo's wordmark, because VS Code paints a container icon as an alpha mask in the theme's
+  foreground colour (the badge would have been a solid block).
 
 ### Added
 
-- **mcpp 库生态** — browse the package index already on this machine, offline:
-  search, namespace and surface filters, `已添加` / `有更新` state, and a per-package
-  detail page in the editor with the real **example code** the index's CI builds and
-  runs (172 example projects), the version matrix per platform, licence, repository and
-  a one-click **mcpp add** — which is the only thing that writes `mcpp.toml`.
+- **mcpp 库生态** — browse the package index already on this machine, offline: search
+  (a row's haystack carries its namespace, so typing `compat` filters to that namespace),
+  the `已添加` state on the row itself, and a per-package detail page in the editor with the
+  real **example code** the index's CI builds and runs (172 example projects), the version
+  matrix per platform, licence and repository. The page opens with what it is for: one row
+  of buttons — **Add to mcpp.toml** / **Switch to &lt;version&gt;** / Open the repository /
+  Open on the index site — and a clickable version matrix that aims that command. For a
+  package the workspace already depends on it reads `mcpp.toml` (then `mcpp.lock`), marks
+  the version in hand, and offers the switch instead of a blind add. `mcpp add` is still the
+  only thing that writes `mcpp.toml`.
 - Searching the *other* registries is a separate switch, `mcpp.library.networkSearch`,
   **off by default**: that tier runs `mcpp search`, which may use the network and can
   only be read from human output on a best-effort basis.
 - Labels use the official index site's own vocabulary — `import` / `#include` / `tool`
   / 上游 mcpp.toml — read from `mcpp xpkg parse --json`, so the editor and the site say
   the same thing.
+
+### Fixed during acceptance testing
+
+Every one of these was found by running the extension in a real profile, and each was
+traced to its cause rather than to its symptom.
+
+- **The library view reloaded itself forever** (flicker, rows that could not be clicked, a
+  pegged CPU). The document announced its own load with a `ready` message and the host
+  answered it with a repaint; assigning `webview.html` reloads the document, and every
+  render minted a fresh CSP nonce, so no two documents ever matched. The handshake is gone,
+  the nonce is per view, and an identical document is never pushed. The same dead `ready`
+  shape was removed from the detail page, and both the reload rule and the missing
+  `registerWebviewViewProvider` now have tests.
+- **Every cache bar was solid black.** The stylesheet selected `rect[data-kind=…]`, but the
+  renderer stamps those attributes on the `<g>` that wraps the rectangle, so no rule matched
+  and every segment took the SVG default fill. `fill` is now set on the group (which the
+  rectangle inherits), and a test compares the document against the stylesheet.
+- **The activity bar icon was a white block.** VS Code draws a container icon as an alpha
+  mask, and the official logo is an opaque badge: as a stencil it is a filled square. The
+  icon is now a derived, transparent-background wordmark, regenerated from `logo.png` by
+  `tools/generate-activitybar-icon.mjs`, with `npm run check:icon` as the drift gate.
+- **Quick menu rows had no icons, then no colour.** Icons needed a table and a rendering
+  path; colour cannot come from a `ThemeIcon` at all (VS Code 1.132 drops its colour in a
+  quick pick), so the rows ship generated coloured SVG assets — one per icon and palette
+  word, light and dark — built from `@vscode/codicons` by
+  `tools/generate-quick-menu-icons.mjs`. The project tree's `charts.orange` turned out to be
+  33%-alpha, and was replaced by `charts.red` for destructive rows.
+- **`mcpp.languageServer.exportDiagnosticBundle` was nearly registered twice** (once through
+  the table, once by hand after a change), which makes `activate()` throw and the whole
+  extension fail to start. A source gate now rejects a command id registered twice, and the
+  gate was verified by reintroducing the bug.
+- **A detail-page link click said nothing.** `void vscode.env.openExternal(…)` dropped the
+  boolean that says whether the browser opened, so a failure was indistinguishable from a
+  dead button. The click now writes a `pending` line immediately, and the host answers with
+  either the result, or the URL on the clipboard plus a note in the output channel.
 
 > From 0.5.0 on, entries are written in English. Earlier entries remain as they
 > were written.
