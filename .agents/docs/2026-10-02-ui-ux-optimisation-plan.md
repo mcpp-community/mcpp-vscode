@@ -1443,3 +1443,24 @@ buildscript 6 / projects 3 / util 3 / i18n 2 / commands 2 / workflows 1）+ 根 
    调薄：仍是 disabled（不可点），但色相说明结果是好的。
 4. 测试对齐：synthetic 三例改按 id 规则；按钮断言加 `data-installed`；客户端脚本源断言
    setAttribute/removeAttribute 成对出现。671 测试全绿。
+
+## 23. round 10：外部深度评审的修复（2026-10-03，`pr17-review.md`）
+
+外部评审（`~/Desktop/tmp/github/pr17-review.md`）+ 本会话逐条对照当前分支复核后落地：
+
+| 项 | 修复 | commit |
+| --- | --- | --- |
+| **P0 工作区信任绕过** | ① `package.json` 声明 `restrictedConfigurations: [mcpp.path, mcpp.clangd.path]`（根上修：受限模式不再读工作区的可执行路径设置）；② 新接缝 `runMcpp(trusted, …)`——不信任即拒绝（返回 `undefined`，调用方降级而非报错），非 `src/cli` 的全部 7 个调用点迁移完毕；③ 三处漏守卫补齐：详情页 `xpkg parse`（页面回退描述符文本并明说原因）、跨 registry 搜索（保留本地结果+说明）、自检探测（报告注明"未探测"）；④ 架构门禁：`src/cli` 之外出现 `runProcess` 即红 | ad9c572 |
+| P1-2 Windows shell 参数不转义 | `quoteWindowsArgument`（CommandLineToArgvW 规则：引号内 `& \| < > ^` 为字面量，内嵌引号与尾随反斜杠转义）；`%VAR%` 展开是所有 shell-spawner 共有的 cmd 限制，文档注明不半修 | 972d0c7 |
+| P1-3 版本比较写错 | `contract.VERIFIED_MCPPLS_MINIMUM` 单一事实源 + `compareVersions`；删掉带死分支的手写比较 | 02af186 |
+| P1-4 注释与行为不符 | `applyViewVisibility` 注释改为与 nls 一致的事实（容器图标去留由 VS Code 决定） | 02af186 |
+| P1-5 copy 500 字符静默丢弃 | 上限放宽到 16 KiB（远超任何真实命令/用法行，仍挡"塞小说"攻击） | 02af186 |
+| P2-9 迁移标记先于弹窗写入 | 标记改到用户做出选择之后——关掉弹窗=下次会话再提示，不再永久搁浅；源码顺序门禁锁死（弹窗必须先于标记） | 8b2ec14 |
+
+外部评审中被判定**过时/不适用**的：P2-8"e2e 没跑通"（CI 三平台 e2e 全绿 + 本机 7/7）；
+本地数字差异（626/9 跳过）系评审机无 mcpp checkout。**未纳入本轮**：P2-6（PR 拆分，已既成
+事实；按建议用 merge commit 保留历史）、P2-7（`.agents/docs` 归档，合并后再议）、
+CHANGELOG 重命名对照表（合并前补）。
+
+676 测试全绿（新增 5：runMcpp 拒绝/放行、Windows 引号、标记顺序门禁、restrictedConfigurations
+锁、架构 seam 门禁）。
