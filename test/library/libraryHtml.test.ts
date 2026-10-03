@@ -7,7 +7,6 @@ import {
   LIBRARY_UI,
   badgeLabels,
   decodeLibraryMessage,
-  documentNeedsRender,
   renderLibraryHtml,
   type LibraryAssets,
   type LibraryModel,
@@ -238,14 +237,6 @@ test("the document announces nothing, so it cannot make the host re-render it", 
   // load with "render me again" never stops loading.
   assert.doesNotMatch(html, /post\(\{\s*type:\s*"ready"/);
   assert.match(html, /post\(\{\s*type:\s*"refresh"\s*\}\)/);
-});
-
-test("an identical document is not pushed to the view", () => {
-  // `webview.html = same` reloads the iframe and throws away the scroll position
-  // and the caret. The rule is one line, so it is stated as one line.
-  assert.equal(documentNeedsRender(undefined, "<html></html>"), true);
-  assert.equal(documentNeedsRender("<html></html>", "<html></html>"), false);
-  assert.equal(documentNeedsRender("<html></html>", "<html> </html>"), true);
 });
 
 test("the stylesheet uses theme tokens only, and clamps the description to two lines", () => {

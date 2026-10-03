@@ -21,19 +21,18 @@
  *   produce a document with a sentence in it, never a blank sidebar.
  */
 
-import { randomBytes } from "node:crypto";
 import * as vscode from "vscode";
 
 import { runProcess } from "../cli/process";
 import { read, write } from "../config/access";
 import { languagePreference, t } from "../i18n/t";
 import { localeFromEditorLanguage } from "../i18n/translate";
+import { WebviewDocument } from "../webview/document";
 import { badgesOf, searchText, parseSearchOutput, type LibraryEntry } from "./indexModel";
 import { loadSnapshot, type IndexRoot, type LibrarySnapshot } from "./indexLocator";
 import {
   LIBRARY_UI,
   decodeLibraryMessage,
-  documentNeedsRender,
   renderLibraryHtml,
   type LibraryModel,
   type LibraryRow,
@@ -126,17 +125,13 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
   private searchTimer: NodeJS.Timeout | undefined;
   private rendering: Promise<void> | undefined;
   /**
-   * The document currently on screen, and the one CSP nonce it was built with.
-   *
-   * Both exist to keep `paint()` from re-assigning a document that has not
-   * changed: an assignment reloads the view, and a reload that is answered by
-   * another render is a loop. The nonce is therefore per view rather than per
-   * render — a fresh nonce would make every render a *different* document and
-   * defeat the comparison, which is how the reload loop started in the first
-   * place.
+   * The document on screen and the one CSP nonce it may be built with. Both
+   * live in `WebviewDocument`: the nonce is per view (a nonce per render would
+   * make every render a *different* document and defeat the comparison, which
+   * is how the reload loop started), and `paint()` refuses to re-assign a
+   * document that has not changed, because an assignment reloads the view.
    */
-  private document: string | undefined;
-  private readonly nonce = randomNonce();
+  private readonly webviewDocument = new WebviewDocument(STYLESHEET);
 
   public constructor(
     private readonly context: vscode.ExtensionContext,
@@ -153,7 +148,7 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
   public resolveWebviewView(view: vscode.WebviewView): void {
     this.view = view;
     // A resolved view is a fresh, empty webview; see the note in `onDidDispose`.
-    this.document = undefined;
+    this.webviewDocument.invalidate();
     view.webview.options = {
       enableScripts: true,
       localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, MEDIA_DIRECTORY)],
@@ -167,7 +162,7 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
         // The next `resolveWebviewView` gets a brand-new, empty webview: what was
         // pushed to the old one says nothing about it, so the comparison in
         // `paint()` must start from nothing again.
-        this.document = undefined;
+        this.webviewDocument.invalidate();
       }
     });
     // First paint from the cached snapshot, so the view is never blank while the
@@ -350,27 +345,18 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
    * Put the current model on screen — but only when it says something new.
    *
    * `webview.html = …` reloads the document, so pushing an identical one would
-   * throw away the scroll position and the half-typed query for nothing. With a
-   * per-view nonce, "identical" means identical: the same model renders byte for
-   * byte the same document, and a render that produced it is dropped here.
+   * throw away the scroll position and the half-typed query for nothing. With
+   * a per-view nonce, "identical" means identical: the same model renders byte
+   * for byte the same document, and a render that produced it is dropped in
+   * `WebviewDocument.paint()`.
    */
   private paint(): void {
     const view = this.view;
     if (view === undefined) {
       return;
     }
-    const document = renderLibraryHtml(this.model(), {
-      cspSource: view.webview.cspSource,
-      nonce: this.nonce,
-      styleUri: view.webview
-        .asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, MEDIA_DIRECTORY, STYLESHEET))
-        .toString(),
-    });
-    if (!documentNeedsRender(this.document, document)) {
-      return;
-    }
-    this.document = document;
-    view.webview.html = document;
+    const document = renderLibraryHtml(this.model(), this.webviewDocument.assets(this.context, view.webview));
+    this.webviewDocument.paint(view.webview, document);
   }
 
   private model(): LibraryModel {
@@ -459,9 +445,4 @@ function htmlLanguage(): string {
     return "en";
   }
   return localeFromEditorLanguage(vscode.env.language) === "zh-cn" ? "zh-cn" : "en";
-}
-
-/** The webview nonce, the same way the other webviews mint theirs. */
-function randomNonce(): string {
-  return randomBytes(16).toString("base64");
 }

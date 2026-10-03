@@ -211,15 +211,19 @@ test("the library view cannot reload itself in a loop", () => {
   assert.doesNotMatch(html, /post\(\{\s*type:\s*"ready"\s*\}\)/, "the document must not announce its own load");
   assert.doesNotMatch(view, /case "ready"/, "the host must not answer a load with a re-render");
   assert.doesNotMatch(html, /\| \{ type: "ready" \}/);
-  // Two guards keep it shut: the comparison, and a nonce that is per *view* — a
-  // nonce per render would make every render a different document, so the
-  // comparison could never say "unchanged".
-  assert.match(view, /if \(!documentNeedsRender\(this\.document, document\)\) \{/);
-  assert.match(view, /private readonly nonce = randomNonce\(\);/);
-  assert.doesNotMatch(view, /nonce: randomNonce\(\)/);
+  // Two guards keep it shut: the render-only-on-change comparison, and a nonce
+  // that is per *view* — a nonce per render would make every render a different
+  // document, so the comparison could never say "unchanged". Both now live in
+  // the shared WebviewDocument kit, so the gate holds the host to the kit
+  // instead of to one implementation of it. Comments are stripped first: the
+  // prose explains the rule with the very assignment it forbids.
+  const viewCode = view.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert.match(viewCode, /new WebviewDocument\(/, "the host must hold its document through the kit");
+  assert.doesNotMatch(viewCode, /randomNonce\(\)/, "the host must not mint its own nonce");
+  assert.doesNotMatch(viewCode, /webview\.html\s*=/, "the host must assign html only through the kit");
   // A freshly resolved view is a new, empty webview: the last document says
   // nothing about it, so it must be forgotten when the old view goes away.
-  assert.match(view, /this\.document = undefined;/);
+  assert.match(view, /\.invalidate\(\);/);
 });
 
 test("no module drives a second language client", () => {

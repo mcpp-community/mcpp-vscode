@@ -62,6 +62,7 @@ const PURE_MODULES = [
   "src/util/format.ts",
   "src/util/log.ts",
   "src/util/text.ts",
+  "src/webview/render.ts",
   "src/workflows/moduleSetup.ts",
 ];
 
