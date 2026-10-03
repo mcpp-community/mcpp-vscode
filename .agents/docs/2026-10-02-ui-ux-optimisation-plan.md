@@ -1095,3 +1095,94 @@ if (std::filesystem::exists(finalPath, existenceError) || existenceError) {
   「Reveal in Folder」是否出现；再点 `show the last captured bundle` 是否**直接定位到那个 zip**；
   `open the log folder` 是否打开系统文件管理器的日志目录。
   未安装/未启用 mcppls 时这四条应给"上游不提供该动作"的降级提示而不是报错（能力表 `required: false`）。
+
+## 19. round 6：搜索框下不再有标签行、详情页合成一行按钮、活动栏 logo 为什么是灰的
+
+### 19.1 库视图：移除筛选 chip 行（反馈 1）
+
+搜索框和网络开关之间原本是**一排可换行的筛选 chip**：All、每个命名空间一个、Added、每种用法
+（surface）一个。在真实索引上这是**三行按钮**压在列表上方——而列表才是这个视图的本体。
+这一轮把它整行去掉。
+
+去掉的不只是 DOM：chip 是"客户端过滤"的入口，所以随之删掉的是整条链路——
+`LibraryChip` / `LibraryModel.chips` / `activeChip`、`{type:"filter"}` 消息及其解码分支、
+客户端里的 chip 取值与 aria 维护、`chipsOf`、以及只为它存在的**纯模型函数**
+`LibraryFilter` / `ALL_FILTER` / `ADDED_FILTER` / `matchesFilter` / `visibleEntries` /
+`namespaceCounts` / `surfaceCounts` / `addedCount` 和它们的测试、`media/library.css` 里的
+`.chips` / `.chip*` 规则。留下的是搜索框 + 网络开关 + 行本身的徽标。
+
+**没有丢功能**：一个行的 "haystack" 里本来就有 id（含命名空间），所以输入 `compat` 或
+`compat.` 就是按命名空间过滤；"已添加"这件事在行上是徽标（`Added`，绿色加粗），不需要一个
+筛选器才能看见。这一点在测试里写成了断言：工具栏里只有 `library-search` 和 `library-network`，
+文档里不存在 `class="chip"` / `data-chip` / `class="chips"`。
+
+### 19.2 详情页：三颗按钮一行（反馈 2）
+
+`Open the repository` 和 `Open on the index site` 原来在**事实行**末尾（跟着 registry / surface /
+standard / 许可 / 徽章 一起换行），而 `Add to mcpp.toml` 在主操作块里——同样是"要做的事"，
+却分在两个地方。现在它们并排在同一行，且后两颗是次要按钮（`data-secondary`）：
+
+```
+[Add to mcpp.toml]  [☐ dev-dependency]  [Open the repository]  [Open on the index site]
+```
+
+实现上复用了客户端已有的 `[data-open-url]` 点击分支（它只要求元素带这个属性，不要求是 `<a>`），
+所以没有新的脚本逻辑；事实行只剩事实。测试断言三颗按钮都在同一个 `.detail-actions` 里，
+且页面里不再有裸的 `<a href="https://…">`。
+
+### 19.3 活动栏的 mcpp logo 为什么是灰的——它不是 PNG，是"模板"（反馈 3）
+
+先给结论：**这不是没修好，是 VS Code 的画法；那个 PNG 永远不可能以彩色出现在活动栏。**
+
+一条你自己就能验证的判据：**文件里的像素是纯白 `#FFFFFF`，而你看到的是灰 `#C5C5C5`。**
+`#C5C5C5` 正是 Dark Modern 里 `icon.foreground` 的值，而它**在文件里一个像素都不存在**：
+
+```
+$ python3 …/pngstat.py .dev-profile/extensions/mcpp-community.mcpp-vscode-0.6.0/images/activity-bar.png
+opaque coverage 33.9%
+top colours: #ffffff 100.0%        ← 不透明像素 100% 是纯白
+```
+
+如果 VS Code 把这张图当图片画，你看到的就是**纯白**；你看到灰色，说明**颜色是在文件和像素之间
+被换掉的**，换掉它的就是那条 mask（§16.4 抄过源码）：
+
+```js
+// ActivityAction.toCompositeBarActionItem
+Sf(p, `mask: ${url} no-repeat 50% 50%;
+        mask-size: var(--activity-bar-icon-size, 24px); …`)
+```
+
+mask 只取 **alpha 通道**当镂空，颜色来自主题变量（未选中 `--vscode-icon-foreground`、
+选中 `--vscode-foreground`、hover `--vscode-activityBar-foreground`）。所以：
+"单色描边"是这条路径的**唯一可能结果**，与文件是 PNG 还是 SVG、彩色还是黑白无关。
+
+**hover 一下就能再确认一次**：鼠标移上去或点开视图时，灰色会**变亮**（换成另一个主题色）。
+图片不会因为 hover 改颜色，模板会。
+
+为什么"配置里切换彩色/单色"也做不到，三条各自独立（任一成立就够）：
+
+1. 清单里 `viewsContainers.activitybar[].icon` 的 schema 是**纯 string**
+   （`{description:…, type:"string"}`，`required:["id","title","icon"]`），连 `{light, dark}`
+   这种写法都会被 `isValidViewsContainer` 判为非法。
+2. 这个字符串只在**激活时读一次**，没有任何运行时 API 能改容器图标。
+3. `viewsContainers` 没有 `when`，`hideIfEmpty` 只给内置容器用，所以也不能"声明两个容器、
+   按工程状态显示其中一个"。
+
+**能做的、也仍然建议保留的**：单色剪影。活动栏里其他图标全是主题前景色的剪影，mcpp 这一枚
+跟它们是一个画法——这也是你上一轮说"效果很好、和其他图标风格匹配"的那个效果。
+**彩色 logo 已经出现在能被上色的地方**：扩展市场/扩展列表用的是 `package.json` 的
+`icon` = `images/logo.png`（真彩色官方 logo），README 里也是它。
+
+如果你希望在编辑器内部也看到彩色 logo，唯一可用的位置是 **webview 视图的正文**（库列表页 /
+详情页，它们是 webview，`img-src` 允许扩展自己的资源）——那需要把 `images/` 加进那两个
+webview 的 `localResourceRoots` 并在文档里放一个 `<img>`。这是一次**新增品牌露出**，不是修复，
+所以我没有擅自加；你要的话我加。
+
+### 19.4 状态
+
+- 657 个单元测试通过（净减 0：删掉的 chip 测试换成了"工具栏里没有 chip"的断言）；
+  `check:config`（69 设置）、`l10n-check`（383 运行串 / 205 清单键）、`check:icon`（48 图标）、
+  `check:generators` 全过；VSIX 142 文件 / 384 KiB。
+- dev profile 重装并重启，日志确认激活、无错误。
+- **需要你验证**：库视图搜索框下面应该直接是列表（没有标签行），输入 `compat` 仍能按命名空间过滤；
+  详情页顶部是一行三颗按钮；活动栏那枚图标 hover 时会变亮（这就是"它是模板"的证据）。

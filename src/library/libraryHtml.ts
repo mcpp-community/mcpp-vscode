@@ -22,7 +22,7 @@
  *   `data-added` attribute; the stylesheet may colour it, but the row reads the
  *   same in a high-contrast theme.
  *
- * The one deliberate performance choice: the search box and the filter chips
+ * The one deliberate performance choice: the search box
  * are applied **in the client**, on rows that are already in the document, so
  * typing never round-trips through the extension host and never moves the caret.
  * The messages still go back (`search`, `filter`) so the host knows what the
@@ -30,7 +30,7 @@
  * a refresh, the cross-registry toggle, or a new index revision.
  */
 
-import { BADGE_UI, SURFACE_TEXT, surfaceLabel, type BadgeKey, type FilterKind, type Surface } from "./indexModel";
+import { BADGE_UI, SURFACE_TEXT, surfaceLabel, type BadgeKey, type Surface } from "./indexModel";
 
 /** One result row, already resolved for display. */
 export interface LibraryRow {
@@ -58,22 +58,10 @@ export interface LibraryRow {
   crossRegistry?: boolean;
 }
 
-/** One filter chip. Labels and counts are resolved by the caller. */
-export interface LibraryChip {
-  id: string;
-  kind: FilterKind;
-  value?: string;
-  label: string;
-  count: number;
-}
-
 export interface LibraryModel {
   /** Everything is already localized by the caller. */
   ui: Record<string, string>;
   rows: LibraryRow[];
-  chips: LibraryChip[];
-  /** The chip id that starts selected. */
-  activeChip: string;
   query: string;
   networkSearch: boolean;
   /**
@@ -105,9 +93,6 @@ export const LIBRARY_UI = {
   htmlLang: "library.htmlLang",
   title: "library.title",
   search: "library.search",
-  filters: "library.filters",
-  chipAll: "library.chip.all",
-  chipAdded: "library.chip.added",
   networkSearch: "library.networkSearch",
   networkSearchHint: "library.networkSearch.hint",
   versionLatest: "library.version.latest",
@@ -153,7 +138,6 @@ const BADGE_KEY_UI: Readonly<Record<BadgeKey, string>> = {
  */
 export type LibraryMessage =
   | { type: "refresh" }
-  | { type: "filter"; chip: string }
   | { type: "search"; query: string }
   | { type: "networkSearch"; enabled: boolean }
   | { type: "open"; id: string };
@@ -250,27 +234,21 @@ function renderRow(row: LibraryRow, label: UiLabel): string {
     .join("\n");
 }
 
-function renderChips(model: LibraryModel, label: UiLabel): string {
-  const chips = model.chips
-    .map((chip) => {
-      const active = chip.id === model.activeChip;
-      const data = chip.value === undefined ? "" : ` data-chip-value="${escapeHtml(chip.value)}"`;
-      return (
-        `<button type="button" class="chip" data-chip="${escapeHtml(chip.id)}" data-chip-kind="${chip.kind}"${data}` +
-        ` aria-pressed="${active ? "true" : "false"}"${flag("data-active", active)}>` +
-        `<span class="chip-label">${escapeHtml(chip.label)}</span>` +
-        `<span class="chip-count">${escapeHtml(String(chip.count))}</span>` +
-        `</button>`
-      );
-    })
-    .join("\n  ");
+/**
+ * The search box, and the network toggle under it.
+ *
+ * There used to be a wrapped row of filter chips between them — one per
+ * namespace, one per surface, plus "Added" — which on a real index is three
+ * lines of buttons above the list, and the list is the view. The search box
+ * already matches the namespace (it is part of a row's haystack), so the
+ * taxonomy the chips offered is still one keystroke away; the "Added" state is
+ * on the row itself, as a badge.
+ */
+function renderToolbar(model: LibraryModel, label: UiLabel): string {
   return [
     `<div class="toolbar">`,
     `  <label class="search-label" for="library-search"><span class="sr-only">${escapeHtml(label(LIBRARY_UI.search))}</span></label>`,
     `  <input id="library-search" type="search" class="search" autocomplete="off" spellcheck="false" placeholder="${escapeHtml(label(LIBRARY_UI.search))}" aria-label="${escapeHtml(label(LIBRARY_UI.search))}"${attribute("value", model.query)}>`,
-    `  <div class="chips" role="group" aria-label="${escapeHtml(label(LIBRARY_UI.filters))}">`,
-    `  ${chips}`,
-    `  </div>`,
     `  <label class="network-toggle" title="${escapeHtml(label(LIBRARY_UI.networkSearchHint))}">`,
     `    <input id="library-network" type="checkbox" data-setting="${escapeHtml(model.networkSearchSetting)}"${flag("checked", model.networkSearch)}>`,
     `    <span>${escapeHtml(label(LIBRARY_UI.networkSearch))}</span>`,
@@ -295,10 +273,10 @@ function renderList(model: LibraryModel, label: UiLabel): string {
  * The client. Dependency-free, no template literals of its own, and it only
  * writes through `textContent`/`setAttribute`.
  *
- * Filtering is local: a row carries its namespace, its added state and its
- * surfaces as `data-*` attributes, and the chip plus the query decide its
- * `hidden` flag. The host is told which filter and query are active, and answers
- * with a whole new document only when the data behind it changed.
+ * Search is local: a row carries the text the search box matches against as a
+ * `data-haystack` attribute, and the query decides its `hidden` flag. The host is
+ * told the query, and answers with a whole new document only when the data
+ * behind it changed.
  */
 function clientScript(initialModel: string): string {
   return `(function () {
@@ -309,33 +287,15 @@ function clientScript(initialModel: string): string {
   var networkInput = document.getElementById("library-network");
   var list = document.getElementById("library-list");
   var empty = document.getElementById("library-empty");
-  var chipElements = document.querySelectorAll("[data-chip]");
   var countElement = document.getElementById("library-count");
-  var activeChip = state && state.activeChip ? state.activeChip : "all";
-  var activeValue = "";
 
   function post(message) {
     if (api) { api.postMessage(message); }
   }
 
-  function chipValue(id) {
-    for (var index = 0; index < chipElements.length; index += 1) {
-      if (chipElements[index].getAttribute("data-chip") === id) {
-        return { kind: chipElements[index].getAttribute("data-chip-kind"), value: chipElements[index].getAttribute("data-chip-value") || "" };
-      }
-    }
-    return { kind: "all", value: "" };
-  }
-
-  // The canonical semantics are indexModel.visibleEntries; this mirrors them on
-  // the data-* attributes and on the host-built data-haystack.
-  function rowMatches(row, kind, value, query) {
-    if (kind === "namespace" && row.getAttribute("data-namespace") !== value) { return false; }
-    if (kind === "added" && row.getAttribute("data-added") !== "true") { return false; }
-    if (kind === "surface") {
-      var surfaces = (row.getAttribute("data-surfaces") || "").split(" ");
-      if (surfaces.indexOf(value) < 0) { return false; }
-    }
+  // Every whitespace-separated word has to appear in the row's haystack, which
+  // the host builds from the id, the name, the description and the usage labels.
+  function rowMatches(row, query) {
     if (query.length === 0) { return true; }
     var haystack = row.getAttribute("data-haystack") || "";
     var parts = query.split(/\\s+/);
@@ -347,14 +307,12 @@ function clientScript(initialModel: string): string {
 
   function apply() {
     var query = searchInput ? searchInput.value.trim().toLowerCase() : "";
-    var chip = chipValue(activeChip);
-    activeValue = chip.value || "";
     var any = false;
     var visible = 0;
     if (list) {
       var rows = list.querySelectorAll("[data-row]");
       for (var index = 0; index < rows.length; index += 1) {
-        var shown = rowMatches(rows[index], chip.kind, activeValue, query);
+        var shown = rowMatches(rows[index], query);
         rows[index].parentNode.hidden = !shown;
         if (shown) { any = true; visible += 1; }
       }
@@ -365,12 +323,6 @@ function clientScript(initialModel: string): string {
       var template = state && state.countTemplate ? state.countTemplate : "";
       var total = state && state.total ? state.total : 0;
       countElement.textContent = template.split("{0}").join(String(visible)).split("{1}").join(String(total));
-    }
-    for (var index2 = 0; index2 < chipElements.length; index2 += 1) {
-      var active = chipElements[index2].getAttribute("data-chip") === activeChip;
-      chipElements[index2].setAttribute("aria-pressed", active ? "true" : "false");
-      if (active) { chipElements[index2].setAttribute("data-active", ""); }
-      else { chipElements[index2].removeAttribute("data-active"); }
     }
   }
 
@@ -388,13 +340,6 @@ function clientScript(initialModel: string): string {
   document.addEventListener("click", function (event) {
     var target = event.target;
     if (!target || typeof target.closest !== "function") { return; }
-    var chip = target.closest("[data-chip]");
-    if (chip) {
-      activeChip = chip.getAttribute("data-chip");
-      apply();
-      post({ type: "filter", chip: activeChip });
-      return;
-    }
     var refresh = target.closest("[data-action]");
     if (refresh && refresh.getAttribute("data-action") === "refresh") {
       post({ type: "refresh" });
@@ -403,14 +348,6 @@ function clientScript(initialModel: string): string {
     var row = target.closest("[data-row]");
     if (row) { post({ type: "open", id: row.getAttribute("data-row") }); }
   });
-  window.addEventListener("message", function (event) {
-    var data = event.data;
-    if (data && data.type === "filter" && typeof data.chip === "string") {
-      activeChip = data.chip;
-      apply();
-    }
-  });
-
   apply();
 })();`;
 }
@@ -424,7 +361,6 @@ function clientScript(initialModel: string): string {
  */
 function clientState(model: LibraryModel): Record<string, unknown> {
   return {
-    activeChip: model.activeChip,
     countTemplate: model.countTemplate,
     total: model.total,
     query: model.query,
@@ -459,7 +395,7 @@ export function renderLibraryHtml(model: LibraryModel, assets: LibraryAssets): s
   <h1 class="panel-title">${escapeHtml(label(LIBRARY_UI.title))}</h1>
   <p class="count" id="library-count">${escapeHtml(count)}</p>
 </header>
-${renderChips(model, label)}
+${renderToolbar(model, label)}
 <main>
 ${renderList(model, label)}
 </main>
@@ -476,23 +412,11 @@ ${clientScript(embedJson(clientState(model)))}
 }
 
 /**
- * The rows the initial query keeps. The live filtering is the client's
+ * The rows the initial query keeps. The live search is the client's
  * `rowMatches`; this mirrors it for the header count, so the count the reader
  * first sees matches the list beneath it.
  */
 function rowMatchesClient(model: LibraryModel, row: LibraryRow): boolean {
-  const chip = model.chips.find((candidate) => candidate.id === model.activeChip);
-  if (chip !== undefined) {
-    if (chip.kind === "namespace" && row.namespace !== chip.value) {
-      return false;
-    }
-    if (chip.kind === "added" && !row.added) {
-      return false;
-    }
-    if (chip.kind === "surface" && !row.surfaces.includes(chip.value as Surface)) {
-      return false;
-    }
-  }
   const query = model.query.trim().toLowerCase();
   if (query.length === 0) {
     return true;
@@ -510,7 +434,7 @@ function nonEmptyString(value: unknown): value is string {
 
 /**
  * Decode one `postMessage` payload. Webview input is untrusted: anything that is
- * not exactly one of the five shapes is dropped, and the returned object is
+ * not exactly one of the four shapes is dropped, and the returned object is
  * rebuilt so foreign fields never travel further.
  */
 export function decodeLibraryMessage(raw: unknown): LibraryMessage | undefined {
@@ -520,8 +444,6 @@ export function decodeLibraryMessage(raw: unknown): LibraryMessage | undefined {
   switch (raw.type) {
     case "refresh":
       return { type: "refresh" };
-    case "filter":
-      return nonEmptyString(raw.chip) ? { type: "filter", chip: raw.chip } : undefined;
     case "search":
       return typeof raw.query === "string" ? { type: "search", query: raw.query } : undefined;
     case "networkSearch":

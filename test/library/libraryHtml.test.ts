@@ -23,9 +23,6 @@ const UI: Record<string, string> = {
   [LIBRARY_UI.htmlLang]: "en",
   [LIBRARY_UI.title]: "Library",
   [LIBRARY_UI.search]: "Search packages",
-  [LIBRARY_UI.filters]: "Filters",
-  [LIBRARY_UI.chipAll]: "All",
-  [LIBRARY_UI.chipAdded]: "Added",
   [LIBRARY_UI.networkSearch]: "Search all registries",
   [LIBRARY_UI.networkSearchHint]: "Off by default.",
   [LIBRARY_UI.versionLatest]: "latest {0}",
@@ -77,13 +74,6 @@ function model(patch: Partial<LibraryModel> = {}): LibraryModel {
         unreadable: false,
       },
     ],
-    chips: [
-      { id: "all", kind: "all", label: "All", count: 2 },
-      { id: "ns:compat", kind: "namespace", value: "compat", label: "compat", count: 1 },
-      { id: "added", kind: "added", label: "Added", count: 1 },
-      { id: "surface:header", kind: "surface", value: "header", label: "#include", count: 1 },
-    ],
-    activeChip: "all",
     query: "",
     networkSearch: false,
     networkSearchSetting: "mcpp.library.networkSearch",
@@ -161,15 +151,20 @@ test("a row carries the state the client filters on, as text", () => {
   assert.match(html, /China mirror/);
 });
 
-test("the chips are data, and the active one is marked for shape not colour", () => {
-  const html = renderLibraryHtml(model({ activeChip: "added" }), ASSETS);
-  assert.match(html, /data-chip="all" data-chip-kind="all"[^>]*aria-pressed="false"/);
-  assert.match(html, /data-chip="added" data-chip-kind="added"[^>]*aria-pressed="true" data-active/);
-  assert.match(html, /data-chip="ns:compat" data-chip-kind="namespace" data-chip-value="compat"/);
-  assert.match(html, /data-chip="surface:header" data-chip-kind="surface" data-chip-value="header"/);
-  assert.match(html, /class="chip-count">1</);
+test("the toolbar is a search box and the network toggle, with no chip row", () => {
+  // The filter chips used to sit between the two and, on a real index, wrapped
+  // into three lines of buttons above the list. The namespace is part of every
+  // row's haystack, so search reaches it; "Added" is a badge on the row.
+  const html = renderLibraryHtml(model(), ASSETS);
+  assert.match(html, /<input id="library-search"[^>]*placeholder="Search packages"/);
+  assert.doesNotMatch(html, /class="chip/);
+  assert.doesNotMatch(html, /data-chip/);
+  assert.doesNotMatch(html, /class="chips"/);
+  // The toggle still follows the search box, and no chip markup is left between.
+  const toolbar = html.slice(html.indexOf('class="toolbar"'), html.indexOf("</div>", html.indexOf('class="toolbar"')));
+  assert.match(toolbar, /library-search/);
+  assert.match(toolbar, /library-network/);
 });
-
 test("the network toggle is off by default and names the setting it drives", () => {
   const off = renderLibraryHtml(model(), ASSETS);
   assert.match(off, /<input id="library-network" type="checkbox" data-setting="mcpp\.library\.networkSearch">/);
@@ -181,8 +176,10 @@ test("the network toggle is off by default and names the setting it drives", () 
 });
 
 test("the header count starts at what the first render keeps, and the footer names the source", () => {
-  const html = renderLibraryHtml(model({ activeChip: "added" }), ASSETS);
-  assert.match(html, /id="library-count">1 of 2 packages</);
+  // The count is the *query*'s count now: the filter chips that used to narrow it
+  // are gone, so an empty search keeps every row.
+  const html = renderLibraryHtml(model(), ASSETS);
+  assert.match(html, /id="library-count">2 of 2 packages</);
   assert.match(html, /Data source: 2 descriptor\(s\) from 1 local index folder\(s\): mcpplibs\. Read offline\./);
   assert.match(html, /data-action="refresh"/);
 });
@@ -200,9 +197,8 @@ test("badgeLabels reads the ui record in badge order", () => {
   );
 });
 
-test("decodeLibraryMessage accepts exactly five shapes", () => {
+test("decodeLibraryMessage accepts exactly four shapes", () => {
   assert.deepEqual(decodeLibraryMessage({ type: "refresh" }), { type: "refresh" });
-  assert.deepEqual(decodeLibraryMessage({ type: "filter", chip: "added" }), { type: "filter", chip: "added" });
   assert.deepEqual(decodeLibraryMessage({ type: "search", query: "" }), { type: "search", query: "" });
   assert.deepEqual(decodeLibraryMessage({ type: "networkSearch", enabled: true }), {
     type: "networkSearch",
@@ -219,8 +215,8 @@ test("decodeLibraryMessage accepts exactly five shapes", () => {
     "ready",
     [],
     { type: "unknown" },
-    { type: "filter" },
-    { type: "filter", chip: "" },
+    // The chips are gone, so the `filter` message they sent is not a shape.
+    { type: "filter", chip: "added" },
     { type: "open" },
     { type: "open", id: "" },
     { type: "networkSearch", enabled: "yes" },
@@ -266,7 +262,7 @@ test("the stylesheet uses theme tokens only, and clamps the description to two l
 test("the client script is syntactically valid JavaScript", () => {
   // A syntax error in the inline script would silently break the webview, and no
   // other test would notice: the document still contains all the right markup.
-  const html = renderLibraryHtml(model({ query: "compat", activeChip: "ns:compat" }), ASSETS);
+  const html = renderLibraryHtml(model({ query: "compat" }), ASSETS);
   const script = /<script nonce="[^"]*">([\s\S]*)<\/script>/.exec(html);
   assert.ok(script !== null, "the document must carry its inline script");
   assert.doesNotThrow(() => new Function(script[1]));

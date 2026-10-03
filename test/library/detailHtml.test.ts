@@ -118,8 +118,19 @@ test("the overview names the vocabulary the index site uses", () => {
   assert.match(html, /openkal-compat/);
   assert.match(html, /POSIX environment/);
   assert.match(html, /MIT/);
-  assert.match(html, /href="https:\/\/github\.com\/p-ranav\/argparse"/);
-  assert.match(html, /href="https:\/\/mcpplibs\.github\.io\/mcpp-index\/packages\/compat\.argparse\/"/);
+  // The repository and the index page are buttons in the action row, not links at
+  // the end of the facts line: they are things to *do*, and one row of them is
+  // easier to find than a link that wraps with the metadata.
+  assert.match(html, /<button type="button" data-secondary data-open-url="https:\/\/github\.com\/p-ranav\/argparse">Open the repository<\/button>/);
+  assert.match(
+    html,
+    /<button type="button" data-secondary data-open-url="https:\/\/mcpplibs\.github\.io\/mcpp-index\/packages\/compat\.argparse\/">Open on the index site<\/button>/,
+  );
+  const actions = html.slice(html.indexOf('class="detail-actions"'), html.indexOf("</div>", html.indexOf('class="detail-actions"')));
+  assert.match(actions, /id="detail-add"/);
+  assert.match(actions, /Open the repository/);
+  assert.match(actions, /Open on the index site/);
+  assert.doesNotMatch(html, /<a href="https:/, "no bare link is left in the facts line");
 });
 
 test("the version matrix marks the current platform, empty groups and all", () => {
@@ -220,9 +231,10 @@ test("a parse failure is stated on the page instead of leaving it blank", () => 
 test("an index url is optional: a registry without a site gets no link", () => {
   const html = renderDetailHtml(model({ indexUrl: undefined, registry: "xim-pkgindex" }), ASSETS);
   assert.doesNotMatch(html, /mcpplibs\.github\.io/);
-  assert.doesNotMatch(html, /<a [^>]*>Open on the index site<\/a>/);
-  // The repo link is still there: only the index-site link is registry-dependent.
-  assert.match(html, /<a href="https:\/\/github\.com\/p-ranav\/argparse"/);
+  assert.doesNotMatch(html, /Open on the index site/);
+  // The repository button is still there: only the index-site button is
+  // registry-dependent.
+  assert.match(html, /data-open-url="https:\/\/github\.com\/p-ranav\/argparse"/);
 });
 
 test("decodeDetailMessage accepts exactly two shapes, and only https urls", () => {

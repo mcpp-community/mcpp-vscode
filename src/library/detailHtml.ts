@@ -313,16 +313,8 @@ function renderMeta(model: DetailModel, label: UiLabel): string {
   for (const license of model.licenses) {
     parts.push(`<span class="badge">${escapeHtml(license)}</span>`);
   }
-  if (model.repo !== undefined) {
-    parts.push(
-      `<a href="${escapeHtml(model.repo)}" data-open-url="${escapeHtml(model.repo)}" rel="noreferrer">${escapeHtml(label(DETAIL_UI.openRepo))}</a>`,
-    );
-  }
-  if (model.indexUrl !== undefined) {
-    parts.push(
-      `<a href="${escapeHtml(model.indexUrl)}" data-open-url="${escapeHtml(model.indexUrl)}" rel="noreferrer">${escapeHtml(label(DETAIL_UI.indexLink))}</a>`,
-    );
-  }
+  // The repository and index links are actions, not facts, so they live in the
+  // button row below rather than at the end of this line.
   return [`<div class="detail-meta">`, parts.join("\n"), `</div>`].join("\n");
 }
 
@@ -352,11 +344,15 @@ function renderExtras(model: DetailModel, label: UiLabel): string {
 function renderActions(model: DetailModel, label: UiLabel): string {
   const disabled = model.latest === undefined;
   const command = fill(label, DETAIL_UI.command, [model.id, model.latest ?? "?"]);
+  const link = (url: string, text: string): string =>
+    `    <button type="button" data-secondary data-open-url="${escapeHtml(url)}">${escapeHtml(text)}</button>`;
   return [
     `<section class="detail-primary" data-section="add">`,
     `  <div class="detail-actions">`,
     `    <button type="button" id="detail-add" class="detail-add"${flag("disabled", disabled)}>${escapeHtml(label(DETAIL_UI.add))}</button>`,
     `    <label class="detail-toggle"><input id="detail-dev" type="checkbox"><span>${escapeHtml(label(DETAIL_UI.addDev))}</span></label>`,
+    ...(model.repo === undefined ? [] : [link(model.repo, label(DETAIL_UI.openRepo))]),
+    ...(model.indexUrl === undefined ? [] : [link(model.indexUrl, label(DETAIL_UI.indexLink))]),
     `  </div>`,
     `  <p class="detail-command" id="detail-command" data-selected-version="${escapeHtml(model.latest ?? "")}" data-template="${escapeHtml(model.commandTemplate)}" data-template-dev="${escapeHtml(model.commandDevTemplate)}">${escapeHtml(command)}</p>`,
     disabled

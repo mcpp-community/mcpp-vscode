@@ -13,7 +13,7 @@
  *    surface, the badges and the version are all text. Colour is decoration.
  * 3. **No inline styles.** The document sets `data-*` attributes and this file
  *    turns them into borders and fills, so the strict CSP holds.
- * 4. **Built for 170–520 px.** Two-line clamped descriptions, one wrapped chip
+ * 4. **Built for 170–520 px.** Two-line clamped descriptions, the search box
  *    row, `tabular-nums` so versions line up, and no fixed widths.
  *
  * The `.detail-*` rules at the end belong to the editor-area detail page
@@ -108,7 +108,6 @@ main {
 }
 
 .search:focus-visible,
-.chip:focus-visible,
 .row:focus-visible,
 .link-button:focus-visible,
 .network-toggle input:focus-visible,
@@ -116,49 +115,6 @@ main {
 .detail-toggle input:focus-visible {
   outline: 1px solid var(--vscode-focusBorder);
   outline-offset: -1px;
-}
-
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  flex: 1 1 100%;
-}
-
-/* A filter is a *toggle*, so it is drawn with the host's own toggle colours and
-   carries no outline until it is on. The old chip was a filled pill with a 1 px
-   border in every state, which made an unselected row of them read as a row of
-   buttons instead of as "these are the filters, none of them is applied". */
-.chip {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-  padding: 2px 8px;
-  font-family: inherit;
-  font-size: 11px;
-  color: var(--vscode-descriptionForeground);
-  background-color: transparent;
-  border: 0;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.chip:hover {
-  color: var(--vscode-foreground);
-  background-color: var(--vscode-toolbar-hoverBackground, transparent);
-}
-
-.chip[data-active] {
-  color: var(--vscode-inputOption-activeForeground, var(--vscode-foreground));
-  background-color: var(--vscode-inputOption-activeBackground, var(--vscode-toolbar-hoverBackground, transparent));
-  outline: 1px solid var(--vscode-inputOption-activeBorder, transparent);
-  outline-offset: -1px;
-  font-weight: 600;
-}
-
-.chip-count {
-  color: inherit;
-  font-size: 10px;
 }
 
 .network-toggle {

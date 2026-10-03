@@ -1225,17 +1225,7 @@ export function parseSelfEnv(text: string): SelfEnv | undefined {
   };
 }
 
-// ─────────────────────────────────────────────────────────────── filters ──
-
-export type FilterKind = "all" | "namespace" | "added" | "surface";
-
-export interface LibraryFilter {
-  kind: FilterKind;
-  value?: string;
-}
-
-export const ALL_FILTER: LibraryFilter = { kind: "all" };
-export const ADDED_FILTER: LibraryFilter = { kind: "added" };
+// ───────────────────────────────────────────────────────────────── search ──
 
 /** The fields a search looks at — never the whole Lua text. */
 export function searchText(entry: LibraryEntry): string {
@@ -1249,55 +1239,6 @@ export function matchesQuery(entry: LibraryEntry, query: string): boolean {
   }
   const haystack = searchText(entry);
   return needle.split(/\s+/).every((part) => haystack.includes(part));
-}
-
-export function matchesFilter(entry: LibraryEntry, filter: LibraryFilter): boolean {
-  switch (filter.kind) {
-    case "namespace":
-      return filter.value === entry.namespace;
-    case "added":
-      return entry.added;
-    case "surface":
-      return filter.value === entry.surface || entry.surfaces.includes(filter.value as Surface);
-    default:
-      return true;
-  }
-}
-
-/** The rows the sidebar shows, after the chip and the query. */
-export function visibleEntries(
-  entries: readonly LibraryEntry[],
-  filter: LibraryFilter,
-  query: string,
-): LibraryEntry[] {
-  return entries.filter((entry) => matchesFilter(entry, filter) && matchesQuery(entry, query));
-}
-
-/** Namespaces that actually occur, busiest first — the chips are data, not a list. */
-export function namespaceCounts(entries: readonly LibraryEntry[]): Array<{ value: string; count: number }> {
-  const counts = new Map<string, number>();
-  for (const entry of entries) {
-    if (entry.namespace === undefined) {
-      continue;
-    }
-    counts.set(entry.namespace, (counts.get(entry.namespace) ?? 0) + 1);
-  }
-  return [...counts.entries()]
-    .map(([value, count]) => ({ value, count }))
-    .sort((a, b) => (b.count === a.count ? (a.value < b.value ? -1 : 1) : b.count - a.count));
-}
-
-/** Surface chips, in `SURFACES` order; a surface nobody has earns no chip. */
-export function surfaceCounts(entries: readonly LibraryEntry[]): Array<{ value: Surface; count: number }> {
-  return SURFACES.map((surface) => ({
-    value: surface,
-    count: entries.filter((entry) => entry.surfaces.includes(surface)).length,
-  })).filter((chip) => chip.count > 0);
-}
-
-/** How many rows are declared in the workspace's `mcpp.toml`. */
-export function addedCount(entries: readonly LibraryEntry[]): number {
-  return entries.filter((entry) => entry.added).length;
 }
 
 /** The surface's label, localized by the caller and falling back to the vocabulary. */

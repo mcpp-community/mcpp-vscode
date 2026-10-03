@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  ALL_FILTER,
-  ADDED_FILTER,
   BADGE_UI,
   badgesOf,
   bracedBody,
@@ -16,7 +14,6 @@ import {
   hasCnMirror,
   idFromFileName,
   mergeSurfaces,
-  namespaceCounts,
   openkalFacetFor,
   parseDescriptorLua,
   parseOpenkalJson,
@@ -24,14 +21,12 @@ import {
   parseSelfEnv,
   searchText,
   stripLuaComments,
-  surfaceCounts,
   surfaceFromDescriptorText,
   surfaceLabel,
   tokenizeCppLine,
   topLevelEntries,
   usageLines,
   versionsFromDescriptorText,
-  visibleEntries,
   type LibraryEntry,
 } from "../../src/library/indexModel";
 import { SURFACE_TEXT, compareVersions, parseXpkgJsonValue } from "../../src/library/xpkg";
@@ -487,50 +482,6 @@ test("descriptorEntry assembles a row and omits what it does not know", () => {
   assert.equal(bare.unreadable, true);
   assert.equal(bare.description, undefined);
   assert.equal(bare.surface, undefined);
-});
-
-test("the filters, the search and the chips agree with each other", () => {
-  const entries = [
-    entry("compat.argparse", { surfaces: ["header"], added: true, description: "argument parser" }),
-    entry("compat.zlib", { surfaces: ["header"], hasCnMirror: true }),
-    entry("mcpplibs.cmdline", { surfaces: ["module"], namespace: "mcpplibs" }),
-    entry("xim.libpng", { namespace: "xim", surfaces: [] }),
-  ];
-  assert.equal(visibleEntries(entries, ALL_FILTER, "").length, 4);
-  assert.deepEqual(
-    visibleEntries(entries, ADDED_FILTER, "").map((item) => item.id),
-    ["compat.argparse"],
-  );
-  assert.deepEqual(
-    visibleEntries(entries, { kind: "namespace", value: "compat" }, "").map((item) => item.id),
-    ["compat.argparse", "compat.zlib"],
-  );
-  assert.deepEqual(
-    visibleEntries(entries, { kind: "surface", value: "module" }, "").map((item) => item.id),
-    ["mcpplibs.cmdline"],
-  );
-  assert.deepEqual(
-    visibleEntries(entries, ALL_FILTER, "parser").map((item) => item.id),
-    ["compat.argparse"],
-  );
-  assert.deepEqual(
-    visibleEntries(entries, ALL_FILTER, "compat zlib").map((item) => item.id),
-    ["compat.zlib"],
-  );
-
-  assert.deepEqual(namespaceCounts(entries), [
-    { value: "compat", count: 2 },
-    { value: "mcpplibs", count: 1 },
-    { value: "xim", count: 1 },
-  ]);
-  assert.deepEqual(
-    surfaceCounts(entries).map((chip) => [chip.value, chip.count]),
-    [
-      ["module", 1],
-      ["header", 2],
-    ],
-  );
-  assert.match(searchText(entries[0]), /compat\.argparse/);
 });
 
 test("parseSearchOutput reads mcpp search's human output tolerantly", () => {

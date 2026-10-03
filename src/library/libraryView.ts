@@ -28,24 +28,13 @@ import { runProcess } from "../cli/process";
 import { read, write } from "../config/access";
 import { languagePreference, t } from "../i18n/t";
 import { localeFromEditorLanguage } from "../i18n/translate";
-import {
-  addedCount,
-  badgesOf,
-  namespaceCounts,
-  searchText,
-  parseSearchOutput,
-  surfaceCounts,
-  surfaceLabel,
-  type LibraryEntry,
-  type Surface,
-} from "./indexModel";
+import { badgesOf, searchText, parseSearchOutput, type LibraryEntry } from "./indexModel";
 import { loadSnapshot, type IndexRoot, type LibrarySnapshot } from "./indexLocator";
 import {
   LIBRARY_UI,
   decodeLibraryMessage,
   documentNeedsRender,
   renderLibraryHtml,
-  type LibraryChip,
   type LibraryModel,
   type LibraryRow,
 } from "./libraryHtml";
@@ -130,7 +119,6 @@ export interface LibraryViewHandle {
 class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   private view: vscode.WebviewView | undefined;
   private snapshot: LibrarySnapshot | undefined;
-  private activeChip = "all";
   private query = "";
   /** Cross-registry hits for the current query, from `mcpp search`. */
   private extra: LibraryRow[] = [];
@@ -217,15 +205,6 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
     switch (message.type) {
       case "refresh":
         await this.refresh();
-        return;
-      case "filter":
-        // Recorded, not re-rendered: the client has already applied the chip to
-        // the document, and reassigning `webview.html` would lose the scroll
-        // position and the caret for no new data. The state is what the next
-        // data-driven render starts from.
-        this.activeChip = message.chip;
-        this.extra = [];
-        this.searchNote = undefined;
         return;
       case "search":
         this.query = message.query;
@@ -341,9 +320,6 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
       [LIBRARY_UI.htmlLang]: htmlLanguage(),
       [LIBRARY_UI.title]: t("Library"),
       [LIBRARY_UI.search]: t("Search packages"),
-      [LIBRARY_UI.filters]: t("Filters"),
-      [LIBRARY_UI.chipAll]: t("All"),
-      [LIBRARY_UI.chipAdded]: t("Added"),
       [LIBRARY_UI.networkSearch]: t("Search all registries"),
       [LIBRARY_UI.networkSearchHint]: t(
         "Off by default: this tier runs mcpp search, which may use the network and is read from human output on a best-effort basis. Failures fall back to the local index.",
@@ -405,7 +381,6 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
     }
     const entries = snapshot.entries;
     const rows = [...entries.map(rowOf), ...this.extra];
-    const chips = chipsOf(entries, ui);
     const notice =
       snapshot.roots.length === 0
         ? ui[LIBRARY_UI.noIndex]
@@ -415,8 +390,6 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
     return {
       ui,
       rows,
-      chips,
-      activeChip: this.activeChip,
       query: this.query,
       networkSearch: this.networkSearch(),
       networkSearchSetting: "mcpp.library.networkSearch",
@@ -431,8 +404,6 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
     return {
       ui,
       rows: [],
-      chips: [{ id: "all", kind: "all", label: ui[LIBRARY_UI.chipAll], count: 0 }],
-      activeChip: "all",
       query: "",
       networkSearch: this.networkSearch(),
       networkSearchSetting: "mcpp.library.networkSearch",
@@ -477,39 +448,6 @@ function rowOf(entry: LibraryEntry): LibraryRow {
   };
 }
 
-/**
- * The chips: all, one per namespace that actually occurs, "added", and one per
- * surface that actually occurs. Counting here means the numbers on the chips and
- * the rows beneath them come from the same list.
- */
-function chipsOf(entries: readonly LibraryEntry[], ui: Record<string, string>): LibraryChip[] {
-  const chips: LibraryChip[] = [
-    { id: "all", kind: "all", label: ui[LIBRARY_UI.chipAll], count: entries.length },
-  ];
-  for (const namespace of namespaceCounts(entries)) {
-    chips.push({
-      id: `ns:${namespace.value}`,
-      kind: "namespace",
-      value: namespace.value,
-      label: namespace.value,
-      count: namespace.count,
-    });
-  }
-  const added = addedCount(entries);
-  if (added > 0) {
-    chips.push({ id: "added", kind: "added", label: ui[LIBRARY_UI.chipAdded], count: added });
-  }
-  for (const surface of surfaceCounts(entries)) {
-    chips.push({
-      id: `surface:${surface.value}`,
-      kind: "surface",
-      value: surface.value,
-      label: surfaceLabel(surface.value as Surface, (key) => ui[key] ?? key),
-      count: surface.count,
-    });
-  }
-  return chips;
-}
 
 /** `auto` is the editor's own language; `en`/`zh-cn` are the manual override. */
 function htmlLanguage(): string {
