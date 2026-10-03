@@ -23,7 +23,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-14]
+        os: [ubuntu-latest, macos-14, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -130,8 +130,14 @@ jobs:
   # One Extension Host run per mcppls variant: a full stub, one that only offers the
   # old restart, one that renamed its command, one that exposes no state API, and one
   # whose state API throws. The promise is that any of them leaves mcpp usable.
+  # All three desktop platforms, because the spawn and path handling the suite
+  # exercises is exactly what differs between them.
   extension-host-e2e:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -141,14 +147,31 @@ jobs:
       - run: npm ci
       - run: npm run compile
       - name: Extension Host smoke tests against every mcppls variant
-        run: xvfb-run -a npm run test:e2e:one
+        # Only Linux needs a virtual display; macOS and Windows runners launch
+        # the downloaded VS Code headless-style without one.
+        shell: bash
+        run: |
+          if [ "$(uname)" = "Linux" ]; then
+            xvfb-run -a npm run test:e2e:one
+          else
+            npm run test:e2e:one
+          fi
 
   # The only check that proves the dependency resolves end to end: install the packed
   # VSIX into a private profile and let VS Code pull the platform build of the
-  # language service.
+  # language service — on every desktop platform, because each pulls its own build.
   isolated-install:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-latest]
+    runs-on: ${{ matrix.os }}
     needs: package
+    defaults:
+      run:
+        # The steps below are written against a POSIX shell; windows-latest ships
+        # Git Bash, so `bash` runs them there unchanged.
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -159,13 +182,13 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: vsix
-      # The runner ships no `code` on PATH — this job could never have gone green
-      # as written. Fetch the same pinned download the e2e job uses (1.91.0, the
-      # oldest VS Code `engines` claims) and expose its CLI as $CODE.
+      # The runners ship no `code` on PATH. Fetch the same pinned download the
+      # e2e job uses (1.91.0, the oldest VS Code `engines` claims) and expose its
+      # CLI as $CODE — on Windows that is bin/code.cmd, which bash runs fine.
       - name: Download the VS Code CLI
         run: |
           set -euo pipefail
-          CODE=$(node tools/ci-vscode-cli.mjs)
+          CODE=$(node tools/ci-vscode-cli.mjs | tr '\\' '/')
           "$CODE" --version
           echo "CODE=$CODE" >> "$GITHUB_ENV"
       - name: Install into a private profile
@@ -178,8 +201,10 @@ jobs:
       - name: The dependency resolved, with a version
         run: |
           set -euo pipefail
+          # `tr -d '\r'`: on Windows the CLI output ends in CRLF, which would
+          # ride along into the version report below.
           LIST=$("$CODE" --extensions-dir "$PWD/.ci-extensions" --user-data-dir "$PWD/.ci-user" \
-            --list-extensions --show-versions)
+            --list-extensions --show-versions | tr -d '\r')
           echo "$LIST"
           echo "$LIST" | grep -q "^mcpp-community.mcpp-vscode@" || { echo "the extension is missing"; exit 1; }
           echo "$LIST" | grep -q "^sunrisepeak.mcpp-language-server@" || { echo "the dependency did not resolve"; exit 1; }

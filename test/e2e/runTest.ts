@@ -16,7 +16,12 @@ async function runVariant(repositoryRoot: string, fixtureRoot: string, variant: 
   const userDataDir = join(tempRoot, "user-data");
   const extensionsDir = join(tempRoot, "extensions");
   const workspaceDir = join(tempRoot, "project");
-  const fakeMcpp = join(tempRoot, "mcpp");
+  // Windows cannot execFile() a shebang script, so there the fake masquerades as
+  // an npm-style .cmd shim (which src/cli/process.ts routes through the shell)
+  // that forwards to the plain node script sitting next to it. Elsewhere the
+  // script with its shebang is the executable.
+  const fakeMcppScript = join(tempRoot, "fake-mcpp.js");
+  const fakeMcpp = process.platform === "win32" ? join(tempRoot, "fake-mcp.cmd") : join(tempRoot, "mcpp");
   const mcppLogPath = join(tempRoot, "mcpp.log");
   const mcpplsLogPath = join(tempRoot, "mcppls.log");
   const mcpplsStub = join(extensionsDir, "sunrisepeak.mcpp-language-server-0.0.0");
@@ -25,8 +30,13 @@ async function runVariant(repositoryRoot: string, fixtureRoot: string, variant: 
   mkdirSync(extensionsDir, { recursive: true });
   mkdirSync(workspaceDir, { recursive: true });
   mkdirSync(mcpplsStub, { recursive: true });
-  copyFileSync(join(fixtureRoot, "fake-mcpp.js"), fakeMcpp);
-  chmodSync(fakeMcpp, 0o755);
+  copyFileSync(join(fixtureRoot, "fake-mcpp.js"), fakeMcppScript);
+  if (process.platform === "win32") {
+    writeFileSync(fakeMcpp, `@node "%~dp0fake-mcpp.js" %*\r\n`);
+  } else {
+    copyFileSync(fakeMcppScript, fakeMcpp);
+    chmodSync(fakeMcpp, 0o755);
+  }
   writeFileSync(join(mcpplsStub, "package.json"), stubPackageJson(variant));
   writeFileSync(join(mcpplsStub, "extension.js"), stubExtensionJs(variant));
   copyFileSync(join(fixtureRoot, "project/mcpp.toml"), join(workspaceDir, "mcpp.toml"));

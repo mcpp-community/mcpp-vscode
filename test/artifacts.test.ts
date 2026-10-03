@@ -574,8 +574,15 @@ test("CI runs the gates, the package checks, the drift check and every e2e varia
   assert.match(workflow, /concurrency:[\s\S]*cancel-in-progress: true/);
   assert.match(workflow, /node-version: \$\{\{ env.NODE_VERSION \}\}/);
   assert.match(workflow, /NODE_VERSION: 22/);
-  // Cross-platform confidence: the unit gates run on Linux and macOS ARM64.
-  assert.match(workflow, /os: \[ubuntu-latest, macos-14\]/);
+  // Cross-platform confidence: the unit gates, the Extension Host e2e and the
+  // isolated install all run the same three-OS matrix — Linux, macOS ARM64 and
+  // Windows, where the spawn and path handling actually differ.
+  const osMatrixes = workflow.match(/os: \[ubuntu-latest, macos-14, windows-latest\]/g) ?? [];
+  assert.equal(
+    osMatrixes.length,
+    3,
+    "gates, extension-host-e2e and isolated-install must all run on Linux, macOS and Windows",
+  );
   assert.match(workflow, /gates:/);
   assert.match(workflow, /extension-host-e2e:/);
   assert.match(workflow, /package:/);

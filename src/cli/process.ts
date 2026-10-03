@@ -22,6 +22,17 @@ export type ProcessRunner = (
   options?: ProcessRunOptions,
 ) => Promise<ProcessResult>;
 
+/**
+ * Windows cannot `execFile` a `.cmd`/`.bat` shim directly — Node ≥ 20.12 rejects
+ * it with EINVAL outright, and older hosts still mis-handle shebang scripts. A
+ * `mcpp.path` that points at such a wrapper (npm-style shim, the e2e fake mcpp)
+ * therefore has to go through the shell. Everywhere else the direct spawn is
+ * both safer and faster, so only these two suffixes opt in.
+ */
+export function spawnNeedsShell(executable: string, platform: NodeJS.Platform = process.platform): boolean {
+  return platform === "win32" && /\.(cmd|bat)$/i.test(executable);
+}
+
 export async function runProcess(
   executable: string,
   args: string[],
@@ -34,6 +45,7 @@ export async function runProcess(
       encoding: "utf8",
       maxBuffer: Math.max(1, options.maxBufferMiB ?? 16) * 1024 * 1024,
       timeout: options.timeoutMs,
+      ...(spawnNeedsShell(executable) ? { shell: true } : {}),
     });
     return {
       exitCode: 0,
