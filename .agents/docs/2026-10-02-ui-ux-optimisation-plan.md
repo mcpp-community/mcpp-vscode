@@ -1256,3 +1256,109 @@ void vscode.env.openExternal(vscode.Uri.parse(message.url));   // 返回的 bool
   标记与按钮**原地**更新。再点 `Open the repository` / `Open on the index site` → 状态行
   应立刻出现 `Opening …`，随后变成 `Opened …`（或"无法打开，已复制链接"）。
 - 仍未做到：活动栏彩色 logo（§19.3 三条独立理由）、状态栏 logo、"初始化当前目录"（上游无 `init`）。
+
+## 21. round 8：仓库工程化四项——l10n 命名 / 目录树收敛 / README 精简 / Open VSX
+
+> 本轮全部是**分析与方案，未动任何代码**；核心点已单独输出给作者 review，批准后按 §21.5 拆任务。
+
+### 21.1 "l10n 不是 i18n 吗？"——两个词都对，仓库里确实存在两层
+
+名词本身：**i18n**（internationalization，国际化）＝把软件**改成能够适配多语言**的工程工作（外置字符串、
+不写死格式）；**l10n**（localization，本地化）＝为**某个具体语言区域**完成翻译与适配。i18n 是前提，
+l10n 是落地。仓库里两层各自叫各自的名字，不是混乱：
+
+| 层 | 位置 | 是什么 | 为什么是两层 |
+| --- | --- | --- | --- |
+| 我们自己的运行时文案 | `src/i18n/`（`t`/`translate`）+ `data/i18n/zh-cn.json` | `t()` 运行时查表；`mcpp.ui.language` 切换**即时生效** | 面板与输出消息要求不重启换语言 |
+| VS Code 平台 l10n | `l10n/bundle.l10n.json` + `bundle.l10n.zh-cn.json` | 命令标题、设置名等**清单文案**，`tools/generate-l10n.mjs` 从 `package.nls*` 生成 | VS Code **只在启动时解析一次**；`l10n/` 目录名是平台约定，不可改 |
+
+结论：**不做重命名**（把 `src/i18n` 改名 `src/l10n` 既不符合平台语义又制造 churn），在
+`docs/architecture.md` 的 Language 小节补一张同款两行表说明即可。
+
+### 21.2 目录树收敛：三处真收益，两处明确不做
+
+现状：`src/` 70 个文件按域分 11 个目录（cli 16 / views 8 / config 8 / library 7 / mcppls 7 / toml 7 /
+buildscript 6 / projects 3 / util 3 / i18n 2 / commands 2 / workflows 1）+ 根 `extension.ts`。大结构
+已经是按域分组，**不动**。根级的 `mcpp-vscode-0.6.0.vsix` 已被 `*.vsix` 忽略且未入库，不是问题。
+
+真收益的三处：
+
+1. **`docs/superpowers/` → `.agents/docs/superpowers/`**（7 份 2026-07~09 的历史实现 plan/spec）。
+   `docs/` 是面向用户的目录；本仓库自己的约定是"分析报告与评审记录只保留 `.agents/docs`"
+   （.gitignore 注释原文）。引用方只有 `.agents/docs` 内两份文档，`git mv` + 改两处链接。
+2. **`images/`（仅 2 文件）并入 `media/`**。`images/` 只有 logo.png（`package.json` 的 `icon` +
+   两份 README 头图）和 activity-bar.png（`generate-activitybar-icon.mjs` 的产物）；`media/` 已经
+   是插件资产目录（三个 webview css + quick-menu/）。合并后根目录少一个，全仓库引用只有 4 处：
+   `package.json`、README×2、该脚本的 SOURCE/TARGET；`check:icon` 门禁随之对齐。
+3. **缓存 webview 换到与库视图同一副骨架**（`src/views/cachePanel*.ts` 共 4 个文件）。这不只是
+   目录美学：上一轮综合 review 的 P2-2 正是"缓存视图缺 per-render nonce / `documentNeedsRender`
+   渲染门禁"（cachePanel.ts:385 起），而 library 视图有整套。统一骨架＝目录上少一套平行实现、
+   功能上顺手关掉 P2-2。属真正的重构，单独一个任务做。
+
+明确不做的：合并 commands / workflows / util / projects 这类小目录（churn 大于收益）；
+`data/i18n/` 与 `l10n/` 不互相搬移（§21.1 的平台约束）。
+
+### 21.3 README 精简 + 相关项目表
+
+两份 README（EN 121 行 / zh 120 行）结构对称。先修实错，再压结构。
+
+实错（2026-10-03 核对；多为 EN 侧，zh 已修一半）：
+
+- EN Quick start 仍写 "Project, Cache and C++ Modules"——0.6.0 是 工程 + 库生态 + 缓存（折叠），
+  **Library 无踪影**（zh 版已是三视图表述）；
+- Install 示例仍是 `mcpp-vscode-0.5.0.vsix`；
+- 命令表里有已删除的 `mcpp.showCachePanel`（与综合 review 的 P3 清单同源）；
+- "All 64 settings"——实测 `contributes.configuration.properties` 共 **69** 个。
+
+结构（121 行 → 约 75 行，两份同步改）：
+
+| 现有小节 | 处置 |
+| --- | --- |
+| Responsibility split 表 | 缩成一句"对 mcppls 只转发不重写"，细节归 docs/architecture.md |
+| （新增）**相关项目表** | 见下；替代散在正文里的链接 |
+| Install | 三渠道：Marketplace / Open VSX（发布后）/ GitHub Releases VSIX |
+| Quick start | 三视图表述对齐 0.6.0，补 Library |
+| Commands 表 / Settings 段 / Editing 段 | 并入 Features 七条 bullets（每条本就带 docs/ 链接） |
+| Troubleshooting 五连链接 | 压成一行 + 链接 |
+
+相关项目表（链接已于 2026-10-03 逐一验证可达）：
+
+| 项目 | 仓库 | 市场 |
+| --- | --- | --- |
+| mcpp（C++23 构建工具，本插件的 CLI 后端） | github.com/mcpp-community/mcpp | — |
+| mcpp-language-server（C++ Modules 语言服务，本插件强依赖） | github.com/Sunrisepeak/mcpp-language-server | Marketplace · Open VSX（0.0.9） |
+| mcpp-vscode（本插件） | github.com/mcpp-community/mcpp-vscode | Marketplace（0.4.0）· Open VSX（待发布）· Releases |
+
+### 21.4 Open VSX 支持
+
+三个已验证的事实（2026-10-03）：
+
+1. **依赖已就位**：`sunrisepeak.mcpp-language-server` **已在 Open VSX**，0.0.9，2026-10-01 更新，
+   publisher 已认证。`extensionDependencies` 在 Open VSX 侧可以解析——这是此前最大的不确定项。
+2. **本插件不在 Open VSX**（API 404）；MS Marketplace 停在 **0.4.0**（37 安装），0.5/0.6 一直走
+   GitHub Releases VSIX——即**两个市场都没有发布流水线**，`release.yml` 目前只做 GitHub Release。
+3. 兼容性无坑：engines `^1.91.0` 对 VSCodium 同样成立（同一 OSS 基座，`vscode.l10n` 可用）；
+   repository / icon / LICENSE（Apache-2.0）字段齐全；`ovsx` 可直接发布 vsce 打好的**同一只
+   VSIX**，不需要第二套打包。
+
+提案（扩展现有 `.github/workflows/release.yml`，不新建工作流）：
+
+- tag 校验、测试、打包、体积/内容门禁**全部照旧**；在 GitHub Release 创建之后追加
+  `npx ovsx publish "mcpp-vscode-${PACKAGE_VERSION}.vsix" -p "$OVSX_PAT"`。secrets 缺失时**显式
+  失败**并说明去哪建 Eclipse OAuth token——发布 tag 是郑重动作，静默跳过等于假发布。
+- 可选：同流水线发 MS Marketplace（`VSCE_PAT`）。0.4.0 已在架，0.6.0 单调递增合法。
+- 首次发布前的一次性人工动作：建 Eclipse OAuth token、确认 `mcpp-community` namespace 归属
+  （Open VSX 首发自动认领，除非已被占用）。
+- 回归锁（本仓库惯例——门禁本身要有测试）：`artifacts.test.ts` 断言 release.yml 含 ovsx publish
+  步骤，防止将来重构工作流时无声丢掉发布。
+- README：Install 三渠道 + §21.3 相关项目表各补 Open VSX。
+
+不做：CI 加 Open VSX 安装冒烟（与 isolated-install 三平台作业重复，VSIX 同源，增量信息≈0）；
+`package.json` 加 Open VSX 专用字段（不存在这种必要）。
+
+### 21.5 需要你定的
+
+1. **发布流水线范围**：只 Open VSX，还是 Open VSX + MS Marketplace 一步到位？（推荐后者，
+   同一只 VSIX 顺手的事；不想自动发 Marketplace 就维持手动。）
+2. **`images/` 并入 `media/`**：做/不做？（推荐做，引用仅 4 处。）
+3. **缓存 webview 骨架统一**（连带关掉 P2-2）：纳入本轮，还是与 P1"已添加"数据链一起排 0.6.x？
