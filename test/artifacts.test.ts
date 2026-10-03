@@ -594,4 +594,9 @@ test("CI runs the gates, the package checks, the drift check and every e2e varia
   // The end-to-end dependency resolution check.
   assert.match(workflow, /isolated-install:/);
   assert.match(workflow, /sunrisepeak.mcpp-language-server@/);
+  // The ubuntu runner ships no `code` on PATH, so the job downloads the CLI via
+  // the e2e tooling instead. A step that calls bare `code` again is the exact
+  // `code: command not found` failure this gate was added after.
+  assert.match(workflow, /tools\/ci-vscode-cli\.mjs/);
+  assert.doesNotMatch(workflow, /^\s+code --/m);
 });

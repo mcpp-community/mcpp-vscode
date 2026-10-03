@@ -159,18 +159,26 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: vsix
+      # The runner ships no `code` on PATH — this job could never have gone green
+      # as written. Fetch the same pinned download the e2e job uses (1.91.0, the
+      # oldest VS Code `engines` claims) and expose its CLI as $CODE.
+      - name: Download the VS Code CLI
+        run: |
+          set -euo pipefail
+          CODE=$(node tools/ci-vscode-cli.mjs)
+          "$CODE" --version
+          echo "CODE=$CODE" >> "$GITHUB_ENV"
       - name: Install into a private profile
         run: |
           set -euo pipefail
-          code --version
-          code --extensions-dir "$PWD/.ci-extensions" --user-data-dir "$PWD/.ci-user" \
+          "$CODE" --extensions-dir "$PWD/.ci-extensions" --user-data-dir "$PWD/.ci-user" \
             --install-extension mcpp-vscode-*.vsix --force
-          code --extensions-dir "$PWD/.ci-extensions" --user-data-dir "$PWD/.ci-user" \
+          "$CODE" --extensions-dir "$PWD/.ci-extensions" --user-data-dir "$PWD/.ci-user" \
             --install-extension sunrisepeak.mcpp-language-server
       - name: The dependency resolved, with a version
         run: |
           set -euo pipefail
-          LIST=$(code --extensions-dir "$PWD/.ci-extensions" --user-data-dir "$PWD/.ci-user" \
+          LIST=$("$CODE" --extensions-dir "$PWD/.ci-extensions" --user-data-dir "$PWD/.ci-user" \
             --list-extensions --show-versions)
           echo "$LIST"
           echo "$LIST" | grep -q "^mcpp-community.mcpp-vscode@" || { echo "the extension is missing"; exit 1; }
