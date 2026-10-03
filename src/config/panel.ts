@@ -22,7 +22,6 @@
  * messages. The webview answers every action with `{ type: "model", model }`.
  */
 
-import { randomBytes } from "node:crypto";
 import * as path from "node:path";
 import * as vscode from "vscode";
 
@@ -30,12 +29,12 @@ import { TOOL_COMMANDS } from "../commands/ids";
 import { languagePreference, t } from "../i18n/t";
 import { localeFromEditorLanguage } from "../i18n/translate";
 import { MCPPLS_EXTENSION_ID } from "../mcppls/contract";
+import { WebviewDocument } from "../webview/document";
 import { effective, onDidChange, write, type WriteTarget } from "./access";
 import {
   PANEL_UI,
   decodePanelMessage,
   renderPanelHtml,
-  type PanelAssets,
   type PanelModel,
   type PanelPreset,
   type PanelRow,
@@ -67,6 +66,13 @@ interface PanelSession {
   panel: vscode.WebviewPanel;
   resource?: vscode.Uri;
   host: PanelHostContext;
+  /**
+   * The document and its per-panel nonce. The panel's html is assigned exactly
+   * once per open — every later update travels by `postMessage` — but the kit
+   * is still used so every webview host in this extension holds its document
+   * the same way (one nonce minting point, one assignment site).
+   */
+  webviewDocument: WebviewDocument;
 }
 
 /** One panel per window: reopening reveals and refreshes the existing one. */
@@ -108,9 +114,16 @@ function open(host: PanelHostContext): void {
     localResourceRoots: [mediaRoot(host)],
     retainContextWhenHidden: false,
   });
-  const active: PanelSession = { panel, resource, host };
+  const active: PanelSession = { panel, resource, host, webviewDocument: new WebviewDocument(STYLESHEET) };
   session = active;
-  panel.webview.html = renderPanelHtml(buildModel(resource), assets(panel.webview, host));
+  const model = buildModel(resource);
+  const html = renderPanelHtml(model, {
+    ...active.webviewDocument.assets(mediaRoot(host), panel.webview),
+    // The client script is inline and nonced; the CSP names no external script
+    // source, so this stays empty on purpose.
+    scriptUri: "",
+  });
+  active.webviewDocument.paint(panel.webview, html);
   panel.webview.onDidReceiveMessage((raw: unknown) => {
     void handle(active, raw);
   });
@@ -389,15 +402,4 @@ function mediaRoot(host: PanelHostContext): vscode.Uri {
   }
   // `dist/src/config/` -> the extension root, where `media/` ships.
   return vscode.Uri.file(path.join(__dirname, "..", "..", "..", MEDIA_DIRECTORY));
-}
-
-function assets(webview: vscode.Webview, host: PanelHostContext): PanelAssets {
-  return {
-    cspSource: webview.cspSource,
-    nonce: randomBytes(16).toString("base64"),
-    styleUri: webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot(host), STYLESHEET)).toString(),
-    // The client script is inline and nonced; the CSP names no external script
-    // source, so this stays empty on purpose.
-    scriptUri: "",
-  };
 }

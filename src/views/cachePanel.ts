@@ -238,7 +238,7 @@ class CacheWebviewViewProvider implements CachePanelProvider {
     if (this.view !== view) {
       return;
     }
-    const html = renderCachePanelHtml(model, this.webviewDocument.assets(this.context, view.webview));
+    const html = renderCachePanelHtml(model, this.webviewDocument.assets(mediaRoot(this.context), view.webview));
     this.webviewDocument.paint(view.webview, html);
   }
 }

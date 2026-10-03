@@ -355,7 +355,10 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
     if (view === undefined) {
       return;
     }
-    const document = renderLibraryHtml(this.model(), this.webviewDocument.assets(this.context, view.webview));
+    const document = renderLibraryHtml(
+      this.model(),
+      this.webviewDocument.assets(vscode.Uri.joinPath(this.context.extensionUri, MEDIA_DIRECTORY), view.webview),
+    );
     this.webviewDocument.paint(view.webview, document);
   }
 

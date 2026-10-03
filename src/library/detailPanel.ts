@@ -18,13 +18,13 @@
  *   file.
  */
 
-import { randomBytes } from "node:crypto";
 import * as vscode from "vscode";
 
 import { runProcess } from "../cli/process";
 import { read } from "../config/access";
 import { languagePreference, t } from "../i18n/t";
 import { localeFromEditorLanguage } from "../i18n/translate";
+import { WebviewDocument } from "../webview/document";
 import { addDependency } from "./addDependency";
 import {
   badgesOf,
@@ -73,7 +73,14 @@ export function createLibraryDetailOpener(
   context: vscode.ExtensionContext,
   deps: DetailPanelDeps,
 ): (id: string) => Promise<void> {
-  const session: DetailSession = { context, deps, panel: undefined, id: undefined, busy: false };
+  const session: DetailSession = {
+    context,
+    deps,
+    panel: undefined,
+    id: undefined,
+    busy: false,
+    webviewDocument: new WebviewDocument(STYLESHEET),
+  };
   context.subscriptions.push({
     dispose: () => {
       session.panel?.dispose();
@@ -91,6 +98,12 @@ export interface DetailSession {
   id: string | undefined;
   /** `mcpp add` in flight: a second click must not start a second command. */
   busy: boolean;
+  /**
+   * The document and its nonce, kept per session so re-opening the *same*
+   * package renders byte for byte the same document and does not reload the
+   * page (which would throw away the reader's scroll position).
+   */
+  webviewDocument: WebviewDocument;
 }
 
 /** The parse result per descriptor, so re-opening a package costs no process. */
@@ -112,6 +125,9 @@ export async function open(session: DetailSession, id: string): Promise<void> {
     panel.onDidDispose(() => {
       session.panel = undefined;
       session.id = undefined;
+      // The next open creates a brand-new webview: what was on screen says
+      // nothing about it, so the document comparison starts from nothing.
+      session.webviewDocument.invalidate();
     });
     panel.webview.onDidReceiveMessage((raw: unknown) => {
       void handle(session, raw);
@@ -228,13 +244,14 @@ async function render(session: DetailSession, id: string): Promise<void> {
   if (session.panel !== panel || session.id !== id) {
     return;
   }
-  panel.webview.html = renderDetailHtml(model, {
-    cspSource: panel.webview.cspSource,
-    nonce: randomBytes(16).toString("base64"),
-    styleUri: panel.webview
-      .asWebviewUri(vscode.Uri.joinPath(session.context.extensionUri, MEDIA_DIRECTORY, STYLESHEET))
-      .toString(),
-  });
+  const html = renderDetailHtml(
+    model,
+    session.webviewDocument.assets(
+      vscode.Uri.joinPath(session.context.extensionUri, MEDIA_DIRECTORY),
+      panel.webview,
+    ),
+  );
+  session.webviewDocument.paint(panel.webview, html);
 }
 
 async function buildModel(session: DetailSession, id: string): Promise<DetailModel> {

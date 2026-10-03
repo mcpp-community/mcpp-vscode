@@ -25,8 +25,6 @@ import * as vscode from "vscode";
 
 import { documentNeedsRender } from "./render";
 
-const MEDIA_DIRECTORY = "media";
-
 /** What an html renderer embeds: the CSP source, the script nonce, the stylesheet. */
 export interface WebviewAssets {
   cspSource: string;
@@ -39,7 +37,7 @@ export class WebviewDocument {
   private readonly nonce = randomBytes(16).toString("base64");
   private current: string | undefined;
 
-  /** @param stylesheet the file under `media/` that the document links. */
+  /** @param stylesheet the stylesheet file, joined onto the media root. */
   constructor(private readonly stylesheet: string) {}
 
   /** The webview was (re)resolved or disposed: it is a fresh, empty document. */
@@ -47,13 +45,11 @@ export class WebviewDocument {
     this.current = undefined;
   }
 
-  assets(context: vscode.ExtensionContext, webview: vscode.Webview): WebviewAssets {
+  assets(mediaRoot: vscode.Uri, webview: vscode.Webview): WebviewAssets {
     return {
       cspSource: webview.cspSource,
       nonce: this.nonce,
-      styleUri: webview
-        .asWebviewUri(vscode.Uri.joinPath(context.extensionUri, MEDIA_DIRECTORY, this.stylesheet))
-        .toString(),
+      styleUri: webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, this.stylesheet)).toString(),
     };
   }
 

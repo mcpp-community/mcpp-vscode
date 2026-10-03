@@ -226,6 +226,39 @@ test("the library view cannot reload itself in a loop", () => {
   assert.match(view, /\.invalidate\(\);/);
 });
 
+test("every webview host holds its document through the kit", () => {
+  // The nonce and the html assignment are the two halves of the reload-loop
+  // accident (see the library gate above); since the kit extraction they are
+  // owned once. Every host — library, cache, settings panel, detail page —
+  // must go through `WebviewDocument`, and a nonce may be minted nowhere but
+  // the kit.
+  const hosts = [
+    "src/library/libraryView.ts",
+    "src/views/cachePanel.ts",
+    "src/config/panel.ts",
+    "src/library/detailPanel.ts",
+  ];
+  for (const host of hosts) {
+    const text = readFileSync(path.join(root, host), "utf8");
+    // Comments are stripped: the prose explains the rules with the very code
+    // it forbids.
+    const code = text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    assert.match(code, /new WebviewDocument\(/, `${host} must hold its document through the kit`);
+    assert.doesNotMatch(code, /\.html\s*=/, `${host} must assign html only through the kit`);
+  }
+  const offenders: string[] = [];
+  for (const [file, text] of sourceFiles()) {
+    if (file === path.join("src", "webview", "document.ts")) {
+      continue;
+    }
+    const code = text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    if (/randomBytes/.test(code)) {
+      offenders.push(file);
+    }
+  }
+  assert.deepEqual(offenders, [], "a webview nonce is minted outside src/webview/document.ts");
+});
+
 test("no module drives a second language client", () => {
   // The same rule the `package` job enforces, but runnable here: the CI grep used
   // to match the bare name, and the compiled comments that explain why this
