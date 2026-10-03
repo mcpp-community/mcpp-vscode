@@ -17,16 +17,35 @@
  * default in step with the `{ version: "1.91.0" }` pin in test/e2e/runTest.ts:
  * CI deliberately tests against the oldest VS Code the extension claims to
  * support (`engines.vscode`), not against whatever `stable` is today.
+ *
+ * The downloader retries internally, but all its attempts die within a second
+ * when the CDN edge resets the connection — a real macos-14 run hit exactly
+ * that. So this adds slower outer retries (30s, 60s, …) to give the edge time
+ * to recover; a CI cache over `.vscode-test/` makes the whole question moot on
+ * repeat runs.
  */
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 
 const args = process.argv.slice(2);
-const index = args.indexOf("--version");
-const version = index === -1 ? "1.91.0" : args[index + 1];
+const indexOf = (name) => args.indexOf(`--${name}`);
+const versionIndex = indexOf("version");
+const version = versionIndex === -1 ? "1.91.0" : args[versionIndex + 1];
+const retriesIndex = indexOf("retries");
+const retries = retriesIndex === -1 ? 3 : Number(args[retriesIndex + 1]);
 
 const { downloadAndUnzipVSCode, resolveCliPathFromVSCodeExecutablePath } = require("@vscode/test-electron");
 
-const executable = await downloadAndUnzipVSCode(version);
-console.log(resolveCliPathFromVSCodeExecutablePath(executable));
+for (let attempt = 1; ; attempt += 1) {
+  try {
+    const executable = await downloadAndUnzipVSCode(version);
+    console.log(resolveCliPathFromVSCodeExecutablePath(executable));
+    break;
+  } catch (error) {
+    if (attempt >= retries) throw error;
+    const seconds = attempt * 30;
+    console.warn(`download failed (${error?.message ?? error}); retry ${attempt + 1}/${retries} in ${seconds}s`);
+    await new Promise((resolve) => setTimeout(resolve, seconds * 1000));
+  }
+}

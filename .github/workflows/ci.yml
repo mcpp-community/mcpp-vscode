@@ -146,6 +146,14 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run compile
+      # The pinned VS Code download is ~135 MB per platform; caching it makes the
+      # e2e both faster and immune to CDN blips (a real macos-14 run was reset
+      # three times in a row by the edge). runTests reuses an existing copy.
+      - name: Cache the pinned VS Code download
+        uses: actions/cache@v4
+        with:
+          path: .vscode-test
+          key: vscode-1.91.0-${{ runner.os }}-${{ runner.arch }}
       - name: Extension Host smoke tests against every mcppls variant
         # Only Linux needs a virtual display; macOS and Windows runners launch
         # the downloaded VS Code headless-style without one.
@@ -182,6 +190,13 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: vsix
+      # Same cache as the e2e job: a hit skips the ~135 MB download entirely, and
+      # the CDN edge has been seen resetting macos downloads three times in a row.
+      - name: Cache the pinned VS Code download
+        uses: actions/cache@v4
+        with:
+          path: .vscode-test
+          key: vscode-1.91.0-${{ runner.os }}-${{ runner.arch }}
       # The runners ship no `code` on PATH. Fetch the same pinned download the
       # e2e job uses (1.91.0, the oldest VS Code `engines` claims) and expose its
       # CLI as $CODE — on Windows that is bin/code.cmd, which bash runs fine.
