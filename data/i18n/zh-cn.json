@@ -460,5 +460,10 @@
   "{0}{1}": "{0}{1}",
   "{0}–{1} day(s)": "{0}–{1} 天",
   "{0}–{1} day(s) ago": "{0}–{1} 天前",
-  "✓ Has examples": "✓ 有示例"
+  "✓ Has examples": "✓ 有示例",
+  "Bring it into your code": "在代码里引入",
+  "Copy": "复制",
+  "Copied to the clipboard.": "已复制到剪贴板。",
+  "Copying…": "复制中…",
+  "Could not write the clipboard.": "无法写入剪贴板。"
 }

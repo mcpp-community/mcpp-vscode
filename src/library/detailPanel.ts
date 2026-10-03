@@ -18,6 +18,8 @@
  *   file.
  */
 
+import { readFileSync } from "node:fs";
+import * as path from "node:path";
 import * as vscode from "vscode";
 
 import { runProcess } from "../cli/process";
@@ -30,9 +32,13 @@ import {
   badgesOf,
   codeSnippets,
   descriptorDependencies,
+  installedFor,
+  mergeSurfaces,
   parseXpkgJson,
   platformKey,
   surfaceLabel,
+  syntheticUsageLines,
+  usageLinesFor,
   type LibraryEntry,
   type Surface,
 } from "./indexModel";
@@ -41,6 +47,7 @@ import {
   DETAIL_UI,
   decodeDetailMessage,
   renderDetailHtml,
+  type DetailInstalled,
   type DetailModel,
   type DetailVersionGroup,
   type DetailResult,
@@ -149,6 +156,21 @@ async function handle(session: DetailSession, raw: unknown): Promise<void> {
     case "openUrl": {
       // `decodeDetailMessage` already restricted this to https.
       await openExternal(session, message.url);
+      return;
+    }
+    case "copy": {
+      // The command preview and the usage lines: both are text a reader pastes
+      // somewhere else, and a click that answers with nothing looks like a dead
+      // button (the lesson `openExternal` learned in §20.2).
+      try {
+        await vscode.env.clipboard.writeText(message.text);
+        postResult(session, { state: "ok", message: t("Copied to the clipboard.") });
+      } catch (error) {
+        session.deps.output.appendLine(
+          `mcpp library: copying to the clipboard failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        postResult(session, { state: "error", message: t("Could not write the clipboard.") });
+      }
       return;
     }
     case "add": {
@@ -285,10 +307,12 @@ async function buildModel(session: DetailSession, id: string): Promise<DetailMod
   const currentVersions = platform === undefined ? [] : (versions[platform] ?? []);
   const latest = currentVersions.length === 0 ? undefined : sortVersions(currentVersions)[0];
 
-  const snippets =
-    entry.example === undefined
-      ? []
-      : codeSnippets(await readExampleFiles(snapshot.roots, entry.example), { context: 2, maxSnippets: 3, maxLines: 20 });
+  const exampleFiles = entry.example === undefined ? [] : await readExampleFiles(snapshot.roots, entry.example);
+  const snippets = codeSnippets(exampleFiles, { context: 2, maxSnippets: 3, maxLines: 20 });
+  // §22: the example project's real `import`/`#include` lines when it states
+  // them, else the honest synthetic form for the surface the parse resolved.
+  const realUsage = usageLinesFor(exampleFiles, entry.id);
+  const usage = realUsage.length > 0 ? realUsage : syntheticUsageLines(mergeSurfaces(info, text), entry.name);
 
   const dependencies = descriptorDependencies(text).map((dependency) => ({ ...dependency }));
   const model: DetailModel = {
@@ -305,12 +329,16 @@ async function buildModel(session: DetailSession, id: string): Promise<DetailMod
     versions: groups,
     currentVersions: sortVersions(currentVersions),
     ...(latest === undefined ? {} : { latest }),
+    // §22: the page finally learns what the project already has. Without this
+    // the button said "Add" to a package mcpp.toml listed all along.
+    ...readInstalled(session, entry.id),
     ...(info?.standard === undefined ? {} : { standard: info.standard }),
     dependencies,
     includeDirs: info?.includeDirs ?? [],
     targets: (info?.targets ?? []).map((target) => target.name ?? "").filter((name) => name.length > 0),
     snippets,
     ...(entry.example === undefined ? {} : { exampleProject: entry.example.project }),
+    usage,
     // One discreet link, and only when this root really is the index that
     // publishes those package pages (see `IndexRoot.site`).
     ...(root?.site === undefined ? {} : { indexUrl: `${root.site}/${entry.id}/` }),
@@ -373,11 +401,38 @@ function emptyModel(id: string, ui: Record<string, string>, notice: string): Det
     includeDirs: [],
     targets: [],
     snippets: [],
+    usage: [],
     commandTemplate: t("mcpp add {0}@{1}"),
     commandDevTemplate: t("mcpp add {0}@{1} --dev"),
     parseNotice: notice,
     dataSource: t("No descriptor was read."),
   };
+}
+
+/**
+ * The workspace's own answer about one package (§20.1, wired in §22):
+ * `mcpp.toml` first, `mcpp.lock` second, both read tolerantly — a missing or
+ * unreadable file is simply "not installed", never a broken page. The spread
+ * sets `installed` only when there is one.
+ */
+function readInstalled(session: DetailSession, id: string): { installed?: DetailInstalled } {
+  const root = session.deps.projectRoot();
+  if (root === undefined) {
+    return {};
+  }
+  const toml = readTextTolerantly(path.join(root, "mcpp.toml"));
+  const lock = readTextTolerantly(path.join(root, "mcpp.lock"));
+  const installed = installedFor(id, toml, lock);
+  return installed === undefined ? {} : { installed };
+}
+
+/** An unreadable or missing file reads as empty text; the view degrades, not breaks. */
+function readTextTolerantly(file: string): string {
+  try {
+    return readFileSync(file, "utf8");
+  } catch {
+    return "";
+  }
 }
 
 /** Every visible string, resolved once per model. */
@@ -418,6 +473,10 @@ function labels(): Record<string, string> {
     [DETAIL_UI.opening]: t("Opening {0}…"),
     [DETAIL_UI.addNoVersion]: t("This index publishes no version for this platform, so there is nothing to add."),
     [DETAIL_UI.command]: t("Command"),
+    [DETAIL_UI.usage]: t("Bring it into your code"),
+    [DETAIL_UI.copy]: t("Copy"),
+    [DETAIL_UI.copied]: t("Copied to the clipboard."),
+    [DETAIL_UI.copying]: t("Copying…"),
     [DETAIL_UI.indexLink]: t("Open on the index site"),
     [DETAIL_UI.badgeExamples]: t("✓ Has examples"),
     [DETAIL_UI.badgeCn]: t("China mirror"),

@@ -1368,3 +1368,62 @@ buildscript 6 / projects 3 / util 3 / i18n 2 / commands 2 / workflows 1）+ 根 
 三项全部批准：双市场发布（key 作者自己配）、images 合并、骨架统一纳入本轮。实施设计见
 `2026-10-03-repo-engineering-plan.md`（四个任务、七个 commit 的切分与验收，另带两个新的范围
 决策点：config/detail 顺路迁移、cache 目录移动）。
+
+## 22. round 9：真机验收的三条反馈——"更新"按钮、引入方式、可复制命令
+
+作者在真实窗口里验收 §20 的详情页，反馈三条；本条落的是修复与新功能。
+
+### 22.1 "好像没有更新按钮"——§20.1 的另一半这次真的补上了（综合 review 的 P1）
+
+根因与 review 轮的判断一致，三层证据重新确认：按钮的三态渲染（`detailHtml.ts`
+`renderActions`/`renderVersions`）、客户端重算（`updateButton`）、add 成功后的行内
+`markInstalled()` 全都**就位**——§20 的测试也全过，因为它们手工构造 `model.installed`——但
+宿主 `detailPanel.buildModel` 从来没有填过这个字段，`readInstalled` 在任何 git 历史上都不存在。
+于是一个 `mcpp.toml` 里已有的包，详情页永远从 "Add to mcpp.toml" 开始。另有一处随之的缺损：
+`clientState.labels` 没带 `installed` 键，add 成功后的行内标记是**空文本 span**。
+
+修复（纯函数 + 一处接线）：
+
+1. `indexModel.declaredDependencyEntries(toml)`——`declaredDependencies` 的版本感知姊妹版：
+   同一套走表逻辑，保留约束文本与 dev 标志；`{ path = … }`/git 表记为"声明了但无版本"。
+2. `indexModel.lockPackageVersions(lock)`——按**实测**的 lock 格式解析（`version = 2`：
+   `[package."短名"]` + `namespace`/`version`；全限定键形式也读，命名空间恰为名字自身的头时
+   不重复拼接——与 `descriptorId` 的 INV-NAME 处理同理）。
+3. `indexModel.installedFor(id, toml, lock)`——§20.1 的规则：toml 优先（键等于 id 或其最后
+   一段），lock 兜底；返回 `{version, dev}` 或 undefined（没有就是没有）。
+4. 宿主 `readInstalled` 容错读 `<projectRoot>/mcpp.toml` 与 `mcpp.lock`（缺文件=空文本，
+   页面不因文件缺失而坏），模型带上 `installed`；`clientState.labels` 补 `installed`。
+
+### 22.2 详情页补"引入方式"（`import xxx;` / `#include …`）
+
+先量了三件事再设计：真实工程（`/home/speak/portable`）的 manifest 写 `openkal = "0.12.0"`，
+源码写 `import openkal.types;`——**模块包按短名导入**；本机索引没有 `tests/examples/`，
+"从示例代码提取真实行"在这台机器上会退化为空；`mcpp xpkg parse` 不暴露任何模块/头文件名。
+
+于是分层：
+
+| 来源 | 行为 |
+| --- | --- |
+| 示例工程存在且有匹配行 | `usageLinesFor(files, id)`：单词边界匹配短名或全 id 的 `import`/`#include` 行，去重，至多 4 行——**真实代码** |
+| 没有示例 | `syntheticUsageLines(surfaces, name)`：module → `import <name>;`（有实测依据的根形式）；header → 索引站自己的占位 `#include <foo.h>`（真实头文件路径在上游压缩包里，离线不可知，**不编造**）；tool/external → 不显示（surface 徽标已经说明） |
+
+渲染位置：命令行正下方，每行 `<code>` + 自己的复制按钮。
+
+### 22.3 命令与用法行可复制
+
+- 命令的 Copy 按钮放在段落**旁边**而不是里面——`command.textContent` 于是恰好是要复制的
+  命令本身；用法行按钮带 `data-copy="<行>"`。
+- 点击立即显示"复制中…"（客户端自己的 pending 行），宿主写剪贴板后回 ok/error——§20.2 的
+  教训：点击不能无声。解码白名单新增 `copy`（非空字符串、≤500 字符，防止恶意文档把长文塞进
+  剪贴板），其余形状照旧丢弃。
+
+### 22.4 状态
+
+- 671 个单元测试通过（新增 6：entries/lock/installedFor/usageLinesFor/syntheticUsageLines
+  纯函数；详情页 usage 块与复制按钮、client 标签含 `installed`、解码三形状含上限拒绝）；
+  `check:l10n`（新增 5 条 zh 词条）等门禁全过。
+- 仍未做：侧边栏行级 `added` 徽标的 lock 兜底（本轮只做了详情页；`declaredDependencies`
+  的 id 语义不变，另案）。
+- **需要作者验证**：详情页打开一个 `mcpp.toml` 里已有的包 → 按钮应是 `Already added`
+  （禁用）或 `Switch to <ver>`，版本矩阵上那一版带 `added` 字标；命令行与用法行旁的
+  **Copy** 应把文本放进剪贴板并有"已复制"回音；`import <name>;` 行出现在命令下方。

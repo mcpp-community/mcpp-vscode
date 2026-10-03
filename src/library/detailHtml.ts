@@ -97,6 +97,12 @@ export interface DetailModel {
   snippets: DetailSnippet[];
   /** The example project the snippets come from, when there is one. */
   exampleProject?: string;
+  /**
+   * How a reader brings the package into code (§22): the example project's
+   * real `import …;` / `#include …` lines when there are any, else the honest
+   * synthetic form for the surface. Empty when the surface is not importable.
+   */
+  usage: string[];
   /** The index site's package page; omitted for a registry that has no site. */
   indexUrl?: string;
   /** `mcpp add {0}@{1}` / with `--dev`, so the preview and the run agree. */
@@ -150,6 +156,10 @@ export const DETAIL_UI = {
   addLatest: "detail.addLatest",
   addNoVersion: "detail.add.noVersion",
   command: "detail.command",
+  usage: "detail.usage",
+  copy: "detail.copy",
+  copied: "detail.copied",
+  copying: "detail.copying",
   indexLink: "detail.indexLink",
   badgeExamples: BADGE_UI.examples.key,
   badgeCn: BADGE_UI.cn.key,
@@ -181,7 +191,8 @@ const BADGE_KEY_UI: Readonly<Record<BadgeKey, string>> = {
  */
 export type DetailMessage =
   | { type: "add"; version: string; dev: boolean }
-  | { type: "openUrl"; url: string };
+  | { type: "openUrl"; url: string }
+  | { type: "copy"; text: string };
 
 export type UiLabel = (key: string) => string;
 
@@ -379,6 +390,20 @@ function renderActions(model: DetailModel, label: UiLabel): string {
       : fill(label, DETAIL_UI.switchTo, [model.latest]);
   const link = (url: string, text: string): string =>
     `    <button type="button" data-secondary data-open-url="${escapeHtml(url)}">${escapeHtml(text)}</button>`;
+  // The command and each usage line carry their own copy button: both are
+  // things a reader pastes somewhere else — a terminal, a source file.
+  const copyButton = (data: string, text: string): string =>
+    `<button type="button" class="detail-copy" ${data}>${escapeHtml(text)}</button>`;
+  const usage =
+    model.usage.length === 0
+      ? []
+      : [
+          `  <p class="detail-hint">${escapeHtml(label(DETAIL_UI.usage))}</p>`,
+          ...model.usage.map(
+            (line) =>
+              `  <p class="detail-usage-line"><code>${escapeHtml(line)}</code>${copyButton(`data-copy="${escapeHtml(line)}"`, label(DETAIL_UI.copy))}</p>`,
+          ),
+        ];
   return [
     `<section class="detail-primary" data-section="add">`,
     `  <div class="detail-actions">`,
@@ -387,10 +412,16 @@ function renderActions(model: DetailModel, label: UiLabel): string {
     ...(model.repo === undefined ? [] : [link(model.repo, label(DETAIL_UI.openRepo))]),
     ...(model.indexUrl === undefined ? [] : [link(model.indexUrl, label(DETAIL_UI.indexLink))]),
     `  </div>`,
-    `  <p class="detail-command" id="detail-command" data-selected-version="${escapeHtml(model.latest ?? "")}" data-template="${escapeHtml(model.commandTemplate)}" data-template-dev="${escapeHtml(model.commandDevTemplate)}">${escapeHtml(command)}</p>`,
+    // The copy button sits beside the command, not inside it: `command.textContent`
+    // is what a click copies, and a button inside the paragraph would be copied too.
+    `  <div class="detail-command-row">`,
+    `    <p class="detail-command" id="detail-command" data-selected-version="${escapeHtml(model.latest ?? "")}" data-template="${escapeHtml(model.commandTemplate)}" data-template-dev="${escapeHtml(model.commandDevTemplate)}">${escapeHtml(command)}</p>`,
+    `    <button type="button" class="detail-copy" data-copy-command>${escapeHtml(label(DETAIL_UI.copy))}</button>`,
+    `  </div>`,
     disabled
       ? `  <p class="detail-hint">${escapeHtml(label(DETAIL_UI.addNoVersion))}</p>`
       : `  <p class="detail-hint">${escapeHtml(label(DETAIL_UI.addLatest))}</p>`,
+    ...usage,
     `  <p class="detail-result" id="detail-result" role="status"${attribute("data-state", model.result?.state)}${model.result === undefined ? " hidden" : ""}>${escapeHtml(model.result?.message ?? "")}</p>`,
     `</section>`,
   ]
@@ -502,6 +533,18 @@ function clientScript(initialModel: string): string {
       post({ type: "openUrl", url: url });
       return;
     }
+    var copy = target.closest("[data-copy-command], [data-copy]");
+    if (copy) {
+      // The command's own text is what gets copied — the button beside it, not
+      // inside it, is why the command's textContent is exactly the command.
+      var text = copy.hasAttribute("data-copy-command")
+        ? (command ? String(command.textContent || "") : "")
+        : String(copy.getAttribute("data-copy") || "");
+      if (!text) { return; }
+      showResult({ state: "pending", message: labels.copying || "" });
+      post({ type: "copy", text: text });
+      return;
+    }
     var pick = target.closest("[data-version]");
     if (pick) {
       selectVersion(pick.getAttribute("data-version") || "");
@@ -553,12 +596,17 @@ function clientState(model: DetailModel): Record<string, unknown> {
     ...(model.latest === undefined ? {} : { latest: model.latest }),
     // The three labels the button can wear, and the version the project already
     // has: the client re-decides the label every time the selection changes, so
-    // the host cannot be the only one that knows what the button means.
+    // the host cannot be the only one that knows what the button means. The
+    // `installed` word belongs here too — `markInstalled()` writes it next to
+    // the version button after a successful add, and an empty string there is
+    // a marker nobody can read (§22).
     labels: {
       add: model.ui[DETAIL_UI.add] ?? "",
       switchTo: model.ui[DETAIL_UI.switchTo] ?? "",
       alreadyAdded: model.ui[DETAIL_UI.alreadyAdded] ?? "",
       opening: model.ui[DETAIL_UI.opening] ?? "",
+      installed: model.ui[DETAIL_UI.installed] ?? "",
+      copying: model.ui[DETAIL_UI.copying] ?? "",
     },
     ...(model.installed === undefined ? {} : { installed: model.installed.version }),
   };
@@ -651,6 +699,13 @@ export function decodeDetailMessage(raw: unknown): DetailMessage | undefined {
     case "openUrl":
       return typeof raw.url === "string" && raw.url.startsWith("https://")
         ? { type: "openUrl", url: raw.url }
+        : undefined;
+    case "copy":
+      // Clipboard content, same trust level as the https-restricted url: a
+      // length cap keeps a hostile document from parking a novel in the
+      // clipboard, and everything else about it is the user's own click.
+      return nonEmptyString(raw.text) && raw.text.length <= 500
+        ? { type: "copy", text: raw.text }
         : undefined;
     default:
       return undefined;

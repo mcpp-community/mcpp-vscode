@@ -528,11 +528,47 @@ pre.detail-code code {
   cursor: pointer;
 }
 
+.detail-command-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
 .detail-command {
   margin: 6px 0 0;
   font-family: var(--vscode-editor-font-family, monospace);
   font-size: 11px;
   color: var(--vscode-descriptionForeground);
+}
+
+/* The small affordance beside the command and each usage line: text a reader
+   pastes elsewhere, so a click takes it to the clipboard. */
+.detail-copy {
+  flex: none;
+  padding: 1px 8px;
+  font-size: 10px;
+  color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+  background-color: var(--vscode-button-secondaryBackground, transparent);
+  border: 1px solid var(--vscode-contrastBorder, transparent);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.detail-copy:hover {
+  background-color: var(--vscode-button-hoverBackground, transparent);
+}
+
+.detail-usage-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 4px 0 0;
+}
+
+.detail-usage-line code {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 11px;
+  color: var(--vscode-editorForeground, var(--vscode-foreground));
 }
 
 .detail-result {

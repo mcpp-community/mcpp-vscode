@@ -49,6 +49,10 @@ const UI: Record<string, string> = {
   [DETAIL_UI.addLatest]: "The version is required.",
   [DETAIL_UI.addNoVersion]: "This index publishes no version for this platform.",
   [DETAIL_UI.command]: "Command",
+  [DETAIL_UI.usage]: "Bring it into your code",
+  [DETAIL_UI.copy]: "Copy",
+  [DETAIL_UI.copied]: "Copied to the clipboard.",
+  [DETAIL_UI.copying]: "Copying…",
   [DETAIL_UI.indexLink]: "Open on the index site",
   [DETAIL_UI.badgeExamples]: "✓ Has examples",
   [DETAIL_UI.badgeCn]: "China mirror",
@@ -91,6 +95,7 @@ function model(patch: Partial<DetailModel> = {}): DetailModel {
       },
     ],
     exampleProject: "argparse",
+    usage: [],
     indexUrl: "https://mcpplibs.github.io/mcpp-index/packages/compat.argparse/",
     commandTemplate: "mcpp add {0}@{1}",
     commandDevTemplate: "mcpp add {0}@{1} --dev",
@@ -259,11 +264,44 @@ test("the client can re-decide the button, and a link click is never silent", ()
   assert.match(html, /"switchTo":"Switch to \{0\}"/);
   assert.match(html, /"alreadyAdded":"Already added"/);
   assert.match(html, /"opening":"Opening \{0\}…"/);
+  // The marker word belongs to the client too: `markInstalled()` writes it
+  // after a successful add, and an empty string there is a marker nobody can
+  // read (the §22 fix).
+  assert.match(html, /"installed":"added"/);
+  assert.match(html, /"copying":"Copying…"/);
   const script = /<script nonce="[^"]*">([\s\S]*)<\/script>/.exec(html);
   assert.ok(script !== null);
   assert.match(script[1], /function updateButton\(\)/);
   assert.match(script[1], /showResult\(\{ state: "pending"/);
   assert.match(script[1], /updateButton\(\);/);
+});
+
+test("the usage lines and the command each carry their own copy button (§22)", () => {
+  const html = renderDetailHtml(
+    model({ usage: ["import openkal.types;", "#include <argparse/argparse.hpp>"] }),
+    ASSETS,
+  );
+  assert.match(html, />Bring it into your code</);
+  assert.match(
+    html,
+    /<p class="detail-usage-line"><code>import openkal\.types;<\/code><button type="button" class="detail-copy" data-copy="import openkal\.types;">Copy<\/button><\/p>/,
+  );
+  assert.match(html, /data-copy="#include &lt;argparse\/argparse\.hpp&gt;"/);
+  // The command's copy button sits beside the paragraph, not inside it, so
+  // `command.textContent` is exactly the command a click copies.
+  assert.match(html, /<div class="detail-command-row">/);
+  assert.match(
+    html,
+    /<\/p>\s*<button type="button" class="detail-copy" data-copy-command>Copy<\/button>\s*<\/div>/,
+  );
+  // A page with nothing to import says nothing rather than inventing a line.
+  const bare = renderDetailHtml(model({ usage: [] }), ASSETS);
+  assert.doesNotMatch(bare, /detail-usage-line/);
+  assert.doesNotMatch(bare, />Bring it into your code</);
+  // The client asks the host to copy, and says so while it waits.
+  const script = /<script nonce="[^"]*">([\s\S]*)<\/script>/.exec(html);
+  assert.ok(script !== null);
+  assert.match(script[1], /post\(\{ type: "copy", text: text \}\)/);
 });
 
 test("a parse failure is stated on the page instead of leaving it blank", () => {
@@ -284,7 +322,7 @@ test("an index url is optional: a registry without a site gets no link", () => {
   assert.match(html, /data-open-url="https:\/\/github\.com\/p-ranav\/argparse"/);
 });
 
-test("decodeDetailMessage accepts exactly two shapes, and only https urls", () => {
+test("decodeDetailMessage accepts exactly three shapes, and only https urls", () => {
   assert.deepEqual(decodeDetailMessage({ type: "add", version: "3.2", dev: false }), {
     type: "add",
     version: "3.2",
@@ -293,6 +331,10 @@ test("decodeDetailMessage accepts exactly two shapes, and only https urls", () =
   assert.deepEqual(decodeDetailMessage({ type: "openUrl", url: "https://example.invalid/x" }), {
     type: "openUrl",
     url: "https://example.invalid/x",
+  });
+  assert.deepEqual(decodeDetailMessage({ type: "copy", text: "mcpp add compat.argparse@3.2" }), {
+    type: "copy",
+    text: "mcpp add compat.argparse@3.2",
   });
 
   for (const raw of [
@@ -308,6 +350,12 @@ test("decodeDetailMessage accepts exactly two shapes, and only https urls", () =
     { type: "openUrl", url: "file:///etc/passwd" },
     { type: "openUrl", url: "command:mcpp.build" },
     { type: "openUrl" },
+    // Clipboard content is the user's own click, but a novel is not: the cap
+    // keeps a hostile document from parking megabytes in the clipboard.
+    { type: "copy" },
+    { type: "copy", text: "" },
+    { type: "copy", text: 42 },
+    { type: "copy", text: "x".repeat(501) },
     // The page used to announce its own load. The host answered with an empty
     // `return`, so nothing looped here — but the shape is the one that made the
     // library view reload itself forever, so the message is gone.

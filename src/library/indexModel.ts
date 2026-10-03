@@ -712,6 +712,213 @@ function bracesOpen(text: string): number {
   return depth;
 }
 
+// ─────────────────────────────────────────────── what the project already has ──
+
+/** One dependency a workspace manifest declares, with the constraint it names. */
+export interface DeclaredDependencyEntry {
+  id: string;
+  /**
+   * The constraint text (`3.2`, `^1.0`) when the value is a plain string.
+   * A table value — `{ path = "…" }`, a git source — names no version, and the
+   * project's lock file is the next place to look.
+   */
+  version?: string;
+  /** Declared under `[dev-dependencies]` (or a feature only tests pull in). */
+  dev: boolean;
+}
+
+/**
+ * The version-aware sibling of `declaredDependencies` (§22): the detail page
+ * asks "which version does this project already ask for", which an id-only
+ * list cannot answer. Same walk, same shapes — bare keys stay bare here
+ * (`argparse` is not expanded to `compat.argparse`), because the matching rule
+ * of the only caller (`installedFor`) compares against both forms anyway.
+ */
+export function declaredDependencyEntries(tomlText: string): DeclaredDependencyEntry[] {
+  const out: DeclaredDependencyEntry[] = [];
+  const seen = new Set<string>();
+  const push = (id: string, version: string | undefined, dev: boolean): void => {
+    if (id.length === 0 || seen.has(`${dev ? "d" : "r"}:${id}`)) {
+      return;
+    }
+    seen.add(`${dev ? "d" : "r"}:${id}`);
+    out.push(version === undefined ? { id, dev } : { id, version, dev });
+  };
+  const header = /^\s*\[([^\]]+)\]\s*$/;
+  let dev = false;
+  let prefix = "";
+  let collecting = false;
+  const lines = tomlText.split(/\r?\n/);
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index].replace(/#.*$/, "").trim();
+    const section = header.exec(line);
+    if (section !== null) {
+      const path = section[1]
+        .split(".")
+        .map((part) => part.trim().replace(/^['"]|['"]$/g, ""))
+        .filter((part) => part.length > 0);
+      const at = path.findIndex((part) => part === "dependencies" || part === "dev-dependencies");
+      collecting = at !== -1;
+      dev = path[at] === "dev-dependencies";
+      prefix = at !== -1 && path.length > at + 1 ? path[at + 1] : "";
+      continue;
+    }
+    if (!collecting) {
+      continue;
+    }
+    let statement = line;
+    while (bracesOpen(statement) > 0 && index + 1 < lines.length) {
+      index += 1;
+      statement += ` ${lines[index].replace(/#.*$/, "").trim()}`;
+    }
+    if (statement.length === 0) {
+      continue;
+    }
+    const assignment = /^([A-Za-z0-9_.\-]+)\s*=\s*(.*)$/.exec(statement);
+    if (assignment === null) {
+      continue;
+    }
+    const key = assignment[1];
+    const value = assignment[2].trim();
+    const version = /^"([^"]*)"$/.exec(value);
+    if (version !== null) {
+      push(prefix.length > 0 ? `${prefix}.${key}` : key, version[1], dev);
+      continue;
+    }
+    if (value.startsWith("{")) {
+      // Three shapes live inside braces. A namespace table
+      // (`compat = { argparse = "3.2" }`) names `compat.argparse` with that
+      // version. A source table (`counters = { path = "../counters" }`, git
+      // tables) names `counters` with no version at all; a `version` key
+      // inside one is honoured, the other source fields are not facts about
+      // the package.
+      const SOURCE_KEYS = new Set(["path", "git", "url", "branch", "rev", "tag"]);
+      const pairs = [...value.matchAll(/([A-Za-z0-9_.\-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^,}]+))/g)]
+        .map((match) => ({ key: match[1], value: (match[2] ?? match[3] ?? match[4] ?? "").trim() }))
+        .filter((pair) => pair.key !== undefined);
+      const named = pairs.filter((pair) => !SOURCE_KEYS.has(pair.key) && pair.key !== "version");
+      if (named.length > 0) {
+        for (const pair of named) {
+          push(
+            prefix.length > 0 ? `${prefix}.${key}.${pair.key}` : `${key}.${pair.key}`,
+            pair.value.length > 0 ? pair.value : undefined,
+            dev,
+          );
+        }
+      } else {
+        const tableVersion = pairs.find((pair) => pair.key === "version" && pair.value.length > 0)?.value;
+        push(prefix.length > 0 ? `${prefix}.${key}` : key, tableVersion, dev);
+      }
+      continue;
+    }
+    push(prefix.length > 0 ? `${prefix}.${key}` : key, undefined, dev);
+  }
+  return out;
+}
+
+/** One package a build resolved, straight out of `mcpp.lock`. */
+export interface LockPackage {
+  id: string;
+  version: string;
+}
+
+/**
+ * `mcpp.lock` (format `version = 2`): one `[package."<name>"]` table per
+ * resolved package, with `namespace` and `version` beside it — measured, not
+ * assumed, against a real lock written by `mcpp 2026.9.30.2`. The file's own
+ * header says the rest: dev-dependencies are excluded, and only index-resolved
+ * packages appear, so a path or git dependency is never an answer here.
+ */
+export function lockPackageVersions(lockText: string): LockPackage[] {
+  const out: LockPackage[] = [];
+  const header = /^\s*\[package\."?([A-Za-z0-9_.\-]+)"?\]\s*$/;
+  let namespace: string | undefined;
+  let version: string | undefined;
+  let name: string | undefined;
+  const flush = (): void => {
+    if (name !== undefined && version !== undefined) {
+      // The key is the short name (`[package."openkal"]` + namespace). A
+      // fully-qualified key also occurs (`[package."mcpplibs.cmdline"]`): when
+      // the namespace is only the name's own head, the name already is the id.
+      let id =
+        namespace === undefined || namespace.length === 0 ? name : `${namespace}.${name}`;
+      const dot = name.lastIndexOf(".");
+      if (namespace !== undefined && dot > 0 && namespace === name.slice(0, dot)) {
+        id = name;
+      }
+      out.push({ id, version });
+    }
+    namespace = undefined;
+    version = undefined;
+    name = undefined;
+  };
+  for (const raw of lockText.split(/\r?\n/)) {
+    const line = raw.replace(/#.*$/, "").trim();
+    if (line.length === 0) {
+      continue;
+    }
+    const section = header.exec(line);
+    if (section !== null) {
+      flush();
+      name = section[1];
+      continue;
+    }
+    if (/^\s*\[/.test(line)) {
+      // Some other table: whatever half-read package there was is over.
+      flush();
+      continue;
+    }
+    if (name === undefined) {
+      continue;
+    }
+    const assignment = /^([A-Za-z_][\w]*)\s*=\s*"([^"]*)"/.exec(line);
+    if (assignment === null) {
+      continue;
+    }
+    if (assignment[1] === "namespace") {
+      namespace = assignment[2];
+    } else if (assignment[1] === "version") {
+      version = assignment[2];
+    }
+  }
+  flush();
+  return out;
+}
+
+/** The project's own answer about one package (§20.1, wired in §22). */
+export interface InstalledDependency {
+  /** The constraint the manifest asks for, or the version a build resolved. */
+  version: string;
+  /** Declared under `[dev-dependencies]`. */
+  dev: boolean;
+}
+
+/**
+ * Whether the project already depends on `id`, and on which version:
+ * `mcpp.toml` first — the matching rule is §20.1's, the key equals the id or
+ * is its last segment, because `mcpp add compat.argparse` writes the short
+ * `argparse = "3.2"` — then `mcpp.lock`, for a dependency whose manifest value
+ * named no version. `undefined` is a real answer: the project does not have it.
+ */
+export function installedFor(
+  id: string,
+  tomlText: string,
+  lockText: string,
+): InstalledDependency | undefined {
+  const short = id.slice(id.lastIndexOf(".") + 1);
+  for (const entry of declaredDependencyEntries(tomlText)) {
+    if ((entry.id === id || entry.id === short) && entry.version !== undefined) {
+      return { version: entry.version, dev: entry.dev };
+    }
+  }
+  for (const locked of lockPackageVersions(lockText)) {
+    if (locked.id === id || locked.id === short) {
+      return { version: locked.version, dev: false };
+    }
+  }
+  return undefined;
+}
+
 /** One example project's manifest and its test files, already read. */
 export interface ExampleInput {
   project: string;
@@ -772,6 +979,55 @@ export function usageLines(files: readonly CodeFile[]): UsageLine[] {
     });
   }
   return out;
+}
+
+/** Regex metacharacters are literal in a package name, never a pattern. */
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * The `import` / `#include` lines a reader of **this** package writes, out of
+ * an example project's real code (§22): a line counts when it names the
+ * package — the dotted id or its short name as a word — so `import std;` and
+ * the example's own other dependencies stay out. Deduplicated, capped at
+ * four: this is a hint beside the command, not a second code section.
+ */
+export function usageLinesFor(files: readonly CodeFile[], id: string): string[] {
+  const short = id.slice(id.lastIndexOf(".") + 1);
+  const dotted = new RegExp(`\\b${escapeRegExp(id)}\\b`);
+  const bare = new RegExp(`\\b${escapeRegExp(short)}\\b`);
+  const out: string[] = [];
+  for (const line of usageLines(files)) {
+    if ((dotted.test(line.text) || bare.test(line.text)) && !out.includes(line.text)) {
+      out.push(line.text);
+      if (out.length >= 4) {
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * The usage lines to show when no example project states the real ones (§22).
+ *
+ * A module package is imported by its short name — measured in a real project:
+ * `openkal = "0.12.0"` in the manifest, `import openkal.types;` in the
+ * sources — so `import <name>;` is the honest root form. A header package's
+ * real path lives inside the upstream archive and is unknowable offline, so
+ * the index site's own muted placeholder answers (`#include <foo.h>`) rather
+ * than an invented path. `tool` and `external` packages are not imported at
+ * all; their surface badge already says what they are.
+ */
+export function syntheticUsageLines(surfaces: readonly Surface[], name: string): string[] {
+  if (surfaces.includes("module")) {
+    return [`import ${name};`];
+  }
+  if (surfaces.includes("header")) {
+    return [SURFACE_TEXT.header.usage];
+  }
+  return [];
 }
 
 /** A window of an example file around one interface line. */
