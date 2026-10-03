@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 
 import { McppCliController, discoveryBoundaryFromSettings } from "./cli/controller";
-import { runProcess } from "./cli/process";
+import { runMcpp } from "./cli/process";
 import { parseProtocolInfo } from "./cli/protocol";
 import { buildSelfCheckText } from "./cli/selfCheck";
 import { CLI_COMMANDS, LEGACY_LANGUAGE_SERVER_COMMANDS, LIBRARY_COMMANDS, TOOL_COMMANDS } from "./commands/ids";
@@ -330,6 +330,9 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
     mcppExecutable: () => cliController.mcppExecutable(findCurrentProject()),
     openDetail: openLibraryDetail,
     output,
+    // The cross-registry search runs `mcpp search`, and `mcpp.path` is
+    // resource-scoped: an untrusted workspace must not name the program.
+    isTrusted: () => vscode.workspace.isTrusted,
   });
   // `registerLibraryView` registers its own webview provider; these are only the
   // entry points a menu or the project view can name.
@@ -355,15 +358,19 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
       // change at all before, which reads exactly like a broken button.
       const result = await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: t("Refreshing the mcpp Package Index…") },
-        () =>
-          runProcess(cliController.mcppExecutable(project), ["index", "update"], project?.root, {
-            timeoutMs: 300_000,
-          }),
-      );
-      await library.refresh();
-      if (result.exitCode !== 0) {
-        void vscode.window.showErrorMessage(t("mcpp index update failed with exit code {0}", result.exitCode));
-        return;
+          () =>
+            runMcpp(vscode.workspace.isTrusted, cliController.mcppExecutable(project), ["index", "update"], project?.root, {
+              timeoutMs: 300_000,
+            }),
+        );
+        await library.refresh();
+        if (result === undefined || result.exitCode !== 0) {
+          void vscode.window.showErrorMessage(
+            result === undefined
+              ? t("This workspace is not trusted. mcpp commands may run external programs named by workspace settings; trust the workspace first.")
+              : t("mcpp index update failed with exit code {0}", result.exitCode),
+          );
+          return;
       }
       // `library.refresh()` has just filled the snapshot cache, so this second
       // look is the count the view is showing, not another read of the index.
@@ -512,10 +519,13 @@ async function showSelfCheck(
   const project = findCurrentProject();
   const executable = cliController.mcppExecutable(project);
   const timeoutSeconds = read<number>("mcpp.runtime.timeoutSeconds");
-  const probeResult = await runProcess(executable, ["--protocol-version"], project?.root, {
+  // The untrusted-workspace promise in the manifest is "no mcpp command runs",
+  // and `mcpp.path` is resource-scoped, so the probe refuses rather than
+  // executing a workspace-named program; the report says so in plain words.
+  const probeResult = await runMcpp(vscode.workspace.isTrusted, executable, ["--protocol-version"], project?.root, {
     timeoutMs: timeoutSeconds > 0 ? timeoutSeconds * 1000 : undefined,
   });
-  const info = probeResult.exitCode === 0 ? parseProtocolInfo(probeResult.stdout) : undefined;
+  const info = probeResult !== undefined && probeResult.exitCode === 0 ? parseProtocolInfo(probeResult.stdout) : undefined;
   const state = readLanguageServerState();
   const capabilities = CAPABILITIES.map((entry) => ({
     key: entry.key,
@@ -548,6 +558,9 @@ async function showSelfCheck(
   output.appendLine("");
   output.appendLine("===== mcpp: environment self-check =====");
   output.appendLine(text);
+  if (probeResult === undefined) {
+    output.appendLine(t("The workspace is not trusted; mcpp itself was not probed."));
+  }
   output.appendLine("========================================");
   output.show(true);
 }

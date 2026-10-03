@@ -32,7 +32,11 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "description": "%untrustedWorkspaces.description%"
+      "description": "%untrustedWorkspaces.description%",
+      "restrictedConfigurations": [
+        "mcpp.path",
+        "mcpp.clangd.path"
+      ]
     }
   },
   "main": "./dist/src/extension.js",

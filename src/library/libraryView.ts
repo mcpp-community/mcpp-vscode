@@ -23,7 +23,7 @@
 
 import * as vscode from "vscode";
 
-import { runProcess } from "../cli/process";
+import { runMcpp } from "../cli/process";
 import { read, write } from "../config/access";
 import { languagePreference, t } from "../i18n/t";
 import { localeFromEditorLanguage } from "../i18n/translate";
@@ -60,6 +60,8 @@ export interface LibraryViewDeps {
   openDetail: (id: string) => Promise<void> | void;
   /** Where `mcpp search` is logged; the same channel the other commands use. */
   output?: vscode.OutputChannel;
+  /** `vscode.workspace.isTrusted`; `mcpp search` never runs without it. */
+  isTrusted: () => boolean;
 }
 
 /**
@@ -270,14 +272,23 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
       this.paint();
       return;
     }
+    // `mcpp search` runs the configured executable and `mcpp.path` is
+    // resource-scoped: an untrusted workspace must not name the program, so the
+    // tier refuses and says so instead of silently showing nothing extra.
     const result = await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Window, title: t("Searching all registries…") },
       () =>
-        runProcess(this.deps.mcppExecutable(), ["search", query], this.deps.projectRoot(), {
+        runMcpp(this.deps.isTrusted(), this.deps.mcppExecutable(), ["search", query], this.deps.projectRoot(), {
           timeoutMs: SEARCH_TIMEOUT_MS,
           maxBufferMiB: read<number>("mcpp.runtime.maxOutputMiB"),
         }),
     );
+    if (result === undefined) {
+      this.extra = [];
+      this.searchNote = t("The workspace is not trusted; the other registries were not searched.");
+      this.paint();
+      return;
+    }
     if (result.exitCode !== 0) {
       this.extra = [];
       this.searchNote = t(

@@ -465,5 +465,8 @@
   "Copy": "复制",
   "Copied to the clipboard.": "已复制到剪贴板。",
   "Copying…": "复制中…",
-  "Could not write the clipboard.": "无法写入剪贴板。"
+  "Could not write the clipboard.": "无法写入剪贴板。",
+  "The workspace is not trusted; mcpp itself was not probed.": "工作区未受信任；未探测 mcpp 本身。",
+  "This workspace is not trusted, so mcpp is not run; the versions below come from the descriptor's text.": "工作区未受信任，因此不运行 mcpp；下面的版本来自描述符文本。",
+  "The workspace is not trusted; the other registries were not searched.": "工作区未受信任；未搜索其他 registry。"
 }

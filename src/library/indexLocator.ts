@@ -33,7 +33,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
 
-import { runProcess } from "../cli/process";
+import { runMcpp } from "../cli/process";
 import { read } from "../config/access";
 import {
   descriptorEntry,
@@ -258,17 +258,17 @@ async function mcppHomeFromCli(): Promise<string | undefined> {
     return probedHome;
   }
   probeAttempted = true;
-  if (!vscode.workspace.isTrusted) {
-    return undefined;
-  }
   const executable = read<string>("mcpp.path").trim();
-  const result = await runProcess(
+  // `mcpp.path` is resource-scoped, so the probe goes through the trust-gated
+  // seam; a refusal is the same "no answer" as a failing mcpp.
+  const result = await runMcpp(
+    vscode.workspace.isTrusted,
     executable.length === 0 ? "mcpp" : executable,
     ["self", "env", "--format", "json"],
     undefined,
     { timeoutMs: SELF_ENV_TIMEOUT_MS, maxBufferMiB: 1 },
   );
-  if (result.exitCode !== 0) {
+  if (result === undefined || result.exitCode !== 0) {
     return undefined;
   }
   const env = parseSelfEnv(result.stdout);

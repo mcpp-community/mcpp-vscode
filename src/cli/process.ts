@@ -65,3 +65,32 @@ export async function runProcess(
     };
   }
 }
+
+/**
+ * The one way the extension body runs mcpp: `runProcess` plus the
+ * workspace-trust gate (external review P0, 2026-10-03).
+ *
+ * `mcpp.path` is a `resource`-scoped setting, so an untrusted workspace can
+ * name any program there; every caller outside `src/cli/` therefore goes
+ * through this seam and receives `undefined` — a refusal, not an error — when
+ * the workspace is not trusted. The callers degrade (the detail page falls
+ * back to the descriptor's own text, the cross-registry search keeps its
+ * local results, the self-check reports the probe as unknown) instead of
+ * running the command.
+ *
+ * `src/cli/controller.ts` wraps its own `requireTrusted()` prompts around
+ * whole commands, which is why `src/cli/` may still call `runProcess`
+ * directly; the architecture test holds everyone else to this seam.
+ */
+export async function runMcpp(
+  trusted: boolean,
+  executable: string,
+  args: readonly string[],
+  cwd?: string,
+  options: ProcessRunOptions = {},
+): Promise<ProcessResult | undefined> {
+  if (!trusted) {
+    return undefined;
+  }
+  return runProcess(executable, [...args], cwd, options);
+}

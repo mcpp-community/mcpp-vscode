@@ -15,7 +15,7 @@
 
 import * as vscode from "vscode";
 
-import { runProcess } from "../cli/process";
+import { runMcpp } from "../cli/process";
 import {
   indexCompletionRequest,
   parseSearchOutput,
@@ -89,7 +89,7 @@ async function resolveIndexVersions(
   // The process gets the setting's timeout and the promise a short grace period,
   // so a process that refuses to die still cannot hold the editor past it.
   const result = await withDeadline(
-    runProcess(executable, request.args, cwd, { timeoutMs: request.timeoutMs }),
+    runMcpp(vscode.workspace.isTrusted, executable, request.args, cwd, { timeoutMs: request.timeoutMs }),
     request.timeoutMs + 250,
   );
   const versions =

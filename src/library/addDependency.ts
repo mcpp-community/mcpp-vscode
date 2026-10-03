@@ -21,7 +21,7 @@
 
 import * as vscode from "vscode";
 
-import { runProcess } from "../cli/process";
+import { runMcpp } from "../cli/process";
 import { read } from "../config/access";
 import { t } from "../i18n/t";
 import { clampOutput } from "../util/text";
@@ -102,11 +102,17 @@ export async function addDependency(
   const result = await vscode.window.withProgress(
     { location: vscode.ProgressLocation.Notification, title: t("Adding {0}…", request.id) },
     () =>
-      runProcess(executable, argv, root, {
+      runMcpp(deps.isTrusted(), executable, argv, root, {
         timeoutMs: ADD_TIMEOUT_MS,
         maxBufferMiB: read<number>("mcpp.runtime.maxOutputMiB"),
       }),
   );
+  if (result === undefined) {
+    // The seam refused: the guard above usually answers first with a friendlier
+    // message, so this is the defensive spelling of the same refusal.
+    const message = t("This workspace is not trusted. mcpp commands that write are disabled until you trust it.");
+    return failure(message);
+  }
 
   try {
     deps.output?.appendLine(`\n[${new Date().toISOString()}] mcpp ${argv.join(" ")}`);

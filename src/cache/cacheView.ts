@@ -28,7 +28,7 @@ import * as vscode from "vscode";
 import { estimateArtifacts, measureDirectory, type ArtifactEstimate } from "../cli/artifacts";
 import { parseCacheDir, parseCacheList, summarizeCache, type CacheInventory, type CacheEntry } from "../cli/cache";
 import { planClean, withSharedCache, type CleanPlan } from "../cli/clean";
-import { runProcess, type ProcessResult } from "../cli/process";
+import { runMcpp, type ProcessResult } from "../cli/process";
 import { CACHE_COMMANDS } from "../commands/ids";
 import { read } from "../config/access";
 import { format as formatMessage, t } from "../i18n/t";
@@ -168,11 +168,16 @@ async function run(
   const executable = deps.mcppExecutable(project);
   const cwd = workingDirectory(project);
   const result = options.quiet === true
-    ? await runProcess(executable, [...argv], cwd, { timeoutMs: options.timeoutMs, maxBufferMiB: read<number>("mcpp.runtime.maxOutputMiB") })
+    ? await runMcpp(deps.isTrusted(), executable, [...argv], cwd, { timeoutMs: options.timeoutMs, maxBufferMiB: read<number>("mcpp.runtime.maxOutputMiB") })
     : await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: `mcpp ${argv[0]}` },
-        () => runProcess(executable, [...argv], cwd, { timeoutMs: options.timeoutMs }),
+        () => runMcpp(deps.isTrusted(), executable, [...argv], cwd, { timeoutMs: options.timeoutMs }),
       );
+  if (result === undefined) {
+    // The seam refuses in an untrusted workspace; the callers gate with their
+    // own message, so this is the defensive shape of the same refusal.
+    return { exitCode: 1, stdout: "", stderr: t("the workspace is not trusted") };
+  }
   if (result.exitCode !== 0 || options.quiet !== true) {
     await appendResult(deps, `mcpp ${argv.join(" ")}`, executable, argv, cwd, result);
   }
@@ -739,11 +744,11 @@ export async function readCacheSnapshot(): Promise<CacheSnapshot | undefined> {
  */
 export async function readCacheSnapshotNow(): Promise<CacheSnapshot | undefined> {
   try {
-    const result = await runProcess(snapshotExecutable(), ["cache", "list", "--format", "json"], undefined, {
+    const result = await runMcpp(vscode.workspace.isTrusted, snapshotExecutable(), ["cache", "list", "--format", "json"], undefined, {
       timeoutMs: queryTimeoutMs(),
       maxBufferMiB: read<number>("mcpp.runtime.maxOutputMiB"),
     });
-    if (result.exitCode !== 0) {
+    if (result === undefined || result.exitCode !== 0) {
       return undefined;
     }
     const parsed = parseCacheList(result.stdout);

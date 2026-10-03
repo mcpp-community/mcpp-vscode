@@ -22,7 +22,7 @@ import { readFileSync } from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 
-import { runProcess } from "../cli/process";
+import { runMcpp } from "../cli/process";
 import { read } from "../config/access";
 import { languagePreference, t } from "../i18n/t";
 import { localeFromEditorLanguage } from "../i18n/translate";
@@ -346,9 +346,11 @@ async function buildModel(session: DetailSession, id: string): Promise<DetailMod
     commandDevTemplate: t("mcpp add {0}@{1} --dev"),
     ...(info === undefined
       ? {
-          parseNotice: t(
-            "mcpp xpkg parse could not read this descriptor; the versions below come from its text, which is less authoritative.",
-          ),
+          parseNotice: session.deps.isTrusted()
+            ? t(
+                "mcpp xpkg parse could not read this descriptor; the versions below come from its text, which is less authoritative.",
+              )
+            : t("This workspace is not trusted, so mcpp is not run; the versions below come from the descriptor's text."),
         }
       : {}),
     dataSource: dataSource(entry, snapshot.roots.length),
@@ -358,14 +360,19 @@ async function buildModel(session: DetailSession, id: string): Promise<DetailMod
 
 /** Run the authoritative reader for one descriptor; never throws. */
 async function readXpkg(session: DetailSession, entry: LibraryEntry): Promise<XpkgInfo | undefined> {
+  // `mcpp.path` is resource-scoped, so an untrusted workspace must not name
+  // the program: the refusal degrades to the descriptor's own text.
   const result = await vscode.window.withProgress(
     { location: vscode.ProgressLocation.Window, title: t("Reading {0}…", entry.id) },
     () =>
-      runProcess(session.deps.mcppExecutable(), ["xpkg", "parse", entry.file, "--json"], session.deps.projectRoot(), {
+      runMcpp(session.deps.isTrusted(), session.deps.mcppExecutable(), ["xpkg", "parse", entry.file, "--json"], session.deps.projectRoot(), {
         timeoutMs: PARSE_TIMEOUT_MS,
         maxBufferMiB: read<number>("mcpp.runtime.maxOutputMiB"),
       }),
   );
+  if (result === undefined) {
+    return undefined;
+  }
   if (result.exitCode !== 0) {
     session.deps.output.appendLine(`mcpp xpkg parse ${entry.file} failed with exit code ${result.exitCode}`);
     if (result.stderr.trim().length > 0) {

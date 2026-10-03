@@ -18,7 +18,7 @@ interface PackageManifest {
   engines?: { vscode?: string };
   extensionDependencies?: string[];
   activationEvents?: string[];
-  capabilities?: { untrustedWorkspaces?: { supported?: string; description?: string } };
+  capabilities?: { untrustedWorkspaces?: { supported?: string; description?: string; restrictedConfigurations?: string[] } };
   contributes?: {
     commands?: Array<{ command: string; title?: string; category?: string; icon?: string }>;
     menus?: { "editor/title"?: Array<{ command: string; group?: string; when?: string }> };
@@ -72,6 +72,13 @@ test("declares mcpp-language-server as the C++ modules language service", () => 
   ]);
   assert.equal(manifest.capabilities?.untrustedWorkspaces?.supported, "limited");
   assert.equal(manifest.capabilities?.untrustedWorkspaces?.description, "%untrustedWorkspaces.description%");
+  // The `limited` promise says "no mcpp command runs" in an untrusted
+  // workspace; a resource-scoped `mcpp.path` can only be kept out of the
+  // workspace's reach by naming it here (external review P0, 2026-10-03).
+  assert.deepEqual(manifest.capabilities?.untrustedWorkspaces?.restrictedConfigurations, [
+    "mcpp.path",
+    "mcpp.clangd.path",
+  ]);
   // Same set, not necessarily the same order: the manifest's order is the
   // palette's presentation order, which `ids.ts` has no business dictating.
   assert.deepEqual(

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
@@ -106,4 +106,36 @@ test("every listed module exists", () => {
   for (const relative of PURE_MODULES) {
     readFileSync(path.join(root, relative), "utf8");
   }
+});
+
+test("runProcess stays inside src/cli — everything else runs mcpp through the trust-gated seam", () => {
+  // The external review's P0 (2026-10-03): `mcpp.path` is a resource-scoped
+  // setting, so any call site that skips the workspace-trust gate lets an
+  // untrusted workspace name the program that runs. The seam is `runMcpp`;
+  // `src/cli/` keeps `runProcess` because its controller wraps whole commands
+  // in `requireTrusted()` prompts of its own.
+  const offenders: string[] = [];
+  const walk = (directory: string): void => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const full = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (!entry.name.endsWith(".ts")) {
+        continue;
+      }
+      const relative = path.relative(root, full);
+      if (relative.split(path.sep)[1] === "cli") {
+        continue;
+      }
+      const text = readFileSync(full, "utf8");
+      const code = text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+      if (/\brunProcess\b/.test(code)) {
+        offenders.push(relative);
+      }
+    }
+  };
+  walk(path.join(root, "src"));
+  assert.deepEqual(offenders, [], "these files call runProcess directly; use runMcpp(trusted, …) instead");
 });
