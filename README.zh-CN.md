@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="images/logo.png" width="160" alt="mcpp 标志">
+  <img src="media/logo.png" width="160" alt="mcpp 标志">
 </p>
 
 # mcpp for VS Code

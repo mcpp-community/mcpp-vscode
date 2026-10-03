@@ -491,7 +491,7 @@ test("新建工程契约是创建并打开，不自动构建", () => {
 
 test("声明 GitHub 仓库和扩展图标", () => {
   const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
-  assert.equal(manifest.icon, "images/logo.png");
+  assert.equal(manifest.icon, "media/logo.png");
   assert.equal(manifest.repository?.url, "https://github.com/mcpp-community/mcpp-vscode.git");
   assert.equal(manifest.homepage, "https://github.com/mcpp-community/mcpp-vscode#readme");
   assert.equal(manifest.bugs?.url, "https://github.com/mcpp-community/mcpp-vscode/issues");
@@ -509,9 +509,9 @@ test("the activity bar gets the stencil, not the marketplace badge", () => {
   // on it: as a stencil that is a solid block, which is what shipped. The
   // marketplace icon keeps the real logo; the activity bar gets its derived
   // stencil, and `npm run check:icon` proves the derivation is current.
-  assert.equal(manifest.icon, "images/logo.png");
-  assert.equal(container?.icon, "images/activity-bar.png");
-  const stencil = readFileSync(path.join(root, "images", "activity-bar.png"));
+  assert.equal(manifest.icon, "media/logo.png");
+  assert.equal(container?.icon, "media/activity-bar.png");
+  const stencil = readFileSync(path.join(root, "media", "activity-bar.png"));
   assert.deepEqual([...stencil.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
   // Read from IHDR: 8-bit RGBA, and wider than tall, because the wordmark is.
   assert.equal(stencil.readUInt32BE(16), 96);

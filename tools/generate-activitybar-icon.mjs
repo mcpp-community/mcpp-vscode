@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * `images/logo.png` -> `images/activity-bar.png`, the mark the activity bar
+ * `media/logo.png` -> `media/activity-bar.png`, the mark the activity bar
  * draws in the theme's own colour.
  *
  * **Why this file exists.** VS Code does not paint a container icon as an
@@ -36,8 +36,8 @@ import zlib from "node:zlib";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const SOURCE = path.join(root, "images", "logo.png");
-const TARGET = path.join(root, "images", "activity-bar.png");
+const SOURCE = path.join(root, "media", "logo.png");
+const TARGET = path.join(root, "media", "activity-bar.png");
 
 /**
  * The wordmark's two flat colours (#f08c00 and #1971c2), reduced to the divisor
