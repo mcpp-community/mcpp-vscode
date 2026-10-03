@@ -1362,3 +1362,9 @@ buildscript 6 / projects 3 / util 3 / i18n 2 / commands 2 / workflows 1）+ 根 
    同一只 VSIX 顺手的事；不想自动发 Marketplace 就维持手动。）
 2. **`images/` 并入 `media/`**：做/不做？（推荐做，引用仅 4 处。）
 3. **缓存 webview 骨架统一**（连带关掉 P2-2）：纳入本轮，还是与 P1"已添加"数据链一起排 0.6.x？
+
+### 21.6 作者的答复（2026-10-03）
+
+三项全部批准：双市场发布（key 作者自己配）、images 合并、骨架统一纳入本轮。实施设计见
+`2026-10-03-repo-engineering-plan.md`（四个任务、七个 commit 的切分与验收，另带两个新的范围
+决策点：config/detail 顺路迁移、cache 目录移动）。
