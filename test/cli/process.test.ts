@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import process from "node:process";
 import test from "node:test";
 
-import { runMcpp, runProcess, spawnNeedsShell } from "../../src/cli/process";
+import { quoteWindowsArgument, runMcpp, runProcess, spawnNeedsShell } from "../../src/cli/process";
 
 test("captures output and exit status from a real child process", async () => {
   const result = await runProcess(process.execPath, ["-e", "process.stdout.write('ok')"]);
@@ -32,4 +32,18 @@ test("only Windows .cmd/.bat shims need the shell, and nothing else does", () =>
   assert.equal(spawnNeedsShell("C:\\tools\\mcpp.js", "win32"), false);
   assert.equal(spawnNeedsShell("/usr/local/bin/mcpp", "linux"), false);
   assert.equal(spawnNeedsShell("/opt/mcpp/mcpp.cmd", "darwin"), false);
+});
+
+test("shell-path arguments are quoted so spaces and cmd metacharacters survive", () => {
+  // The path `xpkg parse` receives: a space must not split it in two.
+  assert.equal(quoteWindowsArgument("C:\\Users\\John Doe\\.mcpp\\pkgs\\n\\nlohmann.json.lua"), '"C:\\Users\\John Doe\\.mcpp\\pkgs\\n\\nlohmann.json.lua"');
+  // cmd metacharacters are literal inside the double quotes, so a search term
+  // cannot become a second command.
+  assert.equal(quoteWindowsArgument("foo & calc"), '"foo & calc"');
+  assert.equal(quoteWindowsArgument("a|b>c^d"), '"a|b>c^d"');
+  // Quotes inside the argument follow the CommandLineToArgvW rule, and a
+  // trailing backslash is doubled so it cannot escape the closing quote.
+  assert.equal(quoteWindowsArgument('he said "hi"'), '"he said \\"hi\\""');
+  assert.equal(quoteWindowsArgument("C:\\dir\\"), '"C:\\dir\\\\"');
+  assert.equal(quoteWindowsArgument(""), '""');
 });

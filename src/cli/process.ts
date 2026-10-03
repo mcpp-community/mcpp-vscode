@@ -33,6 +33,25 @@ export function spawnNeedsShell(executable: string, platform: NodeJS.Platform = 
   return platform === "win32" && /\.(cmd|bat)$/i.test(executable);
 }
 
+/**
+ * One argument, quoted for the shell path (external review P1-2, 2026-10-03).
+ *
+ * Node joins `file` and `args` with plain spaces when `shell: true`, without
+ * quoting anything, so a path with a space (`C:\Users\John Doe\…`, exactly what
+ * `xpkg parse` receives) splits in two and a search term like `foo & calc`
+ * becomes two commands. The rule is the one `CommandLineToArgvW` applies when
+ * the target re-parses the line: double backslashes that precede a quote or end
+ * the argument, escape the quotes themselves, and wrap in double quotes —
+ * inside which cmd treats `& | < > ^` as literal. `%VAR%` expansion inside
+ * quotes is a cmd limitation every shell-spawner shares and stays documented
+ * here rather than half-fixed.
+ */
+export function quoteWindowsArgument(argument: string): string {
+  let quoted = argument.replace(/(\\*)"/g, '$1$1\\"');
+  quoted = quoted.replace(/(\\*)$/, '$1$1');
+  return `"${quoted}"`;
+}
+
 export async function runProcess(
   executable: string,
   args: string[],
@@ -40,13 +59,18 @@ export async function runProcess(
   options: ProcessRunOptions = {},
 ): Promise<ProcessResult> {
   try {
-    const result = await execFileAsync(executable, args, {
-      cwd,
-      encoding: "utf8",
-      maxBuffer: Math.max(1, options.maxBufferMiB ?? 16) * 1024 * 1024,
-      timeout: options.timeoutMs,
-      ...(spawnNeedsShell(executable) ? { shell: true } : {}),
-    });
+    const needsShell = spawnNeedsShell(executable);
+    const result = await execFileAsync(
+      needsShell ? quoteWindowsArgument(executable) : executable,
+      needsShell ? args.map(quoteWindowsArgument) : args,
+      {
+        cwd,
+        encoding: "utf8",
+        maxBuffer: Math.max(1, options.maxBufferMiB ?? 16) * 1024 * 1024,
+        timeout: options.timeoutMs,
+        ...(needsShell ? { shell: true } : {}),
+      },
+    );
     return {
       exitCode: 0,
       stdout: result.stdout,
