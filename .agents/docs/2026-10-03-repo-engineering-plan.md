@@ -144,8 +144,9 @@
 
 ### C3 其余两件（§21.1/§21.2 的收尾）
 
-- `docs/superpowers/`（7 份历史 plan/spec）→ `.agents/docs/superpowers/`：git mv + 修
-  `.agents/docs/2026-10-02-plugin-optimisation-plan.md` 与 `.agents/docs/README.md` 两处引用。
+- `docs/superpowers/`（7 份历史 plan/spec）→ `.agents/superpowers/`：目的地沿用 v4 方案 M0 与
+  `.agents/docs/README.md` 已写明的约定（原 §C3 写的 `.agents/docs/superpowers/` 以此为准修正），
+  纯 `git mv`，既有引用写的都是目标路径，移动后即成立。
 - `docs/architecture.md` Language 小节补 §21.1 那张两层表（`src/i18n`+`data/i18n` 与 `l10n/`
   各管什么、为何不合并）。
 

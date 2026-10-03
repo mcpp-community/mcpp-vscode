@@ -92,6 +92,13 @@ strings in `src/cli/controller.ts` and `src/extension.ts` (task completion messa
 states, toolchain prompts) are still hardcoded Chinese and never go through `t()` at all. They
 do not follow `mcpp.ui.language`, and on an English VS Code they are shown as-is.
 
+A note on the two directory names, because they look like synonyms and are not:
+
+| Layer | Lives in | What it is |
+| --- | --- | --- |
+| Our runtime strings | `src/i18n/` (`t`, `translate`) + `data/i18n/zh-cn.json` | The `t()` lookup table, switchable at runtime by `mcpp.ui.language` — i18n in the sense that the engineering keeps every string adaptable |
+| VS Code's manifest strings | `l10n/bundle.l10n.*.json` (generated from `package.nls*`) | What VS Code itself localizes — l10n proper, resolved once at startup; the `l10n/` directory name is a platform convention and cannot be renamed |
+
 ## The gates
 
 | Gate | Command | Checks |

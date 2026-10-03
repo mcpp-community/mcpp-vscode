@@ -7,33 +7,32 @@
 English | [简体中文](README.zh-CN.md)
 
 The VS Code front end for the [mcpp](https://github.com/mcpp-community/mcpp) C++23 build tool:
-project discovery, `mcpp build` / `run` / `test` / `clean` as VS Code tasks, toolchain
-management, `mcpp.toml` and `build.mcpp` editing help, and cache views with graded cleanup. C++
-module semantics — diagnostics, completion, hover, definitions, references, the module graph —
-come from `sunrisepeak.mcpp-language-server`; this extension never starts an LSP client itself.
+project discovery, `mcpp build` / `run` / `test` / `clean` as VS Code tasks, toolchain management,
+`mcpp.toml` and `build.mcpp` editing help, the package library view, and cache views with graded
+cleanup. C++ module semantics — diagnostics, completion, hover, definitions, references, the module
+graph — come from `sunrisepeak.mcpp-language-server`; this extension never starts an LSP client of
+its own and only **forwards** to it ([docs/architecture.md](docs/architecture.md)).
 
-## Responsibility split
+## Related projects
 
-| Area | Owner |
-| --- | --- |
-| mcpp CLI, project discovery, build/run/test/clean tasks, toolchains | mcpp-vscode |
-| `mcpp.toml` and `build.mcpp` editing, cache views and cleanup commands | mcpp-vscode |
-| Settings registry, settings panel, environment self-check, `mcpp` output channel | mcpp-vscode |
-| C++ module diagnostics, completion, hover, definitions, references, module graph, cache reset, its own clangd/status item/output channel | `sunrisepeak.mcpp-language-server` |
-
-The C++ Modules view here only **displays** the other extension's state and **forwards** its
-commands. Details: [docs/architecture.md](docs/architecture.md).
+| Project | What it is | Where |
+| --- | --- | --- |
+| [mcpp](https://github.com/mcpp-community/mcpp) | The C++23 build tool this extension drives | — |
+| [mcpp-language-server](https://github.com/Sunrisepeak/mcpp-language-server) | The C++ Modules language service; a hard dependency of this extension | [Marketplace](https://marketplace.visualstudio.com/items?itemName=sunrisepeak.mcpp-language-server) · [Open VSX](https://open-vsx.org/extension/sunrisepeak/mcpp-language-server) |
+| mcpp-vscode (this extension) | The VS Code front end | [Marketplace](https://marketplace.visualstudio.com/items?itemName=mcpp-community.mcpp-vscode) · [Open VSX](https://open-vsx.org/extension/mcpp-community/mcpp-vscode) · [Releases](https://github.com/mcpp-community/mcpp-vscode/releases) |
 
 ## Install
 
-Download the VSIX from
-[GitHub Releases](https://github.com/mcpp-community/mcpp-vscode/releases) and use
-**Extensions: Install from VSIX...**, or
-`code --install-extension mcpp-vscode-0.5.0.vsix`.
+Any of the three channels installs the same extension:
 
-`package.json` declares `extensionDependencies: ["sunrisepeak.mcpp-language-server"]`, so VS
-Code installs that extension automatically where a package exists. Only an extension id fits
-there — no version range can be pinned ([docs/compatibility.md](docs/compatibility.md)).
+- **Marketplace**: the link above, or search "mcpp" inside VS Code.
+- **Open VSX**: the link above (VSCodium, Gitpod and friends; listed from 0.6.0 on).
+- **GitHub Releases**: download the VSIX, then **Extensions: Install from VSIX...**, or
+  `code --install-extension mcpp-vscode-<version>.vsix`.
+
+`package.json` declares `extensionDependencies: ["sunrisepeak.mcpp-language-server"]`, so VS Code
+installs that extension automatically where a platform package exists — the field only accepts an
+extension id, no version range ([docs/compatibility.md](docs/compatibility.md)).
 
 | Platform | mcppls package | This extension |
 | --- | --- | --- |
@@ -44,77 +43,38 @@ there — no version range can be pinned ([docs/compatibility.md](docs/compatibi
 
 1. Open a folder containing an `mcpp.toml` (or run **mcpp: New Project**).
 2. Run **mcpp: Build** (`mcpp.build`); it runs in a dedicated task terminal.
-3. Open the **mcpp** activity-bar container and watch **Project**, **Cache** and **C++ Modules**.
+3. Open the **mcpp** activity-bar container: **Project**, **Libraries** and **Cache** (collapsed by
+   default); the C++ Modules status and actions live in **Project → Basics**.
 
 Opening a project never runs `mcpp` on its own and never downloads a toolchain.
 
 ## Features
 
-- **mcpp CLI and tasks** — build, run, test, clean, quick menu, toolchains: [docs/commands.md](docs/commands.md).
-- **`mcpp.toml` editing** — structural completion plus seven structural diagnostics: [docs/mcpp-toml.md](docs/mcpp-toml.md).
-- **`build.mcpp` intelligence** — completion, hovers, seven SPEC-007 diagnostics, never a spurious "module not found": [docs/build-script.md](docs/build-script.md).
-- **Cache views and cleanup** — project artifacts and the shared cache (collapsed by default in the sidebar), previewed first: [docs/cache.md](docs/cache.md).
-- **mcpp library ecosystem** — browse the index already on this machine offline, with a package page that shows the real example code, the version matrix, and whether your workspace already depends on it.
-- **C++ Modules** — the other extension's state and actions, in the project view and the status bar menu, forwarded not reimplemented: [docs/commands.md](docs/commands.md).
-- **Settings and diagnostics** — a registry-backed settings panel and a copyable self-check: [docs/settings.md](docs/settings.md).
-
-## Commands
-
-Every contributed command id, with its title key and behaviour, is in
-[docs/commands.md](docs/commands.md). The common ones:
-
-| Command id | What it does |
-| --- | --- |
-| `mcpp.showMenu` | Project, toolchain, cache and C++ Modules actions in one picker |
-| `mcpp.build` / `run` / `test` / `clean` | Runs the matching mcpp task |
-| `mcpp.installToolchain`, `mcpp.selectDefaultToolchain` | Delegates to the mcpp CLI |
-| `mcpp.openSettings` | The extension's own settings panel |
-| `mcpp.showCachePanel`, `mcpp.cleanStaleArtifacts`, `mcpp.cleanProjectArtifacts` | Cache summary and the two project cleanup levels |
-| `mcpp.languageServer.restart`, `mcpp.selfCheck` | Forward to the other extension; bug-report snapshot |
-
-## Settings
-
-All 64 settings, with type, default, scope and when they apply, are in
-[docs/settings.md](docs/settings.md). The panel (**mcpp: Open Settings Panel**, `mcpp.openSettings`)
-groups them, shows the effective value and its source, and links to the native editor; it does
-not replace it. Several declared settings are not read at runtime yet; each page below names the
-ones that matter to it.
-`mcpp.ui.language` overrides **our** messages and panels only; Command Palette titles and setting names always follow VS Code, which resolves `package.nls.*` once at startup ([docs/architecture.md](docs/architecture.md#language)).
-
-## Editing `mcpp.toml` / `build.mcpp`
-
-`mcpp.toml`: completion on `[` and seven diagnostics (syntax, unknown section, unknown key,
-plane separation, `mcpp` floor, legacy keys, array tables), no formatting. Hover and
-go-to-definition are wired and follow their settings —
-[docs/mcpp-toml.md](docs/mcpp-toml.md).
-
-`build.mcpp`: completion for `mcpp::…` and `import`, hovers for known modules, seven SPEC-007
-diagnostics. Imports of `std`, `std.compat` and `mcpp.*` are never reported missing; there is
-no symbol-level completion inside them — [docs/build-script.md](docs/build-script.md).
+- **mcpp CLI and tasks** — build, run, test, clean, the quick menu, toolchains: [docs/commands.md](docs/commands.md).
+- **`mcpp.toml` editing** — structural completion, hovers, go-to-definition, seven structural diagnostics, no formatting: [docs/mcpp-toml.md](docs/mcpp-toml.md).
+- **`build.mcpp` intelligence** — completion and hovers for `mcpp::…` and `import`, seven SPEC-007 diagnostics, never a spurious "module not found": [docs/build-script.md](docs/build-script.md).
+- **Libraries** — browse the package index already on this machine, offline; the detail page shows the real example code, the version matrix, and whether the workspace already depends on it.
+- **Cache views and cleanup** — project artifacts and the shared build cache, previewed before anything is deleted: [docs/cache.md](docs/cache.md).
+- **C++ Modules** — the other extension's state and actions, in the project view and the status-bar menu, forwarded not reimplemented: [docs/commands.md](docs/commands.md).
+- **Settings and diagnostics** — a registry-backed settings panel (`mcpp.openSettings`) and a copyable environment self-check (`mcpp.selfCheck`): [docs/settings.md](docs/settings.md). `mcpp.ui.language` overrides our messages and panels only; palette titles always follow VS Code ([docs/architecture.md](docs/architecture.md#language)).
 
 ## Troubleshooting
 
-- [The C++ Modules view says the dependency is missing](docs/troubleshooting.md#the-c-modules-view-says-the-dependency-is-missing)
-- [The language service stays on "no status yet"](docs/troubleshooting.md#the-language-service-stays-on-no-status-yet)
-- [A command reports it is not offered](docs/troubleshooting.md#a-command-reports-it-is-not-offered)
-- [mcpp cannot be found (`mcpp.path` vs `PATH`)](docs/troubleshooting.md#mcpp-cannot-be-found)
-- [A build finished but the language service did not refresh](docs/troubleshooting.md#a-build-finished-but-the-language-service-did-not-refresh)
-
-Look first at the **mcpp** output channel, then **mcpp: Environment Self-check**
-(`mcpp.selfCheck`). More: [docs/troubleshooting.md](docs/troubleshooting.md).
+Look first at the **mcpp** output channel, then run **mcpp: Environment Self-check**
+(`mcpp.selfCheck`). The common cases — the dependency is missing, the language service stays on
+"no status yet", `mcpp.path` versus `PATH`, a build that finished without refreshing the language
+service — are in [docs/troubleshooting.md](docs/troubleshooting.md).
 
 ## Development
 
-`npm ci`, `npm run compile`, `npm test`, `npm run test:e2e`, `npm run package`, and
-`node tools/dev-profile.mjs` for a throwaway profile under `.dev-profile/` that never touches
-your real one. `npm test` runs `npm run check` first — `tools/check-config.mjs`,
-`tools/l10n-check.mjs` and `tools/check-generators.mjs` — then `node --test` over `dist/test`.
-The snapshot drift gate skips with a notice when no mcpp checkout is present at `MCPP_REPO`
-(default `../mcpp`).
+`npm ci`, `npm run compile`, `npm test` (the gates first, then the unit tests), `npm run test:e2e`,
+`npm run package`, and `node tools/dev-profile.mjs` for a throwaway profile under `.dev-profile/`
+that never touches your real one.
 
-Release: bump the version in `package.json` and `package-lock.json`, commit, then push a tag
-matching the version exactly. `.github/workflows/release.yml` validates the tag, runs the
-tests, packages the VSIX, writes a SHA-256 file and creates the GitHub Release.
+Release: bump the version in `package.json` and `package-lock.json`, commit, and push a tag
+matching the version exactly. The workflow runs the tests, packages one VSIX, and publishes that
+same artifact to GitHub Releases and Open VSX — and to the Marketplace when its token is
+configured.
 
 ## License
 
