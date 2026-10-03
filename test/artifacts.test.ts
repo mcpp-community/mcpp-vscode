@@ -590,6 +590,16 @@ test("嵌套工程提示不猜测它一定是 mcpp 工作区成员", () => {
   assert.doesNotMatch(source, /当前是工作区成员/);
 });
 
+test("the rename offer is only marked answered after the user answered it", () => {
+  const source = readFileSync(path.join(root, "src/extension.ts"), "utf8");
+  const body = /async function offerSettingRenames[\s\S]*?\n\}/.exec(source)?.[0] ?? "";
+  assert.ok(body.length > 0, "offerSettingRenames must exist");
+  assert.ok(
+    body.indexOf("showInformationMessage") < body.indexOf('workspaceState.update("mcpp.renamesOffered", true)'),
+    "the marker is written before the prompt again: a dismissed popup would strand the user's renamed settings forever (external review P2-9)",
+  );
+});
+
 test("tag release 工作流校验版本并发布 VSIX", () => {
   const workflow = readFileSync(path.join(root, ".github/workflows/release.yml"), "utf8");
   assert.match(workflow, /push:\s*\n\s+tags:\s*\n\s+- "v\*"/);

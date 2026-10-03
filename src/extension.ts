@@ -476,14 +476,18 @@ async function offerSettingRenames(context: vscode.ExtensionContext): Promise<vo
   if (pending.length === 0 || context.workspaceState.get<boolean>("mcpp.renamesOffered") === true) {
     return;
   }
-  await context.workspaceState.update("mcpp.renamesOffered", true);
 
   const toUser = t("Move them to my user settings");
   const toWorkspace = t("Move them to this workspace");
   const choice = await vscode.window.showInformationMessage(renamePrompt(pending), toUser, toWorkspace);
   if (choice !== toUser && choice !== toWorkspace) {
+    // Dismissed is not answered: the marker is only written after a choice, so
+    // the offer comes back next session instead of being lost forever — a
+    // marker written before the prompt stranded exactly those users (external
+    // review P2-9).
     return;
   }
+  await context.workspaceState.update("mcpp.renamesOffered", true);
   const moved = await applyRenames(pending, choice === toUser ? "user" : "workspace");
   void vscode.window.showInformationMessage(t("mcpp: moved {0} setting(s).", moved));
 }
