@@ -706,10 +706,11 @@ export function decodeDetailMessage(raw: unknown): DetailMessage | undefined {
         ? { type: "openUrl", url: raw.url }
         : undefined;
     case "copy":
-      // Clipboard content, same trust level as the https-restricted url: a
-      // length cap keeps a hostile document from parking a novel in the
-      // clipboard, and everything else about it is the user's own click.
-      return nonEmptyString(raw.text) && raw.text.length <= 500
+      // Clipboard content, same trust level as the https-restricted url. The
+      // cap is 16 KiB — far above any command or usage line, low enough that a
+      // hostile document cannot park a novel in the clipboard — and everything
+      // else about the text is the user's own click.
+      return nonEmptyString(raw.text) && raw.text.length <= 16_384
         ? { type: "copy", text: raw.text }
         : undefined;
     default:

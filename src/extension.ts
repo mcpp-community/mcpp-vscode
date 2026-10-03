@@ -12,7 +12,8 @@ import {
   type LanguageServerBridge,
   type LanguageServerCommandResult,
 } from "./mcppls/bridge";
-import { CAPABILITIES, MCPPLS_EXTENSION_ID, VERIFIED_MCPPLS_RANGE } from "./mcppls/contract";
+import { compareVersions } from "./library/xpkg";
+import { CAPABILITIES, MCPPLS_EXTENSION_ID, VERIFIED_MCPPLS_MINIMUM, VERIFIED_MCPPLS_RANGE } from "./mcppls/contract";
 import { formatResult } from "./mcppls/messages";
 import { describeState } from "./mcppls/state";
 import {
@@ -299,8 +300,10 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
   // C++ Modules view only forwards to mcppls.
   const applyViewVisibility = (): void => {
     // Literal keys, so the wiring gate can see them.
-    // `mcpp.views.enabled` is the master switch: with it off every view is hidden and
-    // VS Code removes the container from the activity bar with them. The `when`
+    // `mcpp.views.enabled` is the master switch: with it off every view is hidden.
+    // Whether VS Code also drops the container's icon from the activity bar is
+    // up to VS Code itself — an extension cannot mark its own container
+    // hidden-when-empty (the setting's description says the same). The `when`
     // clauses in package.json are negated (`!mcpp.sidebarHidden`) so the default
     // state is visible — otherwise activation would never run to set the key back.
     void vscode.commands.executeCommand("setContext", "mcpp.sidebarHidden", !read<boolean>("mcpp.views.enabled"));
@@ -496,8 +499,10 @@ async function noteUnverifiedLanguageService(output: vscode.OutputChannel): Prom
   if (version === undefined) {
     return;
   }
-  const [major = 0, minor = 0, patch = 0] = version.split(".").map((part) => Number.parseInt(part, 10) || 0);
-  const below = major < 0 || (major === 0 && (minor < 0 || (minor === 0 && patch < 4)));
+  // The same comparator the version matrix uses, against the contract's own
+  // minimum — the old hand-rolled comparison had dead `< 0` branches and a
+  // second, drifting copy of the floor (external review P1-3).
+  const below = compareVersions(version, VERIFIED_MCPPLS_MINIMUM) < 0;
   if (below) {
     output.appendLine(
       t("{0} {1} is older than the verified range ({2}); the capability probe will hide what it cannot do.", MCPPLS_EXTENSION_ID, version, VERIFIED_MCPPLS_RANGE),

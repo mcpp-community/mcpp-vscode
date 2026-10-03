@@ -23,8 +23,13 @@ export const MCPPLS_EXTENSION_ID = "sunrisepeak.mcpp-language-server";
  * The version range this build was written against. Used for a **notice** only:
  * a command that disappears is detected by calling it, not by reading a version,
  * because a version number cannot predict a rename.
+ *
+ * The minimum is a fact in its own right (the comparison in `extension.ts`
+ * reads it through `compareVersions`), and the range string is its display
+ * form — one source of truth, two spellings (external review P1-3).
  */
-export const VERIFIED_MCPPLS_RANGE = ">=0.0.4";
+export const VERIFIED_MCPPLS_MINIMUM = "0.0.4";
+export const VERIFIED_MCPPLS_RANGE = `>=${VERIFIED_MCPPLS_MINIMUM}`;
 
 export type CapabilityKind = "forward" | "readState";
 

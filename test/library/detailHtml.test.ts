@@ -344,6 +344,10 @@ test("decodeDetailMessage accepts exactly three shapes, and only https urls", ()
     type: "copy",
     text: "mcpp add compat.argparse@3.2",
   });
+  // A long-but-real payload (a padded command, a wrapped usage line) still
+  // copies; only a document trying to park a novel is refused.
+  const longCopy = decodeDetailMessage({ type: "copy", text: "mcpp add " + "x".repeat(2_000) });
+  assert.equal(longCopy?.type, "copy");
 
   for (const raw of [
     undefined,
@@ -363,7 +367,7 @@ test("decodeDetailMessage accepts exactly three shapes, and only https urls", ()
     { type: "copy" },
     { type: "copy", text: "" },
     { type: "copy", text: 42 },
-    { type: "copy", text: "x".repeat(501) },
+    { type: "copy", text: "x".repeat(16_385) },
     // The page used to announce its own load. The host answered with an empty
     // `return`, so nothing looped here — but the shape is the one that made the
     // library view reload itself forever, so the message is gone.
