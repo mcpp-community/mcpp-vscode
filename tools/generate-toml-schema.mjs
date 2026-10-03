@@ -96,7 +96,11 @@ function readPackageVersion(tomlText) {
 
 function readSourceCommit() {
   try {
-    return execFileSync("git", ["rev-parse", "--short", "HEAD"], {
+    // The **full** hash, never `--short`: git shortens to the shortest unique
+    // prefix *for this clone*, so a fresh CI checkout (7 characters) and a
+    // developer's clone with more objects (8) produced two different files for
+    // the same mcpp — the drift gate went red on an unchanged API.
+    return execFileSync("git", ["rev-parse", "HEAD"], {
       cwd: MCPP_REPO,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
@@ -541,7 +545,7 @@ function main() {
   const keys = sections.reduce((total, section) => total + (section.keys?.length ?? 0), 0);
   process.stdout.write(
     `generate-toml-schema: wrote ${OUT_FILE}\n` +
-      `  mcpp ${version} (${schema.sourceCommit}), ${sections.length} sections, ${keys} keys, ` +
+      `  mcpp ${version} (${schema.sourceCommit.slice(0, 8)}), ${sections.length} sections, ${keys} keys, ` +
       `${sections.filter((section) => section.plane === UNCLASSIFIED_PLANE).length} unclassified\n`,
   );
 }

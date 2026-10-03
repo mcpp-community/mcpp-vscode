@@ -222,6 +222,38 @@ test("the library view cannot reload itself in a loop", () => {
   assert.match(view, /this\.document = undefined;/);
 });
 
+test("no module drives a second language client", () => {
+  // The same rule the `package` job enforces, but runnable here: the CI grep used
+  // to match the bare name, and the compiled comments that explain why this
+  // extension does *not* use a language client made it fail on a clean build.
+  const offenders: string[] = [];
+  for (const [file, text] of sourceFiles()) {
+    const code = text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    if (/from\s+["']vscode-languageclient["']|require\(["']vscode-languageclient["']\)/.test(code)) {
+      offenders.push(file);
+    }
+  }
+  assert.deepEqual(offenders, [], "a language client is imported again");
+});
+
+test("the committed snapshots record a clone-independent commit", () => {
+  // `git rev-parse --short` shortens to the shortest unique prefix *for that
+  // clone*, so the same mcpp produced a 7-character hash in a fresh CI checkout
+  // and 8 in a developer's — and the drift gate went red on an unchanged API.
+  for (const file of ["data/buildscript-api.json", "data/toml-schema.json"]) {
+    const snapshot = JSON.parse(readFileSync(path.join(root, file), "utf8")) as {
+      sourceVersion?: string;
+      sourceCommit?: string;
+    };
+    assert.match(snapshot.sourceVersion ?? "", /^\d{4}\.\d+\.\d+/, `${file}: no mcpp version`);
+    assert.match(
+      snapshot.sourceCommit ?? "",
+      /^[0-9a-f]{40}$/,
+      `${file}: the provenance hash must be full length, not an abbreviation`,
+    );
+  }
+});
+
 test("opening a link always produces an answer", () => {
   // The comment above `openExternal` quotes the old call, so comments are
   // stripped before the check — the point is the code, not the prose.

@@ -117,7 +117,10 @@ jobs:
       - name: No second language client in the build output
         run: |
           test ! -e dist/src/languageClient.js
-          ! grep -rqs "vscode-languageclient" dist/src package.json
+          # A *dependency*, not a mention. `dist` carries the compiled comments
+          # that explain why this extension does not drive a language client, and
+          # grepping for the bare name failed the build on those comments alone.
+          ! grep -rqsE "require\(['\"]vscode-languageclient['\"]\)|from ['\"]vscode-languageclient['\"]" dist/src package.json
       - uses: actions/upload-artifact@v4
         with:
           name: vsix

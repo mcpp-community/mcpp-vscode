@@ -107,7 +107,11 @@ function parseSourceVersion(text) {
 
 function sourceCommit() {
   try {
-    return execFileSync("git", ["rev-parse", "--short", "HEAD"], {
+    // The **full** hash, never `--short`: git shortens to the shortest unique
+    // prefix *for this clone*, so a fresh CI checkout (7 characters) and a
+    // developer's clone with more objects (8) produced two different files for
+    // the same mcpp — the drift gate went red on an unchanged API.
+    return execFileSync("git", ["rev-parse", "HEAD"], {
       cwd: mcppRepo,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
