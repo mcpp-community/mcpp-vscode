@@ -40,22 +40,22 @@
   run: |
     set -euo pipefail
     if [ -z "${OVSX_PAT:-}" ]; then
-      echo "缺少 OVSX_PAT。到 open-vsx.org → 用户设置 → Access Tokens 建 publish 作用域 token，"
-      echo "然后在本仓库 Settings → Secrets → Actions 里配置 OVSX_PAT。"
+      echo "缺少 OVSX_PAT：Open VSX 是必发目标，发布 tag 不能没有它。"
+      echo "到 open-vsx.org → Settings → Access Tokens 创建 publish 作用域的 token，"
+      echo "再配到本仓库 Settings → Secrets and variables → Actions 的 OVSX_PAT。"
       exit 1
     fi
     npx ovsx publish "mcpp-vscode-${PACKAGE_VERSION}.vsix"
 
-- name: 发布到 Visual Studio Marketplace
+- name: 发布到 Visual Studio Marketplace（未配置 token 则跳过）
   shell: bash
   env:
     VSCE_PAT: ${{ secrets.VSCE_PAT }}
   run: |
     set -euo pipefail
     if [ -z "${VSCE_PAT:-}" ]; then
-      echo "缺少 VSCE_PAT。到 dev.azure.com 建 Personal Access Token"
-      echo "（Organization: 所有可访问组织，Scopes: Marketplace → Manage），配到仓库 secrets。"
-      exit 1
+      echo "未配置 VSCE_PAT：跳过 Marketplace 发布（Open VSX 与 GitHub Release 不受影响）。"
+      exit 0
     fi
     npx vsce publish --packagePath "mcpp-vscode-${PACKAGE_VERSION}.vsix"
 ```
@@ -64,9 +64,11 @@
 
 - **同一只 VSIX 发两个市场**（`ovsx publish <file>` 直接收文件；`vsce publish --packagePath` 收
   已打包文件），不重新打包——发布产物 = GitHub Release 产物，逐字节一致，SHA-256 对得上。
-- secrets 缺失**显式失败**并写明去哪建 token（§21.4 的决定：发布 tag 是郑重动作，不静默跳过）。
+- **分工是作者定的（2026-10-03，覆盖本节初稿的"双必发"设计）**：Open VSX 缺 token **显式
+  失败**并写明去哪建；Marketplace 缺 token **自动跳过**（打一行说明，`exit 0`），Release 不因此
+  失败。
 - 发布顺序放在 GitHub Release **之后**：市场侧失败时 Release（事实上的源）已就位，重试只补市场。
-- `ovsx` 加入 devDependencies 并锁定版本：`npx` 不应在发布中途去网络解析。`@vscode/vsce` 已在。
+- `ovsx` 已加入 devDependencies（^1.2.0）：`npx` 不在发布中途去网络解析。`@vscode/vsce` 已在。
 
 ### A3 一次性人工步骤（作者操作）
 
@@ -269,4 +271,6 @@ randomNonce();`）——kit 抽取后必然失效，改写为锁**不变量**：
 ### 7.1 作者的答复（2026-10-03）
 
 1、2 批准：config/detail 顺路迁移（commit 6）与 cache 移入 `src/cache/`（commit 7）都做。
-3 已向作者解释，待定。
+3 撤销——PR 未合、无版可发；实现先行（commit 1–7 落在本分支），发布时机完全由作者掌握。
+发布语义按作者最终口径修正：**Open VSX 必发（缺 token 显式失败），Marketplace 机会发布
+（未配 token 自动跳过，Release 不失败）**——已回写 §1 A2。

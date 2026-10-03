@@ -79,3 +79,32 @@ jobs:
               --title "mcpp-vscode ${PACKAGE_VERSION}" \
               --generate-notes
           fi
+
+      # 两个市场收到的都是刚上传给 GitHub Release 的同一只 VSIX（SHA-256 对得上）。
+      # 分工是作者定的：Open VSX 是本流水线的必发目标——缺 token 显式失败，不静默跳过；
+      # Marketplace 机会发布——没配 token 就打一行说明跳过，Release 本身不因此失败。
+      - name: 发布到 Open VSX
+        shell: bash
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          set -euo pipefail
+          if [ -z "${OVSX_PAT:-}" ]; then
+            echo "缺少 OVSX_PAT：Open VSX 是必发目标，发布 tag 不能没有它。"
+            echo "到 open-vsx.org → Settings → Access Tokens 创建 publish 作用域的 token，"
+            echo "再配到本仓库 Settings → Secrets and variables → Actions 的 OVSX_PAT。"
+            exit 1
+          fi
+          npx ovsx publish "mcpp-vscode-${PACKAGE_VERSION}.vsix"
+
+      - name: 发布到 Visual Studio Marketplace（未配置 token 则跳过）
+        shell: bash
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          set -euo pipefail
+          if [ -z "${VSCE_PAT:-}" ]; then
+            echo "未配置 VSCE_PAT：跳过 Marketplace 发布（Open VSX 与 GitHub Release 不受影响）。"
+            exit 0
+          fi
+          npx vsce publish --packagePath "mcpp-vscode-${PACKAGE_VERSION}.vsix"

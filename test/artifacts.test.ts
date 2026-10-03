@@ -566,6 +566,22 @@ test("the release workflow guards the published artefact against local leakage",
   assert.match(workflow, /unzip -t/);
 });
 
+test("tag release 同时发布两个市场：Open VSX 必发，Marketplace 未配 token 则跳过", () => {
+  const workflow = readFileSync(path.join(root, ".github/workflows/release.yml"), "utf8");
+  // 两个市场收到的都是 GitHub Release 上的那只 VSIX，不重新打包。
+  assert.match(workflow, /npx ovsx publish "mcpp-vscode-\$\{PACKAGE_VERSION\}\.vsix"/);
+  assert.match(workflow, /npx vsce publish --packagePath "mcpp-vscode-\$\{PACKAGE_VERSION\}\.vsix"/);
+  // Open VSX 是必发目标：缺 token 显式失败。
+  assert.match(workflow, /OVSX_PAT: \$\{\{ secrets\.OVSX_PAT \}\}/);
+  assert.match(workflow, /if \[ -z "\$\{OVSX_PAT:-\}" \]; then[\s\S]*?exit 1/);
+  // Marketplace 机会发布：缺 token 打一行说明就过，Release 不失败。
+  assert.match(workflow, /VSCE_PAT: \$\{\{ secrets\.VSCE_PAT \}\}/);
+  assert.match(workflow, /if \[ -z "\$\{VSCE_PAT:-\}" \]; then[\s\S]*?exit 0/);
+  // 发布用的是仓库锁定的 ovsx：npx 不在发布中途去网络解析。
+  const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
+  assert.ok(manifest.devDependencies?.ovsx, "ovsx must be a devDependency the release resolves offline");
+});
+
 test("CI runs the gates, the package checks, the drift check and every e2e variant", () => {
   const workflow = readFileSync(path.join(root, ".github/workflows/ci.yml"), "utf8");
   assert.match(workflow, /pull_request:/);

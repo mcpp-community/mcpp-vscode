@@ -1173,6 +1173,7 @@
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^3.9.2",
     "mocha": "^11.8.0",
+    "ovsx": "^1.2.0",
     "typescript": "^5.9.0"
   }
 }
