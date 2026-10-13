@@ -133,13 +133,23 @@ test("coalesces concurrent build refresh requests into one call", async () => {
   assert.deepEqual(calls, ["mcppls.reloadBuildDescription"]);
 });
 
+test("turning other C++ services off and restoring them are two commands, never one falling back to the other", async () => {
+  const { bridge, calls } = harness();
+  await bridge.manageConflicts();
+  await bridge.manageConflicts(true);
+  assert.deepEqual(calls, [
+    { command: "mcppls.turnOffOtherCppFeatures", args: [] },
+    { command: "mcppls.restoreOtherCppFeatures", args: [] },
+  ]);
+  assert.equal(bridge.dangerOf("turnOffOtherCppFeatures"), "none");
+  assert.equal(bridge.dangerOf("restoreOtherCppFeatures"), "none");
+});
+
 test("directional commands pass their argument through", async () => {
   const { bridge, calls } = harness();
-  await bridge.manageConflicts(true);
   await bridge.toggleInWorkspace(false);
   await bridge.reviewChanges(true);
   assert.deepEqual(calls, [
-    { command: "mcppls.turnOffOtherCppFeatures", args: [true] },
     { command: "mcppls.turnOffInWorkspace", args: [false] },
     { command: "mcppls.review.run", args: [true] },
   ]);

@@ -43,7 +43,7 @@ mcppls 侧**没有** `extensionDependencies`：依赖是单向的。
 | `mcppls.collectReport` | 收集诊断报告 | none |
 | `mcppls.exportDiagnosticBundle` | 导出诊断包（服务器命令 `mcppls.exportBundle`） | none |
 | `mcppls.runBuildToolInTerminal` | 在集成终端运行构建工具 | confirm |
-| `mcppls.turnOffOtherCppFeatures` / `mcppls.restoreOtherCppFeatures` | 关闭/恢复其它 C++ 扩展的语言特性（**会写别的扩展自己的设置**，由 mcppls 执行） | confirm |
+| `mcppls.turnOffOtherCppFeatures` / `mcppls.restoreOtherCppFeatures` | 关闭/恢复其它 C++ 扩展的语言特性（**会写别的扩展自己的设置**，由 mcppls 执行；它自己先问作用范围，关掉问题即不执行）。0.7.0 起是两条能力，不再共用一条候选链 | none |
 | `mcppls.turnOnInWorkspace` / `mcppls.turnOffInWorkspace` | 在本工作区启用/停用 C++ Modules（**会写 `mcppls.enable`**，由 mcppls 执行） | confirm |
 | `mcppls.installCommandLineTools` | macOS 命令行工具 | confirm |
 | `mcppls.review.run` / `mcppls.review.clear` | Review Changes（**服务器广告**的命令，服务器运行后才存在；受 `mcppls.ai.enabled` 约束） | none |
@@ -120,6 +120,7 @@ VS Code 命令，重名会让 mcppls 的语言客户端启动失败。mcppls 因
 | `serverCommands(): string[]` | ✅（服务器未运行时为空数组） | 判断服务器是否广告了某命令 |
 | `environment()` | ✅ | version / vscode / appName / appHost / uiKind / platform / remote |
 | `waitForState()` | ✅ | 需要等待某个状态时使用 |
+| `otherCppFeatures(): { active: { extensionId, displayName, settable }[]; canRestore }` | ✅（mcppls 0.0.16 起） | 「其他 C++ 语言服务」一行：哪些在工作、mcppls 能否恢复。缺失、抛错或形状不对时退回本地只读检测（`src/mcppls/otherCppFeatures.ts`，同三个候选），`canRestore` 为 false |
 | 计数器类（`notificationCount` 等） | ❌ 非测试模式下返回 `-1`/`0` | **不使用** |
 
 **使用纪律**（写进 `mcpp-vscode/src/mcppls/state.ts`，并有单测与 e2e 覆盖）：

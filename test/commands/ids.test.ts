@@ -68,6 +68,7 @@ test("the C++ Modules group lists every id it registers", () => {
     "mcpp.languageServer.openLogFolder",
     "mcpp.languageServer.runBuildToolInTerminal",
     "mcpp.languageServer.manageConflicts",
+    "mcpp.languageServer.restoreConflicts",
     "mcpp.languageServer.toggleInWorkspace",
     "mcpp.languageServer.installTools",
     "mcpp.languageServer.reviewChanges",

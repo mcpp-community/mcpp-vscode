@@ -124,4 +124,24 @@ suite(`mcpp extension smoke (mcppls stub: ${STUB})`, () => {
   test("opening the settings panel does not throw", async () => {
     await vscode.commands.executeCommand("mcpp.openSettings");
   });
+
+  test("build.mcpp opens as cpp, and C++ Modules is left the names it answers", async () => {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    assert.ok(workspaceFolder, "the fixture workspace should be open");
+    const uri = vscode.Uri.joinPath(workspaceFolder.uri, "build.mcpp");
+    const document = await vscode.workspace.openTextDocument(uri);
+    assert.equal(document.languageId, "cpp", "build.mcpp must reach the C++ language service");
+
+    // The stub is installed and enabled, so the rule checks run and `unknownSymbol` does not.
+    const deadline = Date.now() + 10_000;
+    let codes: string[] = [];
+    while (Date.now() < deadline) {
+      codes = vscode.languages.getDiagnostics(uri).map((diagnostic) => String(diagnostic.code));
+      if (codes.length > 0) {
+        break;
+      }
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
+    }
+    assert.deepEqual(codes, ["mcpp.buildscript.rpathInLinkFlag"]);
+  });
 });

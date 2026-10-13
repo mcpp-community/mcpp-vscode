@@ -99,7 +99,7 @@ export function createLanguageServerBridge(environment: CapabilityEnvironment): 
     refreshLanguageServerAfterBuild,
     ...forwarded,
     // The two commands whose *argument* selects the direction.
-    manageConflicts: (restore = false) => invoke("manageConflicts", restore),
+    manageConflicts: (restore = false) => invoke(restore ? "restoreOtherCppFeatures" : "turnOffOtherCppFeatures"),
     toggleInWorkspace: (enable) => invoke("toggleInWorkspace", enable),
     reviewChanges: (clear = false) => invoke("review", clear),
   };

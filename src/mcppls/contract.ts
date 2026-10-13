@@ -172,15 +172,28 @@ export const CAPABILITIES: readonly Capability[] = [
     degradedHint: "Installed C++ Modules does not offer this action.",
     confirmHint: "The build tool runs in an integrated terminal, with its normal side effects.",
   },
+  // Two capabilities, not one with a candidate chain: a chain is for a renamed
+  // command, and "turn off" falling back to "restore" would do the opposite.
+  // `danger: "none"` because mcppls's own command asks where to act (this
+  // workspace or user settings) and does nothing when that question is closed;
+  // the settings it writes are the other extensions' own keys, never `mcppls.*`.
   {
-    key: "manageConflicts",
+    key: "turnOffOtherCppFeatures",
     kind: "forward",
-    title: "Manage other C++ language features",
-    commands: ["mcppls.turnOffOtherCppFeatures", "mcppls.restoreOtherCppFeatures"],
+    title: "Turn off other C++ language services",
+    commands: ["mcppls.turnOffOtherCppFeatures"],
     required: false,
-    danger: "confirm",
-    degradedHint: "Installed C++ Modules does not offer conflict handling.",
-    confirmHint: "This changes settings belonging to other C++ extensions, at their own keys. C++ Modules performs the change.",
+    danger: "none",
+    degradedHint: "Installed C++ Modules does not offer this; turn the other extension's language features off in its own settings.",
+  },
+  {
+    key: "restoreOtherCppFeatures",
+    kind: "forward",
+    title: "Restore other C++ language services",
+    commands: ["mcppls.restoreOtherCppFeatures"],
+    required: false,
+    danger: "none",
+    degradedHint: "Installed C++ Modules does not offer this; turn the other extension's language features on in its own settings.",
   },
   {
     key: "toggleInWorkspace",

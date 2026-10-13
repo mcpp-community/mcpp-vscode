@@ -49,9 +49,9 @@ export interface TreeNode {
   /**
    * A `ThemeColor` id the icon is drawn in, e.g. `"charts.blue"`.
    *
-   * Only ids the colour registry always carries are used (`charts.*`), and a
-   * theme that omits one leaves the icon in the normal foreground colour rather
-   * than making the row unreadable — colour is a hint here, never the state.
+   * Only ids the colour registry always carries are used (`charts.*`,
+   * `disabledForeground`), and a theme that omits one leaves the icon in the
+   * normal foreground colour rather than making the row unreadable — colour is a hint here, never the state.
    */
   iconColor?: string;
   /** Consumed by `when` clauses in package.json for inline actions. */
@@ -526,6 +526,11 @@ export interface LanguageServiceBlock {
     state?: string;
     issues?: readonly LanguageServiceIssue[];
   };
+  /** Other C++ language services serving next to it (C/C++, clangd, ccls). */
+  otherCppFeatures?: {
+    active: readonly { extensionId: string; displayName: string; settable: boolean }[];
+    canRestore: boolean;
+  };
 }
 
 /** The provider line the block always carries, so "who owns this" stays answerable. */
@@ -818,6 +823,9 @@ function languageServiceChildren(block: LanguageServiceBlock): TreeNode[] {
       icon: "beaker",
     },
   ];
+  if (block.otherCppFeatures !== undefined) {
+    nodes.push(otherCppFeaturesNode(block.otherCppFeatures));
+  }
 
   (state?.issues ?? []).forEach((issue, index) => {
     nodes.push({
@@ -848,6 +856,38 @@ function languageServiceChildren(block: LanguageServiceBlock): TreeNode[] {
     children: LANGUAGE_SERVICE_MORE_ACTIONS.map((action) => actionNode(action)),
   });
   return nodes;
+}
+
+/**
+ * 「其他 C++ 语言服务」: another service answering the same files shows every
+ * result twice, so while one is active the row says which and one click hands
+ * the decision to mcppls (`mcppls.turnOffOtherCppFeatures`, which asks where).
+ * With none, the row stays as a quiet, dimmed confirmation and does nothing.
+ * When mcppls remembers settings it changed, the row's context menu offers to
+ * put them back (`package.json`: `viewItem =~ /Restorable$/`).
+ */
+function otherCppFeaturesNode(features: NonNullable<LanguageServiceBlock["otherCppFeatures"]>): TreeNode {
+  const restorable = features.canRestore ? "Restorable" : "";
+  if (features.active.length === 0) {
+    return {
+      id: "project.languageService.otherCppFeatures",
+      label: plain("Only C++ Modules is serving C++"),
+      icon: "pass",
+      iconColor: "disabledForeground",
+      tooltip: plain("No other C++ language service (C/C++, clangd, ccls) is active, so no result is shown twice."),
+      contextValue: `mcppOtherCppFeatures${restorable}`,
+    };
+  }
+  const label = plain("Other C++ language services");
+  return {
+    id: "project.languageService.otherCppFeatures",
+    label,
+    description: { key: "{0}", args: [features.active.map((entry) => entry.displayName).join(", ")] },
+    icon: "warning",
+    tooltip: plain("They answer the same C++ files, so results appear twice. Click to turn their C++ language features off; C++ Modules asks whether for this workspace or everywhere."),
+    contextValue: `mcppOtherCppFeatures${restorable}`,
+    command: { command: "mcpp.languageServer.manageConflicts", title: label },
+  };
 }
 
 function actionNode(action: ActionRow): TreeNode {

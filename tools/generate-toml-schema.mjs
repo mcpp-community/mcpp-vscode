@@ -12,6 +12,8 @@
 //                                       checks (`kKnownPackageKeys`, ...). A
 //                                       section mcpp stops accepting therefore
 //                                       disappears from the schema.
+//   modules/manifest/src/key_registry.cppm — the [build] keys, once the parser
+//                                       reads them from the registry.
 //   mcpp.toml                         — [package] version -> sourceVersion.
 //   git rev-parse --short HEAD        — sourceCommit (or "unknown").
 //
@@ -60,6 +62,7 @@ const DOC_BASE = "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-
 const SPEC_FILE = "docs/specs/manifest-semantics.md";
 const FIELD_DOC_FILE = "docs/04-mcpp-toml.md";
 const PARSER_FILE = "modules/manifest/src/toml.cppm";
+const REGISTRY_FILE = "modules/manifest/src/key_registry.cppm";
 
 function fail(message) {
   process.stderr.write(`generate-toml-schema: ${message}\n`);
@@ -460,7 +463,15 @@ function extractStringArray(parserText, arrayName) {
   const block = new RegExp(
     `(?:static\\s+)?constexpr\\s+std::string_view\\s+${arrayName}\\s*\\[\\]\\s*=\\s*\\{([\\s\\S]*?)\\};`,
   ).exec(parserText);
-  if (!block) fail(`${PARSER_FILE}: key list ${arrayName}[] not found`);
+  if (!block) {
+    // mcpp 2026.10.11+ states the [build] keys once, in the key registry, and the
+    // parser reads them from there: `const auto kKnownBuildKeys = registry_keys("build");`.
+    const fromRegistry = new RegExp(
+      `\\b${arrayName}\\s*=\\s*registry_keys\\(\\s*"([^"]+)"\\s*\\)`,
+    ).exec(parserText);
+    if (!fromRegistry) fail(`${PARSER_FILE}: key list ${arrayName}[] not found`);
+    return registryKeys(fromRegistry[1]);
+  }
   const values = [];
   const literal = /"([^"]*)"/g;
   let match;
@@ -468,6 +479,22 @@ function extractStringArray(parserText, arrayName) {
     if (match[1] !== "") values.push(match[1]);
   }
   if (values.length === 0) fail(`${PARSER_FILE}: key list ${arrayName}[] is empty`);
+  return values;
+}
+
+// The keys of one table in mcpp's key registry: every `{"<table>", "<key>", …}`
+// row of `kKeyRegistry`, the table-as-a-whole row (`""`) left out.
+function registryKeys(table) {
+  const text = readSource(REGISTRY_FILE);
+  const block = /kKeyRegistry\s*\[\]\s*=\s*\{([\s\S]*?)\n\};/.exec(text);
+  if (!block) fail(`${REGISTRY_FILE}: kKeyRegistry[] not found`);
+  const values = [];
+  const row = /\{\s*"([^"]*)"\s*,\s*"([^"]*)"/g;
+  let match;
+  while ((match = row.exec(block[1])) !== null) {
+    if (match[1] === table && match[2] !== "") values.push(match[2]);
+  }
+  if (values.length === 0) fail(`${REGISTRY_FILE}: no keys for table ${table}`);
   return values;
 }
 

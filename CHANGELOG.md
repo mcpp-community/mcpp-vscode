@@ -1,3 +1,50 @@
+## 0.7.0 - 2026-10-14
+
+`build.mcpp` is C++ again, compiled by C++ Modules as the build program it is, and the project
+view says when another C++ language service is answering the same files.
+
+### Changed
+
+- **`build.mcpp` is a `cpp` document.** 0.6.0 gave it a language of its own, `mcpp-build`.
+  VS Code prefers a filename match over an extension match, so that hid the file from C++
+  Modules, which selects `cpp`: the build program got a line-by-line text check instead of a
+  compiler. The `mcpp-build` language, its grammar and its language configuration are gone;
+  this extension's build-script help now registers on `cpp` documents named `build.mcpp`, and
+  the C++ module grammar is injected into `source.cpp` only.
+- **While C++ Modules serves `build.mcpp`, it answers what it answers better**: the
+  `unknownSymbol` check and the module names after `import` (completion and hover) are left to
+  it. The SPEC-007 rule checks, the `mcpp::…` directive completion and hover, and the snippets
+  stay. "Serves" means the extension is installed and enabled and `mcppls.enable` is not
+  `false` here; the open files are re-checked when that changes.
+- **`unknownSymbol` reads the file's imports** when it does run: `import mcpp.rules.qt;` makes
+  `mcpp::rules::…` a name the snapshot cannot judge, so it is no longer reported
+  (`unknown mcpp::rules` on every Qt build program).
+- The diagnostics' owner is `mcpp-build-script` (was `mcpp-build`).
+- The build-script snapshot and the `mcpp.toml` schema are regenerated from mcpp 2026.10.11.1.
+  The schema generator reads the `[build]` keys from mcpp's key registry, where 2026.10.11.1
+  moved them.
+
+### Added
+
+- **Project → Basics → Language service → "Other C++ language services".** While C/C++
+  IntelliSense, clangd or ccls is active next to C++ Modules, the row shows a warning and their
+  names, and one click runs C++ Modules' own **Turn Off Other C++ Language Services** (it asks
+  whether for this workspace or everywhere, and writes the other extensions' own settings).
+  With none, the row is a dimmed check mark, "Only C++ Modules is serving C++". When C++
+  Modules remembers what it turned off, the row's context menu offers **Restore**. The list is
+  C++ Modules' own answer (0.0.16+); with an older one, a read-only look at the same three
+  extensions.
+- `mcpp.languageServer.restoreConflicts` ("C++ Modules: Restore Other C++ Language Services").
+  `mcpp.languageServer.manageConflicts` is now titled "Turn Off Other C++ Language Services",
+  which is what it always ran.
+
+### Migrating
+
+- A setting written for the old language id, `"[mcpp-build]": { … }` in `settings.json`, no
+  longer applies. Move it under `"[cpp]"`.
+- Turning other C++ services off or restoring them no longer asks a second time in this
+  extension: C++ Modules' command asks where to act, and closing that question does nothing.
+
 ## 0.6.0 - 2026-10-02
 
 The sidebar was reorganised around one rule: **the body shows state, the actions sit

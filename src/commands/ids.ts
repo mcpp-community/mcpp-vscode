@@ -49,7 +49,9 @@ export const LANGUAGE_SERVER_COMMANDS = {
   revealBundle: "mcpp.languageServer.revealBundle",
   openLogFolder: "mcpp.languageServer.openLogFolder",
   runBuildToolInTerminal: "mcpp.languageServer.runBuildToolInTerminal",
+  /** Turns the other C++ language services off (the id is from 0.6.0). */
   manageConflicts: "mcpp.languageServer.manageConflicts",
+  restoreConflicts: "mcpp.languageServer.restoreConflicts",
   toggleInWorkspace: "mcpp.languageServer.toggleInWorkspace",
   installTools: "mcpp.languageServer.installTools",
   reviewChanges: "mcpp.languageServer.reviewChanges",

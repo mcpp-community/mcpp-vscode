@@ -1,6 +1,6 @@
 {
-  "sourceVersion": "2026.10.3.1",
-  "sourceCommit": "74bcb859e60afc71ad759540d2de5344dda400e9",
+  "sourceVersion": "2026.10.11.1",
+  "sourceCommit": "3fb2d0cc89296c527fcda710792b67bb7a481bed",
   "sections": [
     {
       "header": "[build]",
@@ -691,6 +691,11 @@
           "type": "string"
         },
         {
+          "key": "windows_auto_export",
+          "type": "string",
+          "unmodelled": true
+        },
+        {
           "key": "windows_code_page",
           "type": "enum",
           "values": [
@@ -778,7 +783,7 @@
       "header": "[workspace]",
       "name": "workspace",
       "plane": "unclassified",
-      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md",
+      "doc": "https://github.com/mcpp-community/mcpp/blob/main/docs/04-mcpp-toml.md#218-workspace--tables-a-workspace-shares-202610101",
       "deprecatedBy": null
     },
     {

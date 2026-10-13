@@ -36,7 +36,9 @@ import {
   languageServerInstalled,
   languageServerVersion,
   readLanguageServerState,
+  readOtherCppFeatures,
 } from "../mcppls/stateSource";
+import { OTHER_CPP_SETTINGS } from "../mcppls/otherCppFeatures";
 import { PollTimer } from "../mcppls/timers";
 import { refreshTimerDecision } from "../cache/cacheState";
 import type { LanguageServiceBlock } from "./models";
@@ -162,6 +164,7 @@ export function registerLanguageServerCommands(
       enabled: languageServerEnabled(),
       version: languageServerVersion(),
       state: readLanguageServerState(),
+      otherCppFeatures: languageServerInstalled() ? readOtherCppFeatures() : undefined,
     };
   };
 
@@ -279,7 +282,8 @@ export function registerLanguageServerCommands(
   // answer is the zip's path, and the caller has to keep it.
   forward(LANGUAGE_SERVER_COMMANDS.runBuildToolInTerminal, "runBuildTool");
   forward(LANGUAGE_SERVER_COMMANDS.installTools, "installTools");
-  forward(LANGUAGE_SERVER_COMMANDS.manageConflicts, "manageConflicts", () => [true]);
+  forward(LANGUAGE_SERVER_COMMANDS.manageConflicts, "turnOffOtherCppFeatures");
+  forward(LANGUAGE_SERVER_COMMANDS.restoreConflicts, "restoreOtherCppFeatures");
   forward(LANGUAGE_SERVER_COMMANDS.reviewChanges, "review", () => [false]);
   forward(LANGUAGE_SERVER_COMMANDS.toggleInWorkspace, "toggleInWorkspace", () => [!languageServerEnabled()]);
 
@@ -310,7 +314,9 @@ export function registerLanguageServerCommands(
       if (
         event.affectsConfiguration("mcppls.enable") ||
         event.affectsConfiguration("mcpp.views.languageServer") ||
-        event.affectsConfiguration("mcpp.languageService")
+        event.affectsConfiguration("mcpp.languageService") ||
+        // Another C++ service turned on or off, by mcppls's command or by hand.
+        OTHER_CPP_SETTINGS.some((setting) => event.affectsConfiguration(setting))
       ) {
         refresh();
         applyTimer();

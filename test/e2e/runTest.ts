@@ -41,6 +41,7 @@ async function runVariant(repositoryRoot: string, fixtureRoot: string, variant: 
   writeFileSync(join(mcpplsStub, "extension.js"), stubExtensionJs(variant));
   copyFileSync(join(fixtureRoot, "project/mcpp.toml"), join(workspaceDir, "mcpp.toml"));
   copyFileSync(join(fixtureRoot, "project/main.cpp"), join(workspaceDir, "main.cpp"));
+  copyFileSync(join(fixtureRoot, "project/build.mcpp"), join(workspaceDir, "build.mcpp"));
 
   // `MCPP_E2E_CODE` runs the suite against an already-installed VS Code, which is
   // what makes the Extension Host tests runnable without the 135 MB download.

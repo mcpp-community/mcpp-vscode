@@ -2,9 +2,9 @@
  * The modules a `build.mcpp` can legitimately `import`, and a scanner that finds
  * the import sites in one.
  *
- * §3.2.2 of the plugin-optimisation plan: `build.mcpp` keeps its own
- * `mcpp-build` language id and the C++ language service never sees it, so this
- * extension is the only thing that can explain what an import means. The rule is
+ * Since 0.7.0 `build.mcpp` is a `cpp` document and C++ Modules (mcppls)
+ * compiles it as the build program it is; while it serves the file it explains
+ * the imports itself, and this table is used only when it does not. The rule is
  * absolute — **we never report "module not found"**. This module therefore only
  * *recognises*; it never validates, because a build program's imports are
  * resolved by mcpp's own module graph (`docs/specs/build-plugins.md` §9,

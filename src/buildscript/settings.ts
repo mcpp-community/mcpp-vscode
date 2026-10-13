@@ -28,7 +28,7 @@ export type DiagnosticSeveritySetting = Exclude<Severity, "error">;
  */
 export type SettingsReader = <T>(key: string) => T;
 
-/** What the `mcpp-build` providers contribute, given the current settings. */
+/** What the `build.mcpp` providers contribute, given the current settings. */
 export interface BuildScriptContributions {
   /** Completion and hover for `mcpp::` symbols and known module names. */
   intelligence: boolean;

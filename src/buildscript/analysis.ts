@@ -411,9 +411,35 @@ function findActionBlocks(masked: readonly MaskedLine[]): ActionBlock[] {
  *
  * `lines` are the file's lines without their terminators (`text.split(/\r?\n/)`).
  */
+export interface AnalysisOptions {
+  /**
+   * Whether rule 1 (`unknownSymbol`) runs. Off while C++ Modules (mcppls) serves
+   * `build.mcpp`: it compiles the file against the modules it really imports,
+   * so its answer replaces this guess. Default on.
+   */
+  unknownSymbols?: boolean;
+}
+
+/**
+ * The namespaces under `mcpp::` that the file's own imports bring in:
+ * `import mcpp.rules.qt;` makes `mcpp::rules::…` a name this snapshot cannot
+ * judge, so rule 1 leaves it alone. Comments and strings are already masked.
+ */
+function importedNamespaces(masked: readonly MaskedLine[]): Set<string> {
+  const namespaces = new Set<string>();
+  const imported = /\bimport\s+mcpp\.([A-Za-z_][A-Za-z0-9_]*)/g;
+  for (const line of masked) {
+    for (let match = imported.exec(line.code); match !== null; match = imported.exec(line.code)) {
+      namespaces.add(match[1]);
+    }
+  }
+  return namespaces;
+}
+
 export function analyseBuildScript(
   lines: readonly string[],
   severity: Exclude<Severity, "off">,
+  options: AnalysisOptions = {},
 ): BuildScriptDiagnostic[] {
   const masked: MaskedLine[] = [];
   const state: ScanState = { blockComment: false, rawDelim: null };
@@ -433,11 +459,12 @@ export function analyseBuildScript(
     });
   };
 
-  // 1. `mcpp::<name>` that the engine does not have.
-  for (let i = 0; i < masked.length; i += 1) {
+  // 1. `mcpp::<name>` that the engine does not have, and no import of the file brings in.
+  const imported = options.unknownSymbols === false ? undefined : importedNamespaces(masked);
+  for (let i = 0; imported !== undefined && i < masked.length; i += 1) {
     const symbols = /\bmcpp::([A-Za-z_][A-Za-z0-9_]*)/g;
     for (let match = symbols.exec(masked[i].code); match !== null; match = symbols.exec(masked[i].code)) {
-      if (KNOWN_SYMBOLS.has(match[1])) {
+      if (KNOWN_SYMBOLS.has(match[1]) || imported.has(match[1])) {
         continue;
       }
       report(

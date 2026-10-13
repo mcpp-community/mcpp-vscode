@@ -52,7 +52,7 @@ C++ 模块语义——诊断、补全、悬停、定义、引用、模块图—�
 
 - **mcpp CLI 与任务** —— 构建、运行、测试、清理、快捷菜单、工具链：[docs/commands.md](docs/commands.md)。
 - **`mcpp.toml` 编辑** —— 结构补全、悬停、跳转与七条结构诊断，不做格式化：[docs/mcpp-toml.md](docs/mcpp-toml.md)。
-- **`build.mcpp` 智能** —— `mcpp::…` 与 `import` 的补全悬停、七条 SPEC-007 诊断，且永不误报「模块找不到」：[docs/build-script.md](docs/build-script.md)。
+- **`build.mcpp` 辅助** —— `build.mcpp` 是普通的 `cpp` 文件，由 C++ Modules 当作构建程序编译；本扩展补上 `mcpp::…` 指令的补全、悬停、代码片段，以及编译器不会检查的 SPEC-007 规则：[docs/build-script.md](docs/build-script.md)。
 - **库生态** —— 离线浏览本机已刷新的包索引；详情页展示真实示例代码、版本矩阵，以及工程是否已依赖它。
 - **缓存视图与清理** —— 工程产物与共享缓存，删除前一律先给出预览：[docs/cache.md](docs/cache.md)。
 - **C++ Modules** —— 对方扩展的状态与操作，集中在工程视图与状态栏快捷菜单，只转发不重写：[docs/commands.md](docs/commands.md)。

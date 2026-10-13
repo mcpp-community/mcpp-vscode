@@ -77,10 +77,20 @@ behaviour. The capability table is `src/mcppls/contract.ts`, the probe is
 | `mcpp.languageServer.collectReport` | `command.mcpp.languageServer.collectReport.title` | `mcppls.collectReport` | none |
 | `mcpp.languageServer.exportDiagnosticBundle` | `command.mcpp.languageServer.exportDiagnosticBundle.title` | `mcppls.exportDiagnosticBundle` | none |
 | `mcpp.languageServer.runBuildToolInTerminal` | `command.mcpp.languageServer.runBuildToolInTerminal.title` | `mcppls.runBuildToolInTerminal` | confirm |
-| `mcpp.languageServer.manageConflicts` | `command.mcpp.languageServer.manageConflicts.title` | `mcppls.turnOffOtherCppFeatures` / `mcppls.restoreOtherCppFeatures`, called with `true` | confirm |
+| `mcpp.languageServer.manageConflicts` | `command.mcpp.languageServer.manageConflicts.title` | `mcppls.turnOffOtherCppFeatures` (it asks where: this workspace or user settings) | none |
+| `mcpp.languageServer.restoreConflicts` | `command.mcpp.languageServer.restoreConflicts.title` | `mcppls.restoreOtherCppFeatures` | none |
 | `mcpp.languageServer.toggleInWorkspace` | `command.mcpp.languageServer.toggleInWorkspace.title` | `mcppls.turnOffInWorkspace` / `mcppls.turnOnInWorkspace`, called with `!mcppls.enable` | confirm |
 | `mcpp.languageServer.installTools` | `command.mcpp.languageServer.installTools.title` | `mcppls.installCommandLineTools` | confirm |
 | `mcpp.languageServer.reviewChanges` | `command.mcpp.languageServer.reviewChanges.title` | `mcppls.review.run` / `mcppls.review.clear`, called with `false` | none |
+
+**Project → Basics → Language service** carries one row for the other C++ language services
+(C/C++ IntelliSense, clangd, ccls). While one is active it shows a warning and their names, and
+clicking it runs `mcpp.languageServer.manageConflicts`; with none it is a dimmed check mark,
+"Only C++ Modules is serving C++", with nothing to click. When mcppls remembers settings it
+turned off, the row's context menu offers `mcpp.languageServer.restoreConflicts`. The list comes
+from mcppls itself (`otherCppFeatures()` on its extension API, 0.0.16+) and, from an older
+mcppls, from a read-only look at the same three extensions and their settings. This extension
+never writes those settings: mcppls's command does, at their own keys.
 
 `refresh` for the build path uses a candidate chain
 (`mcppls.reloadBuildDescription`, then `mcppls.restartServer`) and is single-flight, so two

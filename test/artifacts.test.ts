@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
@@ -68,7 +68,6 @@ test("declares mcpp-language-server as the C++ modules language service", () => 
   assert.deepEqual(manifest.activationEvents, [
     "workspaceContains:mcpp.toml",
     "onLanguage:mcpp-toml",
-    "onLanguage:mcpp-build",
   ]);
   assert.equal(manifest.capabilities?.untrustedWorkspaces?.supported, "limited");
   assert.equal(manifest.capabilities?.untrustedWorkspaces?.description, "%untrustedWorkspaces.description%");
@@ -348,31 +347,36 @@ test("shows editor title buttons only inside mcpp projects", () => {
   assert.ok(!commands.some((command) => command.command === "mcpp.inProject"));
 });
 
-test("ships syntax-only C++ highlighting for the exact build.mcpp filename", () => {
+test("build.mcpp is a cpp document, not a language of its own", () => {
   const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as PackageManifest;
   const associations = manifest.contributes?.configurationDefaults?.["files.associations"] as
     | Record<string, string>
     | undefined;
-  const language = manifest.contributes?.languages?.find((item) => item.id === "mcpp-build");
-  const grammar = manifest.contributes?.grammars?.find((item) => item.language === "mcpp-build");
-
+  // 0.6.0 claimed `build.mcpp` as `mcpp-build`. A filename match beats an
+  // extension match in VS Code, so that hid the file from C++ Modules (which
+  // selects `cpp`), and the build program got a text check instead of a compiler.
+  const languages = manifest.contributes?.languages ?? [];
+  assert.equal(languages.find((item) => item.id === "mcpp-build"), undefined);
+  assert.deepEqual(languages.find((item) => item.id === "cpp"), { id: "cpp", filenames: ["build.mcpp"] });
+  assert.equal(manifest.contributes?.grammars?.find((item) => item.language === "mcpp-build"), undefined);
   assert.equal(associations?.["build.mcpp"], undefined);
   assert.equal(associations?.["*.mcpp"], undefined);
-  assert.deepEqual(language, {
-    id: "mcpp-build",
-    aliases: ["mcpp build script", "build.mcpp"],
-    filenames: ["build.mcpp"],
-    configuration: "./syntaxes/mcpp-build-language-configuration.json",
-  });
-  assert.deepEqual(grammar, {
-    language: "mcpp-build",
-    scopeName: "source.mcpp-build",
-    path: "./syntaxes/mcpp-build.tmLanguage.json",
-  });
+  assert.ok(!existsSync(path.join(root, "syntaxes/mcpp-build.tmLanguage.json")));
+  assert.ok(!existsSync(path.join(root, "syntaxes/mcpp-build-language-configuration.json")));
+});
 
-  const grammarText = readFileSync(path.join(root, "syntaxes/mcpp-build.tmLanguage.json"), "utf8");
-  const grammarDocument = JSON.parse(grammarText) as { patterns?: Array<{ include?: string }> };
-  assert.ok(grammarDocument.patterns?.some((pattern) => pattern.include === "source.cpp"));
+test("restoring other C++ services is offered only on a row that says it can be", () => {
+  const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as {
+    contributes?: { menus?: Record<string, Array<{ command: string; when?: string }>> };
+  };
+  const entries = manifest.contributes?.menus?.["view/item/context"] ?? [];
+  const restore = entries.find((entry) => entry.command === "mcpp.languageServer.restoreConflicts");
+  assert.ok(restore?.when?.includes("view == mcpp.project"));
+  const pattern = /viewItem =~ \/(.*)\/$/.exec(restore?.when ?? "");
+  assert.ok(pattern, "the menu matches the row's contextValue");
+  const matches = new RegExp(pattern[1]);
+  assert.ok(matches.test("mcppOtherCppFeaturesRestorable"));
+  assert.ok(!matches.test("mcppOtherCppFeatures"));
 });
 
 test("ships TOML highlighting for the exact mcpp.toml filename", () => {
@@ -424,7 +428,7 @@ test("ships an injection grammar with module-specific scopes", () => {
   const grammar = manifest.contributes?.grammars?.find((item) => item.scopeName === "source.cpp.mcpp-modules");
   assert.deepEqual(grammar, {
     scopeName: "source.cpp.mcpp-modules",
-    injectTo: ["source.cpp", "source.mcpp-build"],
+    injectTo: ["source.cpp"],
     path: "./syntaxes/mcpp-modules.tmLanguage.json",
   });
 
@@ -433,7 +437,7 @@ test("ships an injection grammar with module-specific scopes", () => {
     injectionSelector?: string;
     repository?: Record<string, unknown>;
   };
-  assert.match(grammarDocument.injectionSelector ?? "", /source\.mcpp-build/);
+  assert.equal(grammarDocument.injectionSelector, "L:source.cpp");
   for (const key of ["module-declaration", "import-declaration", "module-name"]) {
     assert.ok(grammarDocument.repository?.[key], `missing grammar rule: ${key}`);
   }

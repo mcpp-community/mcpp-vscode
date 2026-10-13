@@ -2,7 +2,7 @@
   "name": "mcpp-vscode",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "publisher": "mcpp-community",
   "license": "Apache-2.0",
   "icon": "media/logo.png",
@@ -22,8 +22,7 @@
   ],
   "activationEvents": [
     "workspaceContains:mcpp.toml",
-    "onLanguage:mcpp-toml",
-    "onLanguage:mcpp-build"
+    "onLanguage:mcpp-toml"
   ],
   "categories": [
     "Programming Languages",
@@ -70,6 +69,12 @@
         {
           "command": "mcpp.openMcpplsSettings",
           "when": "false"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "mcpp.languageServer.restoreConflicts",
+          "when": "view == mcpp.project && viewItem =~ /^mcppOtherCppFeatures.*Restorable$/"
         }
       ]
     },
@@ -244,6 +249,11 @@
       {
         "command": "mcpp.languageServer.manageConflicts",
         "title": "%command.mcpp.languageServer.manageConflicts.title%",
+        "category": "%category%"
+      },
+      {
+        "command": "mcpp.languageServer.restoreConflicts",
+        "title": "%command.mcpp.languageServer.restoreConflicts.title%",
         "category": "%category%"
       },
       {
@@ -990,15 +1000,10 @@
     },
     "languages": [
       {
-        "id": "mcpp-build",
-        "aliases": [
-          "mcpp build script",
-          "build.mcpp"
-        ],
+        "id": "cpp",
         "filenames": [
           "build.mcpp"
-        ],
-        "configuration": "./syntaxes/mcpp-build-language-configuration.json"
+        ]
       },
       {
         "id": "mcpp-toml",
@@ -1021,11 +1026,6 @@
     },
     "grammars": [
       {
-        "language": "mcpp-build",
-        "scopeName": "source.mcpp-build",
-        "path": "./syntaxes/mcpp-build.tmLanguage.json"
-      },
-      {
         "language": "mcpp-toml",
         "scopeName": "source.toml.mcpp",
         "path": "./syntaxes/mcpp-toml.tmLanguage.json"
@@ -1033,8 +1033,7 @@
       {
         "scopeName": "source.cpp.mcpp-modules",
         "injectTo": [
-          "source.cpp",
-          "source.mcpp-build"
+          "source.cpp"
         ],
         "path": "./syntaxes/mcpp-modules.tmLanguage.json"
       }

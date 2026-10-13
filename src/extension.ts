@@ -19,6 +19,7 @@ import { describeState } from "./mcppls/state";
 import {
   languageServerEnabled,
   languageServerInstalled,
+  languageServerServes,
   languageServerVersion,
   readLanguageServerState,
 } from "./mcppls/stateSource";
@@ -423,7 +424,7 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
       return "off";
     }
     return read<"warning" | "info" | "off">("mcpp.buildScript.diagnostics.severity");
-  });
+  }, languageServerServes);
 
   extensionContext.subscriptions.push(
     output,

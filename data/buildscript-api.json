@@ -1,6 +1,6 @@
 {
-  "sourceVersion": "2026.10.3.1",
-  "sourceCommit": "74bcb859e60afc71ad759540d2de5344dda400e9",
+  "sourceVersion": "2026.10.11.1",
+  "sourceCommit": "3fb2d0cc89296c527fcda710792b67bb7a481bed",
   "protocolVersion": 15,
   "cacheEpoch": 3,
   "roles": [
@@ -118,7 +118,8 @@
       "rules": [
         "R2.1",
         "R3.3",
-        "R3.6"
+        "R3.6",
+        "R3.9"
       ],
       "docsUrl": null
     },
@@ -131,7 +132,7 @@
       "mustExist": false,
       "since": 4,
       "rules": [],
-      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/74bcb859e60afc71ad759540d2de5344dda400e9/docs/30-build-mcpp.md#runner-how-the-artifact-is-executed-20268192"
+      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/3fb2d0cc89296c527fcda710792b67bb7a481bed/docs/30-build-mcpp.md#runner-how-the-artifact-is-executed-20268192"
     },
     {
       "wire": "runner-named",
@@ -262,7 +263,7 @@
         "R2.1",
         "R9.4"
       ],
-      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/74bcb859e60afc71ad759540d2de5344dda400e9/docs/30-build-mcpp.md#warning-succeeding-and-still-being-heard-20268212"
+      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/3fb2d0cc89296c527fcda710792b67bb7a481bed/docs/30-build-mcpp.md#warning-succeeding-and-still-being-heard-20268212"
     },
     {
       "wire": "diagnostic",
@@ -294,6 +295,7 @@
         "R3.5",
         "R3.7",
         "R3.8",
+        "R3.9",
         "R5.1",
         "R5.3",
         "R6.4",
@@ -312,7 +314,7 @@
       "rules": [
         "R2.1"
       ],
-      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/74bcb859e60afc71ad759540d2de5344dda400e9/docs/30-build-mcpp.md#the-probe-channel-fact-floor-2026952"
+      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/3fb2d0cc89296c527fcda710792b67bb7a481bed/docs/30-build-mcpp.md#the-probe-channel-fact-floor-2026952"
     },
     {
       "wire": "floor",
@@ -325,7 +327,7 @@
       "rules": [
         "R2.1"
       ],
-      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/74bcb859e60afc71ad759540d2de5344dda400e9/docs/30-build-mcpp.md#the-probe-channel-fact-floor-2026952"
+      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/3fb2d0cc89296c527fcda710792b67bb7a481bed/docs/30-build-mcpp.md#the-probe-channel-fact-floor-2026952"
     },
     {
       "wire": "pack-format",
@@ -374,7 +376,7 @@
         "R9.2",
         "R9.5"
       ],
-      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/74bcb859e60afc71ad759540d2de5344dda400e9/docs/30-build-mcpp.md#deploying-what-the-program-generated-deploy-20269123-protocol-11"
+      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/3fb2d0cc89296c527fcda710792b67bb7a481bed/docs/30-build-mcpp.md#deploying-what-the-program-generated-deploy-20269123-protocol-11"
     },
     {
       "wire": "runtime-search-dir",

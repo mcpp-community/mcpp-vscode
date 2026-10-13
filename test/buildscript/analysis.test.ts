@@ -197,3 +197,37 @@ test("each rule id is the SPEC-007 code the plan names", () => {
     "mcpp.buildscript.actionNeedsRole",
   ]);
 });
+
+test("rule 1 leaves a namespace the file imports to the module that brings it", () => {
+  // The qt-demo shape: `import mcpp.rules.qt;` and then `mcpp::rules::qt::…`.
+  const lines = [
+    "import std;",
+    "import mcpp;",
+    "import mcpp.rules.qt;",
+    "",
+    "int main() {",
+    "    auto qt = mcpp::rules::qt::options{};",
+    "    mcpp::rules::qt::apply(qt);",
+    "    mcpp::nope();",
+    "}",
+  ];
+  assert.deepEqual(codes(lines), [DIAGNOSTIC_CODES.unknownSymbol]);
+  assert.match(analyseBuildScript(lines, "warning")[0].message, /mcpp::nope/);
+});
+
+test("rule 1 does not count an import that is commented out", () => {
+  const lines = ["// import mcpp.rules.qt;", "int main() { mcpp::rules::qt::apply(); }"];
+  assert.deepEqual(codes(lines), [DIAGNOSTIC_CODES.unknownSymbol]);
+});
+
+test("with rule 1 off, the SPEC-007 rule checks still run", () => {
+  const lines = [
+    "import mcpp;",
+    "int main() {",
+    "    mcpp::nope();",
+    '    mcpp::link_flag("-Wl,-rpath,/opt/lib");',
+    "}",
+  ];
+  const found = analyseBuildScript(lines, "warning", { unknownSymbols: false }).map((entry) => entry.code);
+  assert.deepEqual(found, [DIAGNOSTIC_CODES.rpathInLinkFlag]);
+});

@@ -2,9 +2,11 @@
  * The one-line integration point for `build.mcpp` intelligence.
  *
  * `src/extension.ts` stays the only assembly point: it calls this function with
- * its real context and a severity reader, and gets completion, hover and
- * diagnostics for the `mcpp-build` language id in return. The severity reader is
- * the one switch `src/extension.ts` already owns; the four boolean switches
+ * its real context, a severity reader and a "does C++ Modules serve this
+ * file" reader, and gets completion, hover and diagnostics for `build.mcpp`
+ * in return. `build.mcpp` is an ordinary `cpp` document (C++ Modules compiles
+ * it like any other unit), so the providers register on the `cpp` language with
+ * a `build.mcpp` filename pattern. The severity reader is the one switch `src/extension.ts` already owns; the four boolean switches
  * (`mcpp.buildScript.{intelligence,diagnostics,snippets,imports.knownModules}`)
  * are resolved here through `settings.ts`, because that file is the only place
  * this extension can be told about them.
@@ -18,7 +20,12 @@
  * disappears, while hover keeps recognising `std`/`std.compat`/`mcpp.*` and
  * diagnostics never report any import as missing.
  *
- * This build registers no document-symbol provider for `mcpp-build`, so there is
+ * While C++ Modules serves the file, what it answers better is left to it: the
+ * `unknownSymbol` rule (it compiles the file against the modules it really
+ * imports) and the known-module completion and hover after `import`. The
+ * SPEC-007 rule checks and the snippets stay: no compiler says those.
+ *
+ * This build registers no document-symbol provider for `build.mcpp`, so there is
  * nothing there to suppress; if one is added it must consult `intelligence` too.
  *
  * Everything shown comes from `api.ts` (the generated snapshot), `modules.ts` or
@@ -40,7 +47,14 @@ import { snippetsForScope } from "./snippets";
 // here rather than injected.
 const vscodeApi = require("vscode") as typeof vscode;
 
-const LANGUAGE = "mcpp-build";
+const LANGUAGE = "cpp";
+const FILE_NAME = "build.mcpp";
+const SELECTOR: vscode.DocumentFilter = { language: LANGUAGE, pattern: `**/${FILE_NAME}` };
+
+/** `build.mcpp` by name, as a `cpp` document. */
+function isBuildScript(document: vscode.TextDocument): boolean {
+  return document.languageId === LANGUAGE && document.uri.path.split("/").pop() === FILE_NAME;
+}
 
 const VS_SEVERITY: Record<"error" | "warning" | "info", vscode.DiagnosticSeverity> = {
   error: vscodeApi.DiagnosticSeverity.Error,
@@ -51,8 +65,10 @@ const VS_SEVERITY: Record<"error" | "warning" | "info", vscode.DiagnosticSeverit
 function toVscodeDiagnostics(
   document: vscode.TextDocument,
   severity: "warning" | "info",
+  servedByMcppls: boolean,
 ): vscode.Diagnostic[] {
-  return analyseBuildScript(document.getText().split(/\r?\n/), severity).map((entry) => {
+  const options = { unknownSymbols: !servedByMcppls };
+  return analyseBuildScript(document.getText().split(/\r?\n/), severity, options).map((entry) => {
     const diagnostic = new vscodeApi.Diagnostic(
       // The analyser reports 1-based line/column; `vscode.Position` is 0-based.
       new vscodeApi.Range(
@@ -88,13 +104,14 @@ function markdown(lines: readonly string[]): vscode.MarkdownString {
 export function registerBuildScriptProviders(
   context: { subscriptions: { push(...items: unknown[]): unknown } },
   severity: () => "warning" | "info" | "off",
+  servedByMcppls: () => boolean,
 ): void {
-  const selector: vscode.DocumentSelector = { language: LANGUAGE };
-  const collection = vscodeApi.languages.createDiagnosticCollection(LANGUAGE);
+  const selector: vscode.DocumentSelector = SELECTOR;
+  const collection = vscodeApi.languages.createDiagnosticCollection("mcpp-build-script");
   const contributions = () => buildScriptContributions(read, severity);
 
   const refresh = (document: vscode.TextDocument): void => {
-    if (document.languageId !== LANGUAGE) {
+    if (!isBuildScript(document)) {
       return;
     }
     const { diagnosticSeverity } = contributions();
@@ -102,7 +119,12 @@ export function registerBuildScriptProviders(
       collection.delete(document.uri);
       return;
     }
-    collection.set(document.uri, toVscodeDiagnostics(document, diagnosticSeverity));
+    collection.set(document.uri, toVscodeDiagnostics(document, diagnosticSeverity, servedByMcppls()));
+  };
+  const refreshAll = (): void => {
+    for (const document of vscodeApi.workspace.textDocuments) {
+      refresh(document);
+    }
   };
 
   const completion = vscodeApi.languages.registerCompletionItemProvider(selector, {
@@ -116,8 +138,9 @@ export function registerBuildScriptProviders(
       const afterImport = /\b(?:export\s+)?import\s+([A-Za-z0-9_.]*)$/.exec(before);
       if (afterImport !== null) {
         // Only the *list* is optional. Recognition itself (`knownModule`, hover,
-        // the no-diagnostic rule) is unconditional.
-        if (!completesKnownModules) {
+        // the no-diagnostic rule) is unconditional. C++ Modules completes module
+        // names from what the build can really see, so it answers instead.
+        if (!completesKnownModules || servedByMcppls()) {
           return undefined;
         }
         return knownModules()
@@ -173,7 +196,8 @@ export function registerBuildScriptProviders(
       }
       const lines = document.getText().split(/\r?\n/);
 
-      for (const site of scanImports(lines)) {
+      // An import's hover is C++ Modules' while it serves the file.
+      for (const site of servedByMcppls() ? [] : scanImports(lines)) {
         if (
           site.line === position.line &&
           position.character >= site.startCharacter &&
@@ -213,9 +237,15 @@ export function registerBuildScriptProviders(
     vscodeApi.workspace.onDidOpenTextDocument(refresh),
     vscodeApi.workspace.onDidChangeTextDocument((event) => refresh(event.document)),
     vscodeApi.workspace.onDidCloseTextDocument((document) => collection.delete(document.uri)),
+    // Whether C++ Modules serves the file can change at any time: installed,
+    // enabled, or switched off for this workspace.
+    vscodeApi.extensions.onDidChange(refreshAll),
+    vscodeApi.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration("mcppls.enable") || event.affectsConfiguration("mcpp.buildScript")) {
+        refreshAll();
+      }
+    }),
   ];
-  for (const document of vscodeApi.workspace.textDocuments) {
-    refresh(document);
-  }
+  refreshAll();
   context.subscriptions.push(...subscriptions);
 }

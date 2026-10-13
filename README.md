@@ -52,7 +52,7 @@ Opening a project never runs `mcpp` on its own and never downloads a toolchain.
 
 - **mcpp CLI and tasks** — build, run, test, clean, the quick menu, toolchains: [docs/commands.md](docs/commands.md).
 - **`mcpp.toml` editing** — structural completion, hovers, go-to-definition, seven structural diagnostics, no formatting: [docs/mcpp-toml.md](docs/mcpp-toml.md).
-- **`build.mcpp` intelligence** — completion and hovers for `mcpp::…` and `import`, seven SPEC-007 diagnostics, never a spurious "module not found": [docs/build-script.md](docs/build-script.md).
+- **`build.mcpp` help** — `build.mcpp` is a `cpp` file that C++ Modules compiles as the build program; this extension adds the `mcpp::…` directive completion, hovers and snippets and the SPEC-007 rule checks no compiler makes: [docs/build-script.md](docs/build-script.md).
 - **Libraries** — browse the package index already on this machine, offline; the detail page shows the real example code, the version matrix, and whether the workspace already depends on it.
 - **Cache views and cleanup** — project artifacts and the shared build cache, previewed before anything is deleted: [docs/cache.md](docs/cache.md).
 - **C++ Modules** — the other extension's state and actions, in the project view and the status-bar menu, forwarded not reimplemented: [docs/commands.md](docs/commands.md).

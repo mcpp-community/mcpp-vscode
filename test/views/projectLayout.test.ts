@@ -414,3 +414,47 @@ test("the standalone C++ Modules view is gone", () => {
   assert.doesNotMatch(source, /createTreeView/);
   assert.match(source, /export function registerLanguageServerCommands\(/);
 });
+
+test("other C++ language services: active ones are named and one click turns them off", () => {
+  const block: LanguageServiceBlock = {
+    ...HEALTHY,
+    otherCppFeatures: {
+      active: [
+        { extensionId: "ms-vscode.cpptools", displayName: "C/C++", settable: true },
+        { extensionId: "llvm-vs-code-extensions.vscode-clangd", displayName: "clangd", settable: true },
+      ],
+      canRestore: false,
+    },
+  };
+  const service = find(buildProjectTree({ root: "/w" }, { languageService: block }), "project.languageService");
+  // Right under the provider, so "who answers my C++ files" reads top to bottom.
+  assert.deepEqual(ids(service?.children ?? []).slice(0, 3), [
+    "project.languageService.status",
+    "project.languageService.provider",
+    "project.languageService.otherCppFeatures",
+  ]);
+  const row = find(service?.children ?? [], "project.languageService.otherCppFeatures");
+  assert.equal(text(row?.label), "Other C++ language services");
+  assert.equal(text(row?.description), "C/C++, clangd");
+  assert.equal(row?.icon, "warning");
+  assert.equal(row?.iconColor, undefined);
+  assert.equal(row?.command?.command, "mcpp.languageServer.manageConflicts");
+  assert.equal(row?.contextValue, "mcppOtherCppFeatures");
+});
+
+test("other C++ language services: with none, the row is a dimmed confirmation with nothing to click", () => {
+  const block: LanguageServiceBlock = { ...HEALTHY, otherCppFeatures: { active: [], canRestore: true } };
+  const service = find(buildProjectTree({ root: "/w" }, { languageService: block }), "project.languageService");
+  const row = find(service?.children ?? [], "project.languageService.otherCppFeatures");
+  assert.equal(text(row?.label), "Only C++ Modules is serving C++");
+  assert.equal(row?.icon, "pass");
+  assert.equal(row?.iconColor, "disabledForeground");
+  assert.equal(row?.command, undefined);
+  // What mcppls turned off can still be put back, from the row's context menu.
+  assert.equal(row?.contextValue, "mcppOtherCppFeaturesRestorable");
+});
+
+test("other C++ language services: no row when there is nothing to read", () => {
+  const service = find(buildProjectTree({ root: "/w" }, { languageService: HEALTHY }), "project.languageService");
+  assert.equal(find(service?.children ?? [], "project.languageService.otherCppFeatures"), undefined);
+});

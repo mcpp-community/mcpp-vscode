@@ -1,38 +1,35 @@
 # Editing `build.mcpp`
 
 `build.mcpp` is mcpp's build program: C++ that the engine compiles and runs to produce the
-build graph. It gets its own language id, `mcpp-build` (exact filename `build.mcpp`), with the
-TextMate grammar `source.mcpp-build` from `syntaxes/mcpp-build.tmLanguage.json`; the module
-grammar `source.cpp.mcpp-modules` is injected into both `source.cpp` and `source.mcpp-build`.
+build graph. **It is an ordinary `cpp` document** (this extension declares the filename for the
+`cpp` language, and C++ Modules associates `.mcpp` with `cpp` too); the module grammar
+`source.cpp.mcpp-modules` is injected into `source.cpp`.
 
-## Why it is not handed to the C++ language service
+## Who answers what
 
-Measured on a real mcppls payload with clangd 23.1.0, handing `build.mcpp` to the C++ language
-service fails for **both** `import std;` and `import mcpp;`:
+C++ Modules (mcppls, 0.0.12 and later) compiles `build.mcpp` as the build program it is: against
+the modules it really imports, `mcpp`, `std` and the plugins named in
+`[build-dependencies]`, with the toolchain the build uses. Its completion, hover, navigation and
+diagnostics are a compiler's. This extension adds what no compiler says:
 
-```text
-$ mcppls check build.mcpp --payload <payload>
-root      …/examples/11-features/greeter
-database  6 entries, 2 standard library units, 0 left out
-module    build.mcpp:2: module 'mcpp' not found
-E [module_not_found] Line 1: module 'std' not found
-E Failed to build module mcpp; due to Don't get the module unit for module mcpp
-clangd    exit 3
+| | C++ Modules serves the file | C++ Modules is disabled or switched off here |
+| --- | --- | --- |
+| SPEC-007 rule checks (six of the seven rules below) | this extension | this extension |
+| `unknownSymbol` | off — the compiler's answer replaces it | this extension, import-aware |
+| `mcpp::…` directive completion and hover, snippets | this extension | this extension |
+| Module names after `import` (completion, hover) | C++ Modules | this extension |
 
-$ mcppls check src/main.cpp --payload <payload>
-database  6 entries, 2 standard library units, 0 left out
-clangd    exit 0
-```
+"Serves" is read without asking anything of the language server: the C++ Modules extension is
+installed and enabled, and `mcppls.enable` is not `false` for the workspace. When that changes
+(the extension is enabled, disabled, or switched off for the workspace) the open `build.mcpp`
+files are re-checked at once.
 
-The reason is in the build database: `mcpp emit build-database --spec compile-commands --format
-json` lists 6 records and **none of them is `build.mcpp`** — it only appears under `data.watch`.
-mcpp deliberately does not put the build program into the compilation database, and mcppls's
-model has no `build.mcpp` (it handles `target/.build-mcpp/deps/…`). So this is not "only `mcpp`
-is missing": `std` fails too, and VS Code has no public API to filter a diagnostic another
-extension published.
-
-**Therefore `build.mcpp` stays in its own language id and the C++ language service never sees
-it.** This extension analyses the file itself, and it never reports any import as missing.
+Up to 0.6.0 this extension gave `build.mcpp` a language id of its own, `mcpp-build`. VS Code
+prefers a filename match over an extension match, so that hid the file from C++ Modules, which
+selects `cpp` documents: the build program got a line-by-line text check instead of a compiler,
+and `import mcpp.rules.qt;` followed by `mcpp::rules::qt::…` was reported as an unknown name.
+A setting written for that language (`"[mcpp-build]": { … }`) no longer applies; write it under
+`"[cpp]"`.
 
 ## What this extension provides
 
@@ -42,19 +39,20 @@ work in an untrusted workspace.
 
 ### Completion
 
-Registered for the `mcpp-build` language in `src/buildscript/providers.ts`.
+Registered for `cpp` documents named `build.mcpp`, in `src/buildscript/providers.ts`.
 
 - After `mcpp::` (or `mcpp::pre`): directive names, from the 31 entries in the snapshot's
   `directives` array, with `-` rewritten to `_` (so the wire name `link-flag` offers
   `link_flag`). Kind: function.
-- After `import ` or `export import `: the concrete module names from the known-module table
-  (the `prefix.*` patterns are not offered as literal text). Kind: module, with the module's
-  description as documentation.
+- After `import ` or `export import `, only while C++ Modules does not serve the file: the
+  concrete module names from the known-module table (the `prefix.*` patterns are not offered as
+  literal text). Kind: module, with the module's description as documentation.
 
 ### Hover
 
-- On a known module name in an `import`: the module name and its description (for a
-  `prefix.*` match, the concrete name the user wrote is shown).
+- On a known module name in an `import`, only while C++ Modules does not serve the file: the
+  module name and its description (for a `prefix.*` match, the concrete name the user wrote is
+  shown).
 - On `mcpp::<name>`: the wire spelling (`mcpp:<wire>=`), `slot`, `scope`, `since protocol`, the
   SPEC-007 rules and a link into mcpp's `docs/30-build-mcpp.md`.
 
@@ -78,7 +76,7 @@ diagnostic's `code`; `source` is `mcpp`.
 
 | Code | What it flags | SPEC-007 |
 | --- | --- | --- |
-| `mcpp.buildscript.unknownSymbol` | An `mcpp::<name>` that is not a directive, an action role or a typed-API name in the snapshot | §2 |
+| `mcpp.buildscript.unknownSymbol` | An `mcpp::<name>` that is not a directive, an action role or a typed-API name in the snapshot, and not a namespace the file imports (`import mcpp.rules.qt;` covers `mcpp::rules::…`). Only while C++ Modules does not serve the file | §2 |
 | `mcpp.buildscript.roleLiteral` | `role = "<known role>"`; use `mcpp::roles::<role>` so an engine that does not know it refuses to compile | R3.6 |
 | `mcpp.buildscript.prepareNeedsOutputDir` | A `prepare` action with no `output_dir(…)` | R3.3 |
 | `mcpp.buildscript.rpathInLinkFlag` | `-Wl,-rpath` in `link_flag`; use `mcpp::runtime_search_dir(…)` | R4.4 |
@@ -113,8 +111,8 @@ the raw-string and block-comment state carries across lines.
 
 | Field | Value |
 | --- | --- |
-| `sourceVersion` | `2026.10.1.3` |
-| `sourceCommit` | `4d81d062` |
+| `sourceVersion` | `2026.10.11.1` |
+| `sourceCommit` | `3fb2d0cc` |
 | `protocolVersion` | `15` |
 | `cacheEpoch` | `3` |
 | `roles` | `source`, `check`, `object`, `artifact`, `prepare` |

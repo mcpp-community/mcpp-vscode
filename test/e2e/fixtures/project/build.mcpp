@@ -1,0 +1,9 @@
+import std;
+import mcpp;
+import mcpp.rules.qt;
+
+int main() {
+    auto qt = mcpp::rules::qt::options{};
+    mcpp::link_flag("-Wl,-rpath,/opt/lib");
+    return 0;
+}
