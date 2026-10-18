@@ -205,5 +205,6 @@
   "view.mcpp.project.name": "Project",
   "viewsContainer.mcpp.title": "mcpp",
   "viewsWelcome.library": "No mcpp package index was found on this machine.\n\nRun `mcpp index update` once, or set `mcpp.library.indexPath` to an index checkout.\n[Run mcpp index update](command:mcpp.library.updateIndex)",
-  "command.mcpp.project.showDependencyGraph.title": "Show Project Dependency Graph"
+  "command.mcpp.project.showDependencyGraph.title": "Show Project Dependency Graph",
+  "command.mcpp.project.showModuleDependencyGraph.title": "Show C++ Modules Dependency Graph"
 }

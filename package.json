@@ -328,6 +328,11 @@
         "title": "%command.mcpp.project.showDependencyGraph.title%",
         "category": "%category%",
         "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "mcpp.project.showModuleDependencyGraph",
+        "title": "%command.mcpp.project.showModuleDependencyGraph.title%",
+        "category": "%category%"
       }
     ],
     "configuration": {

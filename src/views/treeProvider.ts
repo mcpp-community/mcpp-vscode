@@ -40,6 +40,8 @@ export function toTreeItem(node: TreeNode): vscode.TreeItem {
   item.id = node.id;
   item.description = node.description === undefined ? undefined : resolveLabel(node.description);
   item.tooltip = node.tooltip === undefined ? undefined : resolveLabel(node.tooltip);
+  // VS Code otherwise substitutes the tooltip for the accessible tree label.
+  item.accessibilityInformation = { label: [resolveLabel(node.label), item.description].filter(Boolean).join(" ") };
   if (node.icon !== undefined) {
     // A `ThemeColor` id is resolved by the host; an id a theme does not define
     // leaves the icon in the normal foreground colour, which is why the model

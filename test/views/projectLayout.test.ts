@@ -210,7 +210,7 @@ test("the dependency group is two levels, marked and resolved, with no connector
   assert.ok(group);
   assert.equal(text(group.label), "Dependencies (7)");
   assert.equal(text(group.description), "1 dev");
-  assert.equal(group.expanded, true);
+  assert.equal(group.expanded, false);
   assert.deepEqual(ids(group.children ?? []), declared.map((entry) => `project.dependency.${entry.name}${entry.dev ? ":dev" : ""}`));
   assert.equal(group.tooltip?.key, "Declared in mcpp.toml; the resolved version comes from mcpp.lock.");
 
@@ -241,16 +241,18 @@ test("the dependency group is two levels, marked and resolved, with no connector
   }
 });
 
-test("the basics section ends with the dependencies and the language-service block", () => {
+test("dependencies follow Basics as a folded sibling; module graph remains inside Basics", () => {
   const tree = buildProjectTree(
     { root: "/w", target: "x86_64-linux-gnu", dependencies: [{ name: "compat.zlib" }] },
     { lock: parseLockfile(LOCK_TEXT), languageService: { installed: false } },
   );
+  assert.deepEqual(ids(tree), ["project.section.basic", "project.dependencies", "project.section.commands"]);
+  assert.equal(find(tree, "project.dependencies")?.expanded, false);
   assert.deepEqual(ids(find(tree, "project.section.basic")?.children ?? []), [
     "project.package",
     "project.target",
     "project.toolchain",
-    "project.dependencies",
+    "project.moduleDependencies",
     "project.languageService",
   ]);
 });

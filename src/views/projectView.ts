@@ -1,9 +1,8 @@
 /**
- * The project view: two labelled sections — 「基本信息」 and 「常用命令」.
+ * The project view: 「基本信息」, folded 「依赖」, then 「常用命令」.
  *
  * The first section is what the project is (identity, target, toolchain, the
- * declared dependencies and the folded C++ Modules block); the second is what can
- * be done to it. The summary is read from `mcpp.toml` and refreshed when the
+ * module graph and the folded C++ Modules block); the final section contains actions. The summary is read from `mcpp.toml` and refreshed when the
  * manifest changes; anything unreadable is omitted rather than guessed, and
  * `mcpp: Environment Self-check` is the place that reports what mcpp itself
  * resolves.

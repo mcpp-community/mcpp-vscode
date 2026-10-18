@@ -27,3 +27,17 @@ button:hover { background:var(--vscode-toolbar-hoverBackground);color:var(--vsco
 #graph .edgeLabel rect.background { fill:var(--vscode-editor-background) !important;opacity:1 !important; }
 #graph .node text>tspan:first-child .text-inner-tspan { font-weight:600 !important; }
 #graph .node text>tspan:nth-child(n+2) { font-size:11px !important; }
+
+.graph-tools { display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;font-size:12px; }
+.graph-tabs { display:flex;gap:2px;padding:2px;border:1px solid var(--vscode-panel-border);border-radius:6px; }
+.graph-tabs [aria-pressed=true] { color:var(--vscode-foreground);background:var(--vscode-toolbar-activeBackground); }
+.graph-tools input,.graph-tools select { font:inherit;background:var(--vscode-input-background);color:var(--vscode-input-foreground);border:1px solid var(--vscode-input-border,transparent);padding:4px 7px;border-radius:4px; }
+.graph-tools input { width:180px;min-width:100px; } .graph-tools input:focus,.graph-tools select:focus { outline:1px solid var(--vscode-focusBorder); }
+.graph-selection { min-height:30px;display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;color:var(--vscode-descriptionForeground);font-size:12px; }
+#selected-node { overflow:hidden;white-space:nowrap;text-overflow:ellipsis; } button:disabled { opacity:.4;cursor:default; }
+#graph { height:calc(100vh - 245px); }
+#graph.is-loading { visibility:hidden; } #graph-state { position:absolute;top:50%;left:24px;right:24px;transform:translateY(-50%);text-align:center;color:var(--vscode-descriptionForeground);font-size:13px;white-space:pre-wrap; }
+#graph-state[hidden], [hidden] { display:none !important; } #graph-notice { color:var(--vscode-descriptionForeground);font-size:11px;margin:8px 0; }
+#graph .fold-control,#graph .fold-control tspan { fill:var(--vscode-textLink-foreground);cursor:pointer;font-weight:600; }
+#graph .fold-control:hover { text-decoration:underline; } #graph .fold-control:focus-visible { outline:1px solid var(--vscode-focusBorder); }
+@media(max-width:600px) { .graph-selection { flex-wrap:wrap; } .graph-tools { gap:8px; } #graph { height:calc(100vh - 290px); } }

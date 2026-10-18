@@ -81,7 +81,7 @@ await fs.writeFile(path.join(scratch, '.vscode/settings.json'), JSON.stringify({
   'mcpp.ui.language': 'en', 'mcpp.diagnostics.selfCheckOnStartup': false,
   'mcpp.toml.indexCompletion': false,
 }, null, 2));
-const userSettings = { 'workbench.startupEditor': 'none', 'telemetry.telemetryLevel': 'off', 'workbench.colorTheme': 'Default Dark Modern', 'window.title': 'Libraries automated review · ${rootName}', 'git.openRepositoryInParentFolders': 'never' };
+const userSettings = { 'workbench.startupEditor': 'none', 'telemetry.telemetryLevel': 'off', 'workbench.colorTheme': 'Default Dark Modern', 'window.title': 'Libraries automated review · ${rootName}', 'git.openRepositoryInParentFolders': 'never', 'extensions.autoUpdate': false };
 const settingsFile = path.join(userData, 'User/settings.json');
 await fs.writeFile(settingsFile, JSON.stringify(userSettings));
 const version = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8')).version;
@@ -104,6 +104,7 @@ async function palette(command) {
   await page.locator('.quick-input-list .monaco-list-row').filter({ hasText: command }).filter({ visible: true }).first().click();
 }
 async function check(name, action) {
+  if (process.env.MCPP_UI_ONLY_MODULES && !name.startsWith('real mcppls modules') && !name.startsWith('module source')) return;
   const start = Date.now(); await action();
   checks.push({ name, elapsedMs: Date.now() - start, ok: true });
   console.log(`PASS ${name}`);
@@ -123,6 +124,11 @@ try {
   await palette('Developer: Reload Window');
   await reloaded;
   await eventually(() => page.locator('.statusbar').innerText(), (text) => /\bmcpp\b/.test(text), 'extension reactivation', 30000);
+  await palette('View: Single Column Editor Layout');
+  await page.keyboard.press('Control+P');
+  await page.locator('.quick-input-widget:visible input').fill(manifestPath);
+  await page.locator('.quick-input-list .monaco-list-row').filter({visible:true}).first().click();
+  await eventually(()=>page.locator('.monaco-editor:visible').innerText(),text=>text.includes('libraries-ui-test'),'initial scratch project editor');
   await palette('mcpp: Search and Add a Dependency');
   const list = await frameWith('#library-search');
   await eventually(() => list.locator('[data-row]').count(), (count) => count > 200, 'official catalog');
@@ -417,7 +423,9 @@ try {
   });
   await check('direct dependency rows show coordinates and focus their graph node', async()=>{
     const basics=page.getByRole('treeitem',{name:'Basics',exact:true});
-    if(await basics.getAttribute('aria-expanded')==='false')await basics.click();
+    if(await basics.getAttribute('aria-expanded')==='true')await basics.click();
+    const dependencies=page.getByRole('treeitem',{name:/^Dependencies \(\d+\)/});
+    if(await dependencies.getAttribute('aria-expanded')==='false')await dependencies.click();
     const library=page.getByRole('treeitem',{name:/compat\.libpng@1\.6\.50/});
     await library.click();
     let graph=await frameWith('#graph');
@@ -428,6 +436,69 @@ try {
     graph=await frameWith('#graph');
     await eventually(async()=>(await frameWith('#graph')).locator('.node.manifest.is-focused').textContent(),text=>text.includes('graph-level-1'),'path dependency focused');
     await page.screenshot({path:path.join(artifacts,'dependency-focused.png')});
+  });
+  await check('real mcppls modules graph shows entries, internal expansion and only one external hop', async()=>{
+    const moduleRoot=path.join(scratch,'module-project');
+    await fs.mkdir(path.join(moduleRoot,'src'),{recursive:true});
+    await fs.mkdir(path.join(moduleRoot,'vendor/ext/src'),{recursive:true});
+    await fs.writeFile(path.join(moduleRoot,'mcpp.toml'),'[package]\nname="module-ui-test"\nversion="0.1.0"\nstandard="c++23"\n[lib]\npath="src/l0.cppm"\n[dependencies]\nexternal={path="vendor/ext"}\n');
+    await fs.writeFile(path.join(moduleRoot,'src/main.cpp'),'import demo.l0;\nint main() { return 0; }\n');
+    for(let i=0;i<7;i++)await fs.writeFile(path.join(moduleRoot,`src/l${i}.cppm`),`export module demo.l${i};\nimport ${i<6?`demo.l${i+1}`:'external.api'};\n`);
+    await fs.writeFile(path.join(moduleRoot,'vendor/ext/mcpp.toml'),'[package]\nname="external"\nversion="0.1.0"\nstandard="c++23"\n[lib]\npath="src/api.cppm"\n');
+    await fs.writeFile(path.join(moduleRoot,'vendor/ext/src/api.cppm'),'export module external.api;\nimport external.hidden;\n');
+    await fs.writeFile(path.join(moduleRoot,'vendor/ext/src/hidden.cppm'),'export module external.hidden;\n');
+    await page.keyboard.press('Control+P');
+    await page.locator('.quick-input-widget:visible input').fill(path.join(moduleRoot,'mcpp.toml'));
+    await page.locator('.quick-input-list .monaco-list-row').filter({hasText:'module-project'}).filter({visible:true}).first().click();
+    await eventually(()=>page.locator('.monaco-editor:visible').innerText(),text=>text.includes('module-ui-test'),'module project editor');
+    const basics=page.getByRole('treeitem',{name:'Basics',exact:true});
+    if(await basics.getAttribute('aria-expanded')==='false')await basics.click();
+    await page.getByRole('treeitem',{name:'C++ Modules Deps',exact:true}).click();
+    const graph=await frameWith('#graph');
+    await eventually(()=>graph.locator('#graph').innerText(),text=>text.includes('demo.l3'),'real module graph',35000);
+    assert.match(await graph.locator('#graph').innerText(),/src\/main.cpp/);
+    assert.match(await graph.locator('#graph').innerText(),/entry · lib · export module/);
+    assert.doesNotMatch(await graph.locator('#graph').innerText(),/demo.l4|external.hidden/);
+    await graph.locator('.node[data-node-key="demo.l3"] .fold-control').click();
+    await eventually(()=>graph.locator('#graph').innerText(),text=>text.includes('demo.l4'),'expand one module level');
+    await graph.locator('#graph-depth').selectOption('5');
+    await eventually(()=>graph.locator('#graph').innerText(),text=>text.includes('demo.l5')&&!text.includes('demo.l6'),'five-level view');
+    await graph.locator('#graph-depth').selectOption('all');
+    await eventually(()=>graph.locator('#graph').innerText(),text=>text.includes('external.api'),'all internal depths');
+    assert.doesNotMatch(await graph.locator('#graph').innerText(),/external.hidden/);
+    assert.equal(await graph.locator('.node.index[data-node-key="external.api"]').count(),1,'local path package remains an external boundary');
+    await graph.locator('#graph-search').fill('demo.l6');
+    await graph.locator('#graph-search').press('Enter');
+    await eventually(()=>graph.locator('.node.is-focused').textContent(),text=>text.includes('demo.l6'),'hidden module search focuses graph');
+    await graph.locator('[data-action=overview]').click();
+    await graph.locator('#graph-depth').selectOption('3');
+    await eventually(()=>graph.locator('#graph').innerText(),text=>!text.includes('demo.l4'),'depth reset');
+    await graph.locator('[data-zoom=fit]').click();
+    await graph.locator('body').screenshot({path:path.join(artifacts,'module-graph.png')});
+  });
+  await check('module source opens read-only beside the graph and view state survives switching',async()=>{
+    const graph=await frameWith('#graph');
+    const original=await fs.readFile(path.join(scratch,'module-project/src/l0.cppm'),'utf8');
+    await graph.locator('.node[data-node-key="demo.l0"]').click();
+    const editor=page.locator('.monaco-editor:visible').filter({hasText:'export module demo.l0;'});
+    await editor.waitFor();
+    await editor.locator('.view-lines').click({position:{x:25,y:20}});
+    await page.keyboard.type('MODULE_SOURCE_MUST_BE_READ_ONLY');
+    assert.doesNotMatch(await editor.innerText(),/MODULE_SOURCE_MUST_BE_READ_ONLY/);
+    assert.equal(await fs.readFile(path.join(scratch,'module-project/src/l0.cppm'),'utf8'),original);
+    await page.keyboard.press('Escape');
+    assert.equal(await graph.locator('#graph svg').count(),1,'graph remains mounted beside source');
+    await graph.locator('[data-zoom=fit]').click();
+    await graph.locator('[data-zoom="+"]').click();
+    const transform=()=>graph.locator('#graph svg').evaluate(svg=>getComputedStyle(svg).transform);
+    const before=await transform();
+    await graph.locator('[data-mode=packages]').click();
+    await eventually(()=>graph.locator('[data-mode=packages]').getAttribute('aria-pressed'),state=>state==='true','package mode');
+    await eventually(()=>graph.locator('#graph').innerText(),text=>text.includes('module-ui-test'),'package graph restored');
+    await graph.locator('[data-mode=modules]').click();
+    await eventually(()=>graph.locator('.node.is-focused').textContent(),text=>text.includes('demo.l0'),'module selection restored');
+    assert.equal(await transform(),before,'module viewport survives view switch');
+    await page.screenshot({path:path.join(artifacts,'module-source-readonly.png')});
   });
   await fs.writeFile(path.join(artifacts, 'results.json'), JSON.stringify({ checks, testedAt: new Date().toISOString(), codeVersion: run(code, ['--version']).trim(), mcppEnv: JSON.parse(run(realMcpp, ['self', 'env', '--format', 'json'])) }, null, 2));
   console.log(`UI checks passed. Evidence: ${artifacts}`);

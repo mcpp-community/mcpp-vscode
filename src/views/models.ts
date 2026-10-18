@@ -7,11 +7,11 @@
  * themselves be labels, so a phrase like `C++23 · 87 source file(s)` is composed
  * from two independently translatable pieces instead of one frozen sentence.
  *
- * The project view is two labelled sections: **Basics** (what this project is)
+ * The project view has **Basics** (what this project is), folded direct dependencies
  * and **Common commands** (what can be done to it). The C++ Modules block is
  * folded into the first one, with the status line carrying the problem count, so
  * a degraded language service is visible **without expanding anything**. The
- * second section is the only place in the view whose rows are all commands, and
+ * commands section is the only place in the view whose rows are all commands, and
  * it is the one that starts open: the sidebar should open on what can be done,
  * with 「基本信息」 one click away.
  *
@@ -498,7 +498,7 @@ export interface ProjectTreeOptions {
   platform?: KeyboardPlatform;
 }
 
-/** The project view: two labelled sections — what this is, then what to do with it. */
+/** Project facts, folded direct dependencies, then common actions. */
 export function buildProjectTree(project: ProjectSummary | undefined, options: ProjectTreeOptions = {}): TreeNode[] {
   if (project === undefined) {
     // An empty workspace gets the one thing that can be done in it, next to the
@@ -562,12 +562,13 @@ export function buildProjectTree(project: ProjectSummary | undefined, options: P
       description: { key: "{0}", args: [project.toolchainSpec ?? "host default"] },
       icon: "chip",
     },
-    ...dependencyNodes(project, options),
+    { id: "project.moduleDependencies", label: plain("C++ Modules Deps"), icon: "type-hierarchy", iconColor: "charts.blue", command: { command: "mcpp.project.showModuleDependencyGraph", title: plain("C++ Modules Deps"), arguments: [{ root: project.root }] } },
     ...languageServiceNodes(options.languageService),
   ];
 
   return [
     { id: "project.section.basic", label: plain("Basics"), icon: "info", children: basic },
+    ...dependencyNodes(project, options),
     { id: "project.section.commands", label: plain("Common commands"), icon: "terminal", expanded: true, children: commandNodes(options) },
   ];
 }
@@ -660,7 +661,7 @@ function dependencyNodes(project: ProjectSummary, options: ProjectTreeOptions): 
       ...(dev === 0 ? {} : { description: { key: "{0} dev", args: [dev] } }),
       icon: "library",
       tooltip: plain("Declared in mcpp.toml; the resolved version comes from mcpp.lock."),
-      expanded: true,
+      expanded: false,
       children: declared.map((entry) => dependencyNode(entry, lock, project.root)),
     },
   ];
