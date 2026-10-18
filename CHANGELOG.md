@@ -1,5 +1,8 @@
 ## Unreleased
 
+## 0.8.0 - 2026-10-19
+
+- Package details use the available editor width on fullscreen displays, with bounded side gutters and a compact metadata column.
 - Add C++ Modules Deps backed by mcppls JSON, with entry/source cards, one-hop external boundaries and read-only source navigation. Share the package graph canvas with depth/branch folding, hidden-node search, focused views and 150-node/300-edge layout budgets. Move direct Dependencies after Basics as a collapsed sibling.
 
 - Example code uses a uniform background and compact heading actions; local and bundled example sources both open read-only. Direct dependency rows now resolve namespaces correctly, show package coordinates and sources, and focus the selected node in the simplified colored graph.
