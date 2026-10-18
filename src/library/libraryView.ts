@@ -101,6 +101,7 @@ export function registerLibraryView(context: vscode.ExtensionContext, deps: Libr
   return {
     refresh: () => provider.refresh(),
     select: (key: string) => provider.select(key),
+    setUpdateStatus: (status: string) => provider.setUpdateStatus(status),
     dispose: () => provider.dispose(),
   };
 }
@@ -118,6 +119,7 @@ export function registerLibraryView(context: vscode.ExtensionContext, deps: Libr
 export interface LibraryViewHandle {
   refresh(): Promise<void>;
   select(key: string): void;
+  setUpdateStatus(status: string): void;
   dispose(): void;
 }
 
@@ -134,6 +136,7 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
   private refreshAgain = false;
   private requestGeneration = 0;
   private error: string | undefined;
+  private updateNote: string | undefined;
   private painted = false;
   private lastHtml = "";
   /**
@@ -149,6 +152,8 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
     private readonly context: vscode.ExtensionContext,
     private readonly deps: LibraryViewDeps,
   ) {}
+
+  public setUpdateStatus(status: string): void { this.updateNote = status; this.paint(); }
 
   public select(key: string): void { this.selectedKey = key; this.paint(); }
 
@@ -460,7 +465,7 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
       networkSearchSetting: "mcpp.library.networkSearch",
       dataSource: this.dataSource(snapshot.roots, entries.length),
       sourceDetails: snapshot.roots.map((root) => `${root.kind === "official" ? t("Official index") : t("Custom index")}: ${root.path}${root.updatedAt === undefined ? "" : ` · ${new Date(root.updatedAt).toLocaleString()}`}`).join("\n"),
-      status: this.error ?? this.searchNote,
+      status: [this.error, this.searchNote, this.updateNote].filter(Boolean).join(" ") || undefined,
       projectNotice: this.deps.projectRoot() === undefined ? t("Browse libraries; select an mcpp project in the detail page to add dependencies.") : undefined,
       countTemplate: ui[LIBRARY_UI.count],
       total: rows.length,

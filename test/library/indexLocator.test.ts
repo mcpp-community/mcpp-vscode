@@ -18,7 +18,7 @@ const locator: typeof import("../../src/library/indexLocator") = createRequire(_
 loader._load = original;
 
 test("official discovery prefers new layout, never substitutes xim, and honors explicit paths", async () => {
-  const home = await fs.mkdtemp(path.join(tmpdir(), "mcpp-index-test-"));
+  const home = await fs.realpath(await fs.mkdtemp(path.join(tmpdir(), "mcpp-index-test-")));
   const make = async (relative: string) => fs.mkdir(path.join(home, relative, "pkgs"), { recursive: true });
   try {
     await make("registry/data/xim-pkgindex");
@@ -61,7 +61,7 @@ test("async results cannot cross package, project or page lifetime", () => {
 
 
 test("catalog caching observes nested descriptor edits and reapplies fresh project declarations", async () => {
-  const base = await fs.mkdtemp(path.join(tmpdir(), "mcpp-snapshot-test-"));
+  const base = await fs.realpath(await fs.mkdtemp(path.join(tmpdir(), "mcpp-snapshot-test-")));
   const previousHome = process.env.MCPP_HOME;
   process.env.MCPP_HOME = base;
   const directory = path.join(base, "indices/mcpplibs/pkgs/c");
@@ -117,7 +117,7 @@ json = "1"
 
 
 test("selected-project fallback observes disk changes and stops on disposal", async () => {
-  const root = await fs.mkdtemp(path.join(tmpdir(), "mcpp-project-watch-"));
+  const root = await fs.realpath(await fs.mkdtemp(path.join(tmpdir(), "mcpp-project-watch-")));
   await fs.writeFile(path.join(root, "mcpp.toml"), "before");
   let changes = 0;
   const watcher = watchProjectFiles(root, () => { changes++; }, 30);
@@ -126,6 +126,14 @@ test("selected-project fallback observes disk changes and stops on disposal", as
     const start = Date.now();
     while (changes === 0 && Date.now() - start < 2000) { await new Promise((resolve) => setTimeout(resolve, 40)); }
     assert.ok(changes > 0);
+    await watcher.check();
+    await fs.writeFile(path.join(root, "mcpp.lock"), "transient lock");
+    await watcher.check();
+    const created = changes;
+    await fs.rm(path.join(root, "mcpp.lock"));
+    const removedAt = Date.now();
+    while (changes === created && Date.now() - removedAt < 2000) { await new Promise((resolve) => setTimeout(resolve, 40)); }
+    assert.ok(changes > created, "a lock seen by native events between polling ticks must still report deletion");
     watcher.dispose();
     const previous = changes;
     await fs.writeFile(path.join(root, "mcpp.lock"), "new lock");

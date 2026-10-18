@@ -541,5 +541,8 @@
   "Add development dependency": "添加开发依赖",
   "Build dependencies are used by the build script. Copy this entry into mcpp.toml; mcpp add does not support this group yet.": "构建依赖供构建脚本使用；当前 mcpp add 尚不支持此分组，请复制此项并编辑 mcpp.toml。",
   "Changing this declaration requires a manifest edit. Copy the entry and update its dependency group in mcpp.toml.": "请复制声明并在 mcpp.toml 中调整依赖分组；已有声明不会自动迁移。",
-  "The dependency declaration changed. Review mcpp.toml before adding it.": "依赖声明已变化，请先检查 mcpp.toml 再添加。"
+  "The dependency declaration changed. Review mcpp.toml before adding it.": "依赖声明已变化，请先检查 mcpp.toml 再添加。",
+  "Updating mcpp index…": "正在更新 mcpp 索引…",
+  "Index update failed; showing the last available local snapshot.": "索引更新失败，继续显示上次可用的本地快照。",
+  "Index updated; {0} local packages.": "索引已更新，本地共 {0} 个包。"
 }

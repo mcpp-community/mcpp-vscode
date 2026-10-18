@@ -329,7 +329,7 @@ async function buildModel(session: DetailSession, id: string, request: number): 
   const entry = snapshot.entries.find((candidate) => candidate.file === id || candidate.id === id);
   // The root the descriptor lives under, matched by path: two roots may share a
   // directory name, and the site link belongs to the one that holds the file.
-  const root = entry === undefined ? undefined : snapshot.roots.find((candidate) => path.relative(candidate.path, entry.file).split(path.sep)[0] !== "..");
+  const root = entry === undefined ? undefined : snapshot.roots.find((candidate) => { const relative = path.relative(candidate.path, entry.file); return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative); });
   const ui = labels();
   if (entry === undefined) {
     const preview = session.preview;

@@ -42,7 +42,7 @@ async function until(predicate: () => boolean | Promise<boolean>): Promise<void>
 }
 
 test("an in-flight add keeps its original project and cannot update a different package page", async () => {
-  const root = await fs.mkdtemp(path.join(tmpdir(), "mcpp-detail-operation-"));
+  const root = await fs.realpath(await fs.mkdtemp(path.join(tmpdir(), "mcpp-detail-operation-")));
   index = path.join(root, "index");
   await fs.mkdir(path.join(index, "pkgs"), { recursive: true });
   const a = path.join(index, "pkgs/compat.a.lua");

@@ -43,6 +43,7 @@ await fs.mkdir(path.join(scratch, '.vscode'), { recursive: true });
 await fs.mkdir(path.join(scratch, 'secondary'), { recursive: true });
 await fs.mkdir(path.join(userData, 'User'), { recursive: true });
 await fs.mkdir(artifacts, { recursive: true });
+for (const file of ['results.json', 'failure.txt', 'failure.png']) { await fs.rm(path.join(artifacts, file), { force: true }); }
 await fs.writeFile(manifestPath, baseManifest);
 await fs.writeFile(path.join(scratch, 'secondary/mcpp.toml'), '[package]\nname = "secondary"\nversion = "0.1.0"\n');
 const wrapper = path.join(scratch, 'mcpp-ui.cjs');
@@ -51,9 +52,11 @@ const {spawnSync}=require('node:child_process');
 const fs=require('node:fs');
 const path=require('node:path');
 const args=process.argv.slice(2);
+if(args[0]==='index' && args[1]==='update' && fs.existsSync(path.join(__dirname,'fail-update'))) {console.error('forced index failure');process.exit(17);}
 if(args[0]==='xpkg' && fs.existsSync(path.join(__dirname,'fail-parse'))) { console.error('forced parse failure'); process.exit(17); }
 if(args[0]==='add' && fs.existsSync(path.join(__dirname,'fail-add'))) { console.error('forced add failure'); process.exit(17); }
 const sleep=ms=>Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,ms);
+if(args[0]==='xpkg' && fs.existsSync(path.join(__dirname,'delay-parse'))) {sleep(25000);}
 if(args[0]==='search') {
  const query=args[1]; fs.appendFileSync(path.join(__dirname,'search.log'),query+'\\n');
  sleep(query==='race-a'?1800:100);
@@ -70,7 +73,9 @@ await fs.rm(path.join(scratch, 'search.log'), { force: true });
 await fs.rm(path.join(scratch, 'add-started'), { force: true });
 await fs.rm(path.join(scratch, 'delay-add'), { force: true });
 await fs.rm(path.join(scratch, 'fail-add'), { force: true });
+await fs.rm(path.join(scratch, 'fail-update'), { force: true });
 await fs.rm(path.join(scratch, 'fail-parse'), { force: true });
+await fs.rm(path.join(scratch, 'delay-parse'), { force: true });
 await fs.writeFile(path.join(scratch, '.vscode/settings.json'), JSON.stringify({
   'mcpp.path': wrapper, 'mcpp.library.indexPath': '', 'mcpp.library.networkSearch': false,
   'mcpp.ui.language': 'en', 'mcpp.diagnostics.selfCheckOnStartup': false,
@@ -103,13 +108,13 @@ async function check(name, action) {
   checks.push({ name, elapsedMs: Date.now() - start, ok: true });
   console.log(`PASS ${name}`);
 }
-async function openPackage(id) {
+async function openPackage(id, timeout = 15000) {
   const list = await frameWith('#library-search');
   await list.locator('#library-search').fill(id);
   await list.locator(`[data-id="${id}"]`).click();
   const detail = await frameWith('#detail-main');
   await eventually(() => detail.locator('.detail-title').innerText(), (text) => text === id, 'detail identity');
-  await eventually(() => detail.locator('.detail-primary').getAttribute('aria-busy'), (value) => value === 'false', 'detail loaded');
+  await eventually(() => detail.locator('.detail-primary').getAttribute('aria-busy'), (value) => value === 'false', 'detail loaded', timeout);
   return detail;
 }
 try {
@@ -125,10 +130,32 @@ try {
     assert.match(await list.locator('#library-footer').innerText(), /mcpp-index/);
     assert.equal(await list.locator('[data-cross="false"]').count(), await list.locator('[data-row]').count());
     const detail = await openPackage('compat.argparse');
+    await detail.locator('[data-action=selectProject]').click();
+    await page.locator('.quick-input-widget:visible').getByText(scratch, { exact: true }).first().click();
+    await eventually(() => detail.locator('.detail-primary').getAttribute('aria-busy'), (value) => value === 'false', 'initial project selected');
+    await detail.locator('#detail-kind-toggle').click();
+    await detail.locator('[data-kind=normal]').click();
     assert.equal(await detail.locator('#detail-version').inputValue(), '3.2');
     assert.equal(await detail.locator('#detail-add').isDisabled(), true);
     assert.match(await detail.locator('.project-context').innerText(), /libraries-ui-test/);
     assert.equal(await detail.locator('button[data-version]').count(), 0);
+  });
+  await check('lockfile changes stay distinct from direct declarations', async () => {
+    const detail = await openPackage('compat.argparse');
+    const lock = path.join(scratch, 'mcpp.lock');
+    await fs.writeFile(lock, 'version = 2\n[package."argparse"]\nnamespace = "compat"\nversion = "3.1"\n');
+    await eventually(() => detail.locator('.detail-controls').innerText(), (text) => text.includes('Resolved in lockfile: 3.1'), 'lock overlay');
+    assert.equal(await detail.locator('#detail-version').inputValue(), '3.2');
+    await fs.rm(lock, { force: true });
+    await eventually(() => detail.locator('.detail-controls').innerText(), (text) => !text.includes('Resolved in lockfile'), 'lock deletion');
+  });
+  await check('failed index updates retain the usable catalog', async () => {
+    const count = await list.locator('[data-row]').count();
+    await fs.writeFile(path.join(scratch, 'fail-update'), '1');
+    await list.locator('[data-action=update]').click();
+    await eventually(() => list.locator('.search-status').innerText(), (text) => text.includes('Index update failed'), 'index failure feedback');
+    assert.equal(await list.locator('[data-row]').count(), count);
+    await fs.rm(path.join(scratch, 'fail-update'), { force: true });
   });
   await check('search, keyboard opening and stable document', async () => {
     await list.evaluate(() => { window.__librariesDocument = 'same'; });
@@ -237,6 +264,17 @@ try {
     await fs.rm(path.join(scratch, 'fail-parse'), { force: true });
     await fallback.locator('[data-action="retry"]:visible').first().click();
     await eventually(() => fallback.locator('body').innerText(), (text) => !text.includes('Versions are from descriptor text'), 'parse recovery');
+  });
+  await check('a timed-out parser retains package identity and recovers on retry', async () => {
+    await fs.writeFile(path.join(scratch, 'delay-parse'), '1');
+    const start = Date.now();
+    const detail = await openPackage('compat.apriltag', 30000);
+    assert.ok(Date.now() - start >= 19000, 'parser timeout was exercised');
+    assert.match(await detail.locator('body').innerText(), /Versions are from descriptor text/);
+    assert.equal(await detail.locator('.detail-title').innerText(), 'compat.apriltag');
+    await fs.rm(path.join(scratch, 'delay-parse'), { force: true });
+    await detail.locator('[data-action="retry"]:visible').first().click();
+    await eventually(() => detail.locator('body').innerText(), (text) => !text.includes('Versions are from descriptor text'), 'timeout recovery');
   });
   await check('add failures keep the selected version and permit recovery', async () => {
     const detail = await openPackage('compat.zlib');
