@@ -620,7 +620,10 @@ test("tag release 工作流校验版本并发布 VSIX", () => {
 test("the release workflow guards the published artefact against local leakage", () => {
   const workflow = readFileSync(path.join(root, ".github/workflows/release.yml"), "utf8");
   assert.match(workflow, /校验 VSIX 体积与内容/);
-  assert.match(workflow, /forbidden in \.dev-profile\/ \.agents\/ test\/ tools\/ src\/ node_modules\//);
+  const forbidden = /for forbidden in ([^;\n]+)/.exec(workflow)?.[1].trim().split(/\s+/) ?? [];
+  for (const directory of [".dev-profile/", ".agents/", ".agnets/", "test/", "tools/", "src/", "node_modules/"]) {
+    assert.ok(forbidden.includes(directory), `${directory} must be excluded from the VSIX`);
+  }
   assert.match(workflow, /unzip -t/);
 });
 
@@ -667,7 +670,10 @@ test("CI runs the gates, the package checks, the drift check and every e2e varia
   assert.match(workflow, /unzip -t/);
   // A local dev profile once leaked into the VSIX (64 MB); the guard is now explicit.
   assert.match(workflow, /The VSIX stays small and free of local state/);
-  assert.match(workflow, /forbidden in \.dev-profile\/ \.agents\/ test\/ tools\/ src\/ node_modules\//);
+  const forbidden = /for forbidden in ([^;\n]+)/.exec(workflow)?.[1].trim().split(/\s+/) ?? [];
+  for (const directory of [".dev-profile/", ".agents/", ".agnets/", "test/", "tools/", "src/", "node_modules/"]) {
+    assert.ok(forbidden.includes(directory), `${directory} must be excluded from the VSIX`);
+  }
   assert.match(workflow, /xvfb-run -a npm run test:e2e:one/);
   // The snapshot drift gate only means something with an mcpp checkout present.
   assert.match(workflow, /generated-drift:/);

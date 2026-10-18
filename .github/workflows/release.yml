@@ -51,8 +51,12 @@ jobs:
           COUNT=$(unzip -l "$VSIX" | tail -1 | awk '{print $2}')
           echo "VSIX: $COUNT files, $((SIZE / 1024)) KiB"
           if [ "$COUNT" -gt 200 ]; then echo "文件数异常：$COUNT"; exit 1; fi
-          if [ "$SIZE" -gt 1048576 ]; then echo "体积异常：$SIZE 字节"; exit 1; fi
-          for forbidden in .dev-profile/ .agents/ test/ tools/ src/ node_modules/; do
+          # Budget includes offline Mermaid and the official test example snapshot.
+          if [ "$SIZE" -gt 2097152 ]; then echo "体积异常（超过 2 MiB）：$SIZE 字节"; exit 1; fi
+          for required in dist/vendor/mermaid.js dist/vendor/MERMAID-LICENSE dist/data/library-examples.json; do
+            unzip -p "$VSIX" "extension/$required" > /dev/null
+          done
+          for forbidden in .dev-profile/ .agents/ .agnets/ test/ tools/ src/ node_modules/; do
             if unzip -l "$VSIX" | grep -q "extension/$forbidden"; then
               echo "产物里混入了本地内容：$forbidden"
               exit 1
