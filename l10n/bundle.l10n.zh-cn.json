@@ -544,5 +544,18 @@
   "The dependency declaration changed. Review mcpp.toml before adding it.": "依赖声明已变化，请先检查 mcpp.toml 再添加。",
   "Updating mcpp index…": "正在更新 mcpp 索引…",
   "Index update failed; showing the last available local snapshot.": "索引更新失败，继续显示上次可用的本地快照。",
-  "Index updated; {0} local packages.": "索引已更新，本地共 {0} 个包。"
+  "Index updated; {0} local packages.": "索引已更新，本地共 {0} 个包。",
+  "Bundled official index tests · commit {0}": "插件内置官方索引测试 · 提交 {0}",
+  "Project dependency graph": "项目依赖图",
+  "Copy Mermaid": "复制 Mermaid",
+  "Up to 3 dependency levels · {0} packages · {1} edges": "最多 3 层依赖 · {0} 个包 · {1} 条关系",
+  "Edges come from manifests and local index descriptors; lockfile versions are shown when available. This is a declaration graph, not a resolved build graph. Dashed nodes have no local dependency metadata; conditional edges may not apply to this environment.": "关系来自项目清单和本地索引描述符；有锁定版本时显示锁定版本。这是声明关系图，不代表实际构建解析结果。虚线节点缺少本地依赖元数据，条件关系可能不适用于当前环境。",
+  "Large graph truncated at 120 nodes or 240 edges.": "大型依赖图已截断（最多 120 个节点或 240 条关系）。",
+  "Fit": "适应窗口",
+  "Mermaid source": "Mermaid 源码",
+  "Could not render the graph. Copy Mermaid source or refresh to retry.": "依赖图渲染失败，可复制 Mermaid 源码或刷新重试。",
+  "Could not read project dependencies: {0}": "无法读取项目依赖：{0}",
+  "Open an mcpp project first.": "请先打开一个 mcpp 项目。",
+  "The project manifest is missing or unreadable.": "项目清单不存在或无法读取。",
+  "Reading project dependencies…": "正在读取项目依赖…"
 }

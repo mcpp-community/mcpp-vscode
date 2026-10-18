@@ -32,7 +32,6 @@ import type { LibraryRow } from "./libraryHtml";
 import { addDependency } from "./addDependency";
 import {
   badgesOf,
-  codeSnippets,
   descriptorDependencies,
   lockPackageVersions,
   mergeSurfaces,
@@ -44,6 +43,7 @@ import {
   type Surface,
 } from "./indexModel";
 import { cachedDescriptorText, loadSnapshot, readDescriptorText, readExampleFiles } from "./indexLocator";
+import { bundledExample, bundledExampleText, EXAMPLE_SCHEME } from "./examples";
 import {
   DETAIL_UI,
   decodeDetailMessage,
@@ -76,6 +76,7 @@ export interface DetailPanelDeps {
    * library view's `refresh()`.
    */
   onDependenciesChanged?: () => void;
+  onProjectFilesRead?: (root: string, manifest: string, lock: string) => void;
 }
 
 /** Build the opener once; `extension.ts` passes `openLibraryDetail` to the view. */
@@ -83,6 +84,9 @@ export function createLibraryDetailOpener(
   context: vscode.ExtensionContext,
   deps: DetailPanelDeps,
 ): LibraryDetailOpener {
+  context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(EXAMPLE_SCHEME, {
+    provideTextDocumentContent: (uri) => bundledExampleText(uri.path) ?? "",
+  }));
   const session: DetailSession = {
     context,
     deps,
@@ -225,7 +229,7 @@ async function handle(session: DetailSession, raw: unknown): Promise<void> {
       return;
     case "openFile": {
       if (!session.model?.snippets.some((snippet) => snippet.fileKey === message.key)) { return; }
-      await vscode.window.showTextDocument(vscode.Uri.file(message.key)); return;
+      await vscode.window.showTextDocument(message.key.startsWith(`${EXAMPLE_SCHEME}:`) ? vscode.Uri.parse(message.key) : vscode.Uri.file(message.key)); return;
     }
     case "copy": {
       let result: string;
@@ -375,9 +379,13 @@ async function buildModel(session: DetailSession, id: string, request: number): 
   const currentVersions = platform === undefined ? [] : (versions[platform] ?? []);
   const latest = currentVersions.length === 0 ? undefined : sortVersions(currentVersions)[0];
 
-  const exampleFiles = entry.example === undefined ? [] : await readExampleFiles(root ? [root] : [], entry.example);
-  const snippets = codeSnippets(exampleFiles, { context: 2, maxSnippets: 3, maxLines: 20 }).map((snippet) => ({
-    ...snippet, ...(root === undefined ? {} : { fileKey: path.join(root.path, snippet.file) }),
+  const localExamples = entry.example === undefined ? [] : await readExampleFiles(root ? [root] : [], entry.example);
+  const bundled = root?.kind === "official" && localExamples.length === 0 ? bundledExample(entry.id) : undefined;
+  const exampleFiles = localExamples.length ? localExamples : bundled?.files ?? [];
+  const snippets = exampleFiles.slice(0, 2).map((file) => ({
+    file: file.path, startLine: 1, usageLine: 0, lines: file.text.split(/\r?\n/).slice(0, 80),
+  })).map((snippet) => ({
+    ...snippet, ...(bundled ? { fileKey: `${EXAMPLE_SCHEME}:/${snippet.file}` } : root ? { fileKey: path.join(root.path, snippet.file) } : {}),
   }));
   // Only verified lines from real example source are copyable.
   const realUsage = usageLinesFor(exampleFiles, entry.id);
@@ -385,8 +393,11 @@ async function buildModel(session: DetailSession, id: string, request: number): 
 
   // The lock answers what a build actually resolved for each declared edge —
   // the same matching rule `installedFor` uses for this package itself.
-  const lock = lockPackageVersions(projectRoot ? readTextTolerantly(path.join(projectRoot, "mcpp.lock")) : "");
-  const declarations = readProjectDeclarations(projectRoot ? readTextTolerantly(path.join(projectRoot, "mcpp.toml")) : "");
+  const lockText = projectRoot ? readTextTolerantly(path.join(projectRoot, "mcpp.lock")) : "";
+  const manifestText = projectRoot ? readTextTolerantly(path.join(projectRoot, "mcpp.toml")) : "";
+  if (projectRoot) { session.deps.onProjectFilesRead?.(projectRoot, manifestText, lockText); }
+  const lock = lockPackageVersions(lockText);
+  const declarations = readProjectDeclarations(manifestText);
   const catalog = snapshot.entries.map((entry) => entry.id);
   const dependencyGroups = {
     normal: projectDependencyState(entry.id, declarations, lock, catalog, "normal"),
@@ -431,7 +442,7 @@ async function buildModel(session: DetailSession, id: string, request: number): 
     includeDirs: info?.includeDirs ?? [],
     targets: (info?.targets ?? []).map((target) => target.name ?? "").filter((name) => name.length > 0),
     snippets,
-    ...(entry.example === undefined ? {} : { exampleProject: entry.example.project }),
+    ...(bundled ? { exampleProject: bundled.project, exampleProvenance: t("Bundled official index tests · commit {0}", bundled.commit.slice(0, 12)) } : entry.example ? { exampleProject: entry.example.project } : {}),
     usage,
     // One discreet link, and only when this root really is the index that
     // publishes those package pages (see `IndexRoot.site`).

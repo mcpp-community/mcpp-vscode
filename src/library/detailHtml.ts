@@ -113,6 +113,7 @@ export interface DetailModel {
   snippets: DetailSnippet[];
   /** The example project the snippets come from, when there is one. */
   exampleProject?: string;
+  exampleProvenance?: string;
   /**
    * How a reader brings the package into code (§22): the example project's
    * real `import …;` / `#include …` lines when there are any, else the honest
@@ -610,6 +611,7 @@ export function renderDetailHtml(model: DetailModel, assets: DetailAssets): stri
       ${model.usage.length ? `<p class="detail-hint">${escapeHtml(label(DETAIL_UI.usageSource))}</p>` + model.usage.map((line) => `<div class="detail-usage-line"><code>${escapeHtml(line)}</code><button type="button" class="detail-copy" data-copy="${escapeHtml(line)}">${escapeHtml(label(DETAIL_UI.copy))}</button></div>`).join("") : model.snippets.length ? "" : `<p class="detail-hint">${escapeHtml(label(DETAIL_UI.unknownUsage))}</p>`}
       ${model.snippets.length ? `<h2>${escapeHtml(label(DETAIL_UI.code))}</h2>${renderSnippets(model, label)}` : ""}
       ${model.exampleProject === undefined ? "" : `<p class="detail-hint">${escapeHtml(fill(label, DETAIL_UI.codeProject, [model.exampleProject]))}</p>`}
+      ${model.exampleProvenance === undefined ? "" : `<p class="detail-hint">${escapeHtml(model.exampleProvenance)}</p>`}
     </section>
     <aside class="detail-aside">
       <details class="detail-section" data-section="versions" data-persist="versions"><summary>${escapeHtml(label(DETAIL_UI.platforms))}</summary>${renderVersions(model, label)}</details>

@@ -75,6 +75,11 @@
         {
           "command": "mcpp.languageServer.restoreConflicts",
           "when": "view == mcpp.project && viewItem =~ /^mcppOtherCppFeatures.*Restorable$/"
+        },
+        {
+          "command": "mcpp.project.showDependencyGraph",
+          "when": "view == mcpp.project && viewItem == mcppProjectDependencies",
+          "group": "inline@1"
         }
       ]
     },
@@ -317,6 +322,12 @@
         "title": "%command.mcpp.library.updateIndex.title%",
         "category": "%category%",
         "icon": "$(cloud-download)"
+      },
+      {
+        "command": "mcpp.project.showDependencyGraph",
+        "title": "%command.mcpp.project.showDependencyGraph.title%",
+        "category": "%category%",
+        "icon": "$(type-hierarchy)"
       }
     ],
     "configuration": {
@@ -1151,7 +1162,7 @@
   },
   "scripts": {
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
-    "compile": "tsc -p tsconfig.json",
+    "compile": "tsc -p tsconfig.json && node tools/copy-webview-assets.mjs",
     "test": "npm run check && npm run clean && npm run compile && node --test \"dist/test/**/*.test.js\"",
     "package": "npm run clean && npm run compile && vsce package",
     "test:e2e": "npm run compile && node dist/test/e2e/runTest.js",
@@ -1167,9 +1178,11 @@
     "gen:menuicons": "node tools/generate-quick-menu-icons.mjs",
     "check:icon": "node tools/generate-activitybar-icon.mjs --check && node tools/generate-quick-menu-icons.mjs --check",
     "check:generated": "node tools/check-generators.mjs",
-    "test:e2e:one": "node dist/test/e2e/runTest.js"
+    "test:e2e:one": "node dist/test/e2e/runTest.js",
+    "gen:examples": "node tools/generate-library-examples.mjs"
   },
   "devDependencies": {
+    "@mermaid-js/tiny": "12.2.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^24.0.0",
     "@types/vscode": "^1.91.0",

@@ -142,7 +142,7 @@ const BADGE_KEY_UI: Readonly<Record<BadgeKey, string>> = {
 export type LibraryMessage =
   | { type: "refresh" | "settings" | "update" | "output" | "mounted" }
   | { type: "search"; query: string }
-  | { type: "networkSearch"; enabled: boolean }
+  | { type: "networkSearch"; enabled: boolean; token?: string }
   | { type: "open"; id: string };
 
 export type UiLabel = (key: string) => string;
@@ -239,8 +239,8 @@ function renderToolbar(model: LibraryModel, label: UiLabel): string {
   return [
     `<div class="toolbar">`,
     `  <label class="search-label" for="library-search"><span class="sr-only">${escapeHtml(label(LIBRARY_UI.search))}</span></label>`,
-    `  <input id="library-search" type="search" class="search" autocomplete="off" spellcheck="false" placeholder="${escapeHtml(label(LIBRARY_UI.search))}" aria-label="${escapeHtml(label(LIBRARY_UI.search))}"${attribute("value", model.query)}>`,
-    `  <button class="link-button clear-search" type="button" data-action="clear" aria-label="${escapeHtml(label(LIBRARY_UI.clear))}">×</button>`,
+    `  <input id="library-search" type="text" role="searchbox" class="search" autocomplete="off" spellcheck="false" placeholder="${escapeHtml(label(LIBRARY_UI.search))}" aria-label="${escapeHtml(label(LIBRARY_UI.search))}"${attribute("value", model.query)}>`,
+    `  <button class="link-button clear-search" type="button" data-action="clear" aria-label="${escapeHtml(label(LIBRARY_UI.clear))}"${model.query ? "" : " hidden"}>×</button>`,
     `  <label class="network-toggle" title="${escapeHtml(label(LIBRARY_UI.networkSearchHint))}">`,
     `    <input id="library-network" type="checkbox" data-setting="${escapeHtml(model.networkSearchSetting)}"${flag("checked", model.networkSearch)}>`,
     `    <span>${escapeHtml(label(LIBRARY_UI.networkSearch))}</span>`,
@@ -282,6 +282,8 @@ function clientScript(initialModel: string): string {
   var saved = api && api.getState ? api.getState() || {} : {};
   var searchInput = document.getElementById("library-search");
   var networkInput = document.getElementById("library-network");
+  var networkToken;
+  var networkSequence = 0;
   var selected = state.selectedKey || saved.selected || "";
   if (searchInput && typeof saved.query === "string") { searchInput.value = saved.query; }
   function post(message) { if (api) { api.postMessage(message); } }
@@ -289,6 +291,7 @@ function clientScript(initialModel: string): string {
     if (api && api.setState) { api.setState({ query: searchInput.value, selected: selected, scroll: window.scrollY }); }
   }
   function apply() {
+    document.querySelector('[data-action="clear"]').hidden = searchInput.value.length === 0;
     var query = searchInput.value.trim().toLowerCase();
     var parts = query.split(/\\s+/);
     var rows = Array.from(document.querySelectorAll("[data-row]"));
@@ -321,7 +324,7 @@ function clientScript(initialModel: string): string {
     persist();
   }
   searchInput.addEventListener("input", function () { apply(); post({ type: "search", query: searchInput.value }); });
-  networkInput.addEventListener("change", function () { post({ type: "networkSearch", enabled: networkInput.checked }); });
+  networkInput.addEventListener("change", function () { networkToken = Date.now() + "-" + (++networkSequence); post({ type: "networkSearch", enabled: networkInput.checked, token: networkToken }); });
   document.addEventListener("click", function (event) {
     var target = event.target.closest && event.target.closest("[data-action], [data-row]");
     if (!target) { return; }
@@ -345,6 +348,7 @@ function clientScript(initialModel: string): string {
   window.addEventListener("scroll", persist);
   window.addEventListener("message", function (event) {
     var payload = event.data;
+    if (payload && payload.type === "networkSearchSaved") { if (payload.token === networkToken) { networkToken = undefined; networkInput.checked = payload.enabled; } return; }
     if (!payload || payload.type !== "libraryUpdate") { return; }
     var scroll = window.scrollY;
     var focused = document.activeElement && document.activeElement.getAttribute("data-row");
@@ -357,7 +361,7 @@ function clientScript(initialModel: string): string {
     });
     state = payload.state;
     if (state.selectedKey) { selected = state.selectedKey; }
-    networkInput.checked = payload.networkSearch;
+    if (!networkToken) { networkInput.checked = payload.networkSearch; }
     apply();
     var nextDetails = document.querySelector("footer details"); if (nextDetails) { nextDetails.open = expanded; }
     if (focused) { Array.from(document.querySelectorAll("[data-row]")).some(function (row) { if (row.getAttribute("data-row") === focused) { row.focus(); return true; } return false; }); }
@@ -475,7 +479,7 @@ export function decodeLibraryMessage(raw: unknown): LibraryMessage | undefined {
     case "search":
       return typeof raw.query === "string" ? { type: "search", query: raw.query } : undefined;
     case "networkSearch":
-      return typeof raw.enabled === "boolean" ? { type: "networkSearch", enabled: raw.enabled } : undefined;
+      return typeof raw.enabled === "boolean" ? { type: "networkSearch", enabled: raw.enabled, ...(typeof raw.token === "string" && raw.token.length <= 80 ? { token: raw.token } : {}) } : undefined;
     case "open":
       return nonEmptyString(raw.id) ? { type: "open", id: raw.id } : undefined;
     default:

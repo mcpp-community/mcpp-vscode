@@ -1,5 +1,5 @@
 import type { DeclaredDependencyEntry, LockPackage } from "./indexModel";
-import { parseMcppToml, type TomlValueNode } from "../toml/parser";
+import { parseMcppToml, type TomlValueNode, type TomlKeyValueNode } from "../toml/parser";
 
 export type DependencyKind = "normal" | "dev" | "build";
 
@@ -7,12 +7,12 @@ export interface ProjectDeclaration extends DeclaredDependencyEntry {
   kind?: DependencyKind;
   source?: boolean;
   conditional?: boolean;
+  path?: string;
 }
 
 /** Reuse the editor's TOML parser so quoted keys, comments and source+version tables keep their meaning. */
 export function readProjectDeclarations(text: string): ProjectDeclaration[] {
   const out: ProjectDeclaration[] = [];
-  let section: string[] = [];
   const collect = (id: string, value: TomlValueNode | undefined, kind: DependencyKind, conditional: boolean): void => {
     const dev = kind === "dev";
     if (!value) { return; }
@@ -22,17 +22,29 @@ export function readProjectDeclarations(text: string): ProjectDeclaration[] {
     const version = entries.find((entry) => entry.keyPath[0]?.name === "version")?.value?.text;
     const specKeys = new Set(["version", "path", "git", "url", "branch", "rev", "tag", "features", "backend", "tools", "host-module", "reexport", "workspace"]);
     if (source || entries.some((entry) => specKeys.has(entry.keyPath[0]?.name))) {
-      out.push({ id, version, dev, kind, source, conditional });
+      const localPath = entries.find((entry) => entry.keyPath[0]?.name === "path")?.value?.text;
+      out.push({ id, version, dev, kind, source, conditional, ...(localPath ? { path: localPath } : {}) });
     } else if (entries.length) {
       for (const entry of entries) { collect(`${id}.${entry.keyPath.map((key) => key.name).join(".")}`, entry.value, kind, conditional); }
     } else { out.push({ id, dev, kind, conditional }); }
   };
+  const groups: Array<{ section: string[]; entries: TomlKeyValueNode[] }> = [{ section: [], entries: [] }];
   for (const node of parseMcppToml(text.split(/\r?\n/)).nodes) {
-    if (node.type === "section") { section = node.segments.map((segment) => segment.name); continue; }
+    if (node.type === "section") { groups.push({ section: node.segments.map((segment) => segment.name), entries: [] }); }
+    else { groups[groups.length - 1].entries.push(node); }
+  }
+  for (const { section, entries } of groups) {
     const index = section.findIndex((part) => part === "dependencies" || part === "dev-dependencies" || part === "build-dependencies");
     if (index < 0 || section[0] === "workspace") { continue; }
-    const id = [...section.slice(index + 1), ...node.keyPath.map((key) => key.name)].join(".");
-    collect(id, node.value, section[index] === "dev-dependencies" ? "dev" : section[index] === "build-dependencies" ? "build" : "normal", index !== 0);
+    const kind = section[index] === "dev-dependencies" ? "dev" : section[index] === "build-dependencies" ? "build" : "normal";
+    if (section.length > index + 1 && entries.some((entry) => entry.keyPath.length === 1 && ["version", "path", "git", "url", "workspace"].includes(entry.keyPath[0].name))) {
+      collect(section.slice(index + 1).join("."), { kind: "inlineTable", open: false, range: entries[0].range, entries }, kind, index !== 0);
+    } else {
+      for (const node of entries) {
+        const id = [...section.slice(index + 1), ...node.keyPath.map((key) => key.name)].join(".");
+        collect(id, node.value, kind, index !== 0);
+      }
+    }
   }
   return out;
 }

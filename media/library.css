@@ -442,6 +442,8 @@ body.detail {
   margin: 0;
   padding: 8px 10px;
   overflow-x: auto;
+  max-height: min(52vh, 440px);
+  overflow-y: auto;
   background-color: var(--vscode-textCodeBlock-background, transparent);
   border: 1px solid var(--vscode-panel-border, transparent);
   border-radius: 3px;

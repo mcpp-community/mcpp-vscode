@@ -140,6 +140,26 @@ try {
     assert.match(await detail.locator('.project-context').innerText(), /libraries-ui-test/);
     assert.equal(await detail.locator('button[data-version]').count(), 0);
   });
+  await check('official tests supply real offline usage and a full read-only source', async () => {
+    const detail = await openPackage('compat.argparse');
+    assert.match(await detail.locator('.detail-usage').innerText(), /argparse::ArgumentParser/);
+    assert.match(await detail.locator('.detail-usage').innerText(), /Bundled official index tests/);
+    const source = detail.locator('[data-open-file]').first();
+    assert.match(await source.getAttribute('data-open-file'), /^mcpp-example:/);
+    await source.click();
+    await eventually(() => page.locator('.monaco-editor:visible').innerText(), text => text.includes('ArgumentParser'), 'read-only test source');
+    await openPackage('compat.argparse');
+  });
+  await check('focused search exposes only the custom clear control', async () => {
+    await list.locator('#library-search').fill('argparse');
+    await list.locator('#library-search').focus();
+    assert.equal(await list.locator('[data-action=clear]').count(), 1);
+    assert.equal(await list.locator('#library-search').getAttribute('type'), 'text');
+    assert.equal(await list.locator('#library-search').getAttribute('role'), 'searchbox');
+    await list.locator('[data-action=clear]').click();
+    assert.equal(await list.locator('#library-search').inputValue(), '');
+    assert.equal(await list.locator('[data-action=clear]').isVisible(), false);
+  });
   await check('lockfile changes stay distinct from direct declarations', async () => {
     const detail = await openPackage('compat.argparse');
     const lock = path.join(scratch, 'mcpp.lock');
@@ -330,6 +350,30 @@ try {
       }
     }
     await fs.writeFile(path.join(artifacts, 'layouts.json'), JSON.stringify(layouts, null, 2));
+  });
+  await check('project graph renders three real manifest levels and copies Mermaid', async () => {
+    const graphRoot=path.join(scratch,'graph-project');
+    for(let depth=0;depth<5;depth++) {
+      const directory=depth===0?graphRoot:path.join(graphRoot,`level${depth}`);
+      await fs.mkdir(directory,{recursive:true});
+      await fs.writeFile(path.join(directory,'mcpp.toml'),`[package]\nname="graph-level-${depth}"\nversion="0.1.0"\n`+(depth<4?`[dependencies]\nlevel${depth+1}={path="${depth===0?'':'../'}level${depth+1}"}\n`:'')+(depth===0?`[dependencies.compat]\nlibpng="1.6.50"\n[target.'cfg(windows)'.dependencies]\nwin={path="level1"}\n`:''));
+    }
+    await page.keyboard.press('Control+P');
+    await page.locator('.quick-input-widget:visible input').fill(path.join(graphRoot,'mcpp.toml'));
+    await page.locator('.quick-input-list .monaco-list-row').filter({hasText:'graph-project'}).filter({visible:true}).first().click();
+    await eventually(()=>page.locator('.monaco-editor:visible').innerText(),text=>text.includes('graph-level-0'),'graph project editor');
+    await palette('mcpp: Show Project Dependency Graph');
+    const graph=await frameWith('#graph');
+    await eventually(()=>graph.locator('#graph').innerText(), text=>text.includes('level3'), 'three-level graph');
+    assert.equal(await graph.locator('#graph svg').count(),1);
+    assert.doesNotMatch(await graph.locator('#graph').innerText(),/level4/);
+    assert.match(await graph.locator('#graph').innerText(),/compat.zlib/);
+    assert.match(await graph.locator('pre').textContent(),/-\.->/);
+    await graph.locator('[data-action=copy]').click();
+    await eventually(()=>graph.locator('#feedback').innerText(),text=>text==='Copied','graph copied');
+    await graph.locator('[data-zoom="+"]').click();
+    await graph.locator('[data-zoom=fit]').click();
+    await page.screenshot({path:path.join(artifacts,'dependency-graph.png')});
   });
   await fs.writeFile(path.join(artifacts, 'results.json'), JSON.stringify({ checks, testedAt: new Date().toISOString(), codeVersion: run(code, ['--version']).trim(), mcppEnv: JSON.parse(run(realMcpp, ['self', 'env', '--format', 'json'])) }, null, 2));
   console.log(`UI checks passed. Evidence: ${artifacts}`);

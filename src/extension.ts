@@ -346,6 +346,7 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
     output,
     isTrusted: () => vscode.workspace.isTrusted,
     onDependenciesChanged: () => { void library.refresh(); },
+    onProjectFilesRead: (root, manifest, lock) => { if (root === libraryProjectRoot) { selectedLibraryPoll?.observe(manifest, lock); } },
   });
   const library = registerLibraryView(extensionContext, {
     projectRoot: libraryProject,

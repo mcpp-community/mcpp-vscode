@@ -21,7 +21,7 @@ const panel = {
 const vscode = {
   Uri: { joinPath: (base: { fsPath: string }, ...parts: string[]) => uri(path.join(base.fsPath, ...parts)), file: uri },
   ViewColumn: { Active: 1 }, ProgressLocation: { Window: 1, Notification: 2 },
-  workspace: { isTrusted: true, getConfiguration: () => ({ inspect: (key: string) => ({ globalValue: key === "library.indexPath" ? index : undefined }) }) },
+  workspace: { isTrusted: true, registerTextDocumentContentProvider: () => ({ dispose() {} }), getConfiguration: () => ({ inspect: (key: string) => ({ globalValue: key === "library.indexPath" ? index : undefined }) }) },
   window: {
     createWebviewPanel: () => panel,
     withProgress: (_options: unknown, action: () => Promise<unknown>) => action(),

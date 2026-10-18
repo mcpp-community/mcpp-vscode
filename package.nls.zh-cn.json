@@ -204,5 +204,6 @@
   "view.mcpp.library.name": "库生态",
   "view.mcpp.project.name": "工程",
   "viewsContainer.mcpp.title": "mcpp",
-  "viewsWelcome.library": "本机没有找到 mcpp 包索引。\n\n先运行一次 `mcpp index update`，或用 `mcpp.library.indexPath` 指向一个索引检出。\n[运行 mcpp index update](command:mcpp.library.updateIndex)"
+  "viewsWelcome.library": "本机没有找到 mcpp 包索引。\n\n先运行一次 `mcpp index update`，或用 `mcpp.library.indexPath` 指向一个索引检出。\n[运行 mcpp index update](command:mcpp.library.updateIndex)",
+  "command.mcpp.project.showDependencyGraph.title": "显示项目依赖图"
 }

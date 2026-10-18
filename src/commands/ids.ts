@@ -81,6 +81,7 @@ export const LIBRARY_COMMANDS = {
 
 /** Settings, diagnostics and the mcpp CLI entry points added in 0.5.0. */
 export const TOOL_COMMANDS = {
+  dependencyGraph: "mcpp.project.showDependencyGraph",
   openSettings: "mcpp.openSettings",
   openLanguageServerSettings: "mcpp.openMcpplsSettings",
   selfCheck: "mcpp.selfCheck",

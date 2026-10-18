@@ -122,6 +122,7 @@ test("selected-project fallback observes disk changes and stops on disposal", as
   let changes = 0;
   const watcher = watchProjectFiles(root, () => { changes++; }, 30);
   try {
+    await watcher.check();
     await fs.writeFile(path.join(root, "mcpp.toml"), "after edit");
     const start = Date.now();
     while (changes === 0 && Date.now() - start < 2000) { await new Promise((resolve) => setTimeout(resolve, 40)); }
@@ -134,6 +135,10 @@ test("selected-project fallback observes disk changes and stops on disposal", as
     const removedAt = Date.now();
     while (changes === created && Date.now() - removedAt < 2000) { await new Promise((resolve) => setTimeout(resolve, 40)); }
     assert.ok(changes > created, "a lock seen by native events between polling ticks must still report deletion");
+    watcher.observe(await fs.readFile(path.join(root, "mcpp.toml"), "utf8"), "a transient lock seen by a detail render");
+    const observed = changes;
+    await watcher.check();
+    assert.ok(changes > observed, "a render that saw a lock between ticks must be reconciled even without native events");
     watcher.dispose();
     const previous = changes;
     await fs.writeFile(path.join(root, "mcpp.lock"), "new lock");

@@ -730,6 +730,7 @@ function dependencyNodes(project: ProjectSummary, options: ProjectTreeOptions): 
   return [
     {
       id: "project.dependencies",
+      contextValue: "mcppProjectDependencies",
       label: { key: "Dependencies ({0})", args: [declared.length] },
       ...(dev === 0 ? {} : { description: { key: "{0} dev", args: [dev] } }),
       icon: "library",

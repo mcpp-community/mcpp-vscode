@@ -1,0 +1,8 @@
+body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 20px 28px; }
+header { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 16px; }
+h1 { font-size: 20px; margin: 0 0 8px; } p { line-height: 1.6; } header p, .hint { color: var(--vscode-descriptionForeground); font-size: 12px; overflow-wrap: anywhere; }
+nav, .zoom { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+button { color: var(--vscode-button-secondaryForeground); background: var(--vscode-button-secondaryBackground); border: 1px solid var(--vscode-contrastBorder, transparent); padding: 6px 10px; cursor: pointer; }
+button:hover { background: var(--vscode-button-secondaryHoverBackground); } button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; }
+#graph { overflow: auto; min-height: 200px; margin: 20px 0; border: 1px solid var(--vscode-panel-border); padding: 12px; }
+#graph svg { display: block; margin: auto; height: auto; } pre { overflow: auto; } details { margin: 16px 0; } summary { cursor: pointer; } #feedback { color: var(--vscode-descriptionForeground); }

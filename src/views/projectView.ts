@@ -29,6 +29,7 @@ import {
   type ProjectSummary,
 } from "./models";
 import { registerTreeView } from "./treeProvider";
+import { registerDependencyGraph } from "../projects/dependencyGraphPanel";
 
 export const PROJECT_VIEW_ID = "mcpp.project";
 
@@ -96,6 +97,7 @@ export function registerProjectView(context: vscode.ExtensionContext, deps: Proj
   });
 
   let current = snapshot(deps.currentProject(), true);
+  registerDependencyGraph(context, () => current.summary);
 
   const view = registerTreeView(PROJECT_VIEW_ID, () =>
     buildProjectTree(current.summary, {

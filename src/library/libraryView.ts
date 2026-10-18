@@ -137,6 +137,8 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
   private requestGeneration = 0;
   private error: string | undefined;
   private updateNote: string | undefined;
+  private networkWrites: Promise<void> = Promise.resolve();
+  private networkChange = 0;
   private painted = false;
   private lastHtml = "";
   /**
@@ -249,7 +251,7 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
         this.scheduleSearch();
         return;
       case "networkSearch":
-        await this.setNetworkSearch(message.enabled);
+        await this.setNetworkSearch(message.enabled, message.token);
         return;
       case "open":
         await this.deps.openDetail(message.id, this.extra.find((row) => (row.key ?? row.id) === message.id));
@@ -260,19 +262,24 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
   }
 
   /** `mcpp.library.networkSearch`: persisted, then honoured on the next query. */
-  private async setNetworkSearch(enabled: boolean): Promise<void> {
+  private async setNetworkSearch(enabled: boolean, token?: string): Promise<void> {
+    const change = ++this.networkChange;
     this.requestGeneration++;
     this.extra = [];
     this.searchNote = undefined;
     try {
       const source = effective<boolean>("mcpp.library.networkSearch").source;
-      await write("mcpp.library.networkSearch", enabled, source === "workspace" || source === "workspaceFolder" ? "workspace" : "user");
+      const queued = this.networkWrites.then(() => write("mcpp.library.networkSearch", enabled, source === "workspace" || source === "workspaceFolder" ? "workspace" : "user"));
+      this.networkWrites = queued.catch(() => {});
+      await queued;
     } catch (error) {
       this.deps.output?.appendLine(
         `mcpp library: could not write mcpp.library.networkSearch: ${error instanceof Error ? error.message : String(error)}`,
       );
       this.searchNote = t("The setting could not be written; the toggle was not saved.");
     }
+    if (change !== this.networkChange) { return; }
+    void this.view?.webview.postMessage({ type: "networkSearchSaved", token, enabled: this.networkSearch() });
     if (enabled && this.networkSearch()) {
       await this.runCrossRegistrySearch();
     } else {

@@ -932,11 +932,12 @@ export interface ExampleInput {
  *
  * The site generator's `_scan_examples` contract: `{project, path, paths[],
  * count}`, keyed by every dependency id the project's manifest names. Several
- * projects may demonstrate one package; the first (sorted) wins, which is what
- * the generator does too.
+ * projects may consume one package; prefer its own named test project over
+ * incidental consumers, then use deterministic alphabetical order.
  */
 export function exampleCatalog(inputs: readonly ExampleInput[]): Map<string, ExampleRef> {
   const catalog = new Map<string, ExampleRef>();
+  const priorities = new Map<string, number>();
   const sorted = [...inputs].sort((a, b) => (a.project < b.project ? -1 : a.project > b.project ? 1 : 0));
   for (const input of sorted) {
     if (input.sources.length === 0) {
@@ -949,8 +950,12 @@ export function exampleCatalog(inputs: readonly ExampleInput[]): Map<string, Exa
       count: input.sources.length,
     };
     for (const id of declaredDependencies(input.text)) {
-      if (!catalog.has(id)) {
+      const short = id.slice(id.lastIndexOf(".") + 1).replace(/[-_]/g, "").toLowerCase();
+      const projectName = input.project.replace(/[-_]/g, "").toLowerCase();
+      const priority = projectName === short ? 0 : projectName.startsWith(short) ? 1 : 2;
+      if (!catalog.has(id) || priority < priorities.get(id)!) {
         catalog.set(id, ref);
+        priorities.set(id, priority);
       }
     }
   }
