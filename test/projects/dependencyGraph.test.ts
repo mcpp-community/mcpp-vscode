@@ -17,6 +17,7 @@ test("graph shows three dependency hops, shared edges and cycles without inventi
   assert.equal(graph.nodes.find(n=>n.name==="compat.a")?.version, "1.2");
   assert.ok(graph.edges.some(e=>e.kind==="dev"));
   assert.ok(graph.edges.some(e=>e.kind==="build"));
+  assert.match(graphMermaid(graph), /\|"compat\.a@1"\|/, "keep a coordinate intact in a quoted Mermaid edge label");
   const shallow = await buildDependencyGraph(root, "demo", reader, 2);
   assert.ok(!shallow.nodes.some(n=>n.name==="compat.d"));
 });

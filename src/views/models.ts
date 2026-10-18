@@ -24,7 +24,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-import { parseMcppToml } from "../toml/parser";
+import { readProjectDeclarations } from "../library/projectState";
 
 export type LabelArgument = string | number | Label;
 
@@ -84,6 +84,8 @@ export interface TargetSummary {
 
 /** One dependency declared in `mcpp.toml`, before `mcpp.lock` says what it resolved to. */
 export interface DependencyDeclaration {
+  kind?: "normal" | "dev" | "build";
+  conditional?: boolean;
   /** `namespace.name` as written in the manifest. */
   name: string;
   /** The declared version constraint, when the manifest states one. */
@@ -116,94 +118,17 @@ export interface ProjectSummary {
 
 /* ------------------------------------------------------------------ mcpp.toml */
 
-/** The two manifest groups the project view reports. A dep is either runtime or dev. */
-const DEPENDENCY_GROUPS: Readonly<Record<string, boolean>> = {
-  dependencies: false,
-  "dev-dependencies": true,
-};
-
-function dependencyField(entry: DependencyDeclaration, key: string, value: string | undefined): void {
-  if (value === undefined || value.length === 0) {
-    return;
-  }
-  if (key === "version") {
-    entry.version = value;
-  } else if (key === "path") {
-    entry.path = value;
-  } else if (key === "git") {
-    entry.git = value;
-  }
-}
-
-/**
- * The declared dependencies, read with the fault-tolerant TOML scanner the
- * completion provider already uses.
- *
- * Three shapes are recognised, because all three are legal mcpp.toml:
- * `name = "1.0"`, `name = { path = "…" }` (including multi-line inline tables)
- * and `[dependencies.name]` with the fields on following lines. `workspace` and
- * `features` are deliberately ignored: neither changes what the row must say.
- */
+/** Direct declarations only; share the namespace-aware parser with Libraries and the graph. */
 export function readDependencies(lines: readonly string[]): DependencyDeclaration[] {
-  const found: DependencyDeclaration[] = [];
-  const byName = new Map<string, DependencyDeclaration>();
-  const ensure = (name: string, dev: boolean): DependencyDeclaration => {
-    const existing = byName.get(name);
-    if (existing !== undefined) {
-      return existing;
-    }
-    const entry: DependencyDeclaration = dev ? { name, dev: true } : { name };
-    byName.set(name, entry);
-    found.push(entry);
-    return entry;
-  };
-
-  try {
-    let group: string | undefined;
-    let named: DependencyDeclaration | undefined;
-    for (const node of parseMcppToml(lines).nodes) {
-      if (node.type === "section") {
-        const segments = node.segments.map((segment) => segment.name);
-        const head = segments[0];
-        if (head === undefined || DEPENDENCY_GROUPS[head] === undefined) {
-          group = undefined;
-          named = undefined;
-          continue;
-        }
-        group = head;
-        // `[dependencies.name]` names the dependency; its fields follow.
-        named = segments.length >= 2 ? ensure(segments.slice(1).join("."), DEPENDENCY_GROUPS[head] === true) : undefined;
-        continue;
-      }
-      if (group === undefined) {
-        continue;
-      }
-      const dev = DEPENDENCY_GROUPS[group] === true;
-      const key = node.keyPath.map((segment) => segment.name).join(".");
-      const value = node.value;
-      if (value === undefined) {
-        continue;
-      }
-      if (named !== undefined) {
-        dependencyField(named, key, value.text);
-        continue;
-      }
-      if (key.length === 0) {
-        continue;
-      }
-      const entry = ensure(key, dev);
-      if (value.kind === "string") {
-        dependencyField(entry, "version", value.text);
-      } else if (value.kind === "inlineTable") {
-        for (const field of value.entries ?? []) {
-          dependencyField(entry, field.keyPath.map((segment) => segment.name).join("."), field.value?.text);
-        }
-      }
-    }
-  } catch {
-    // A manifest being edited is not an error here; whatever was read stands.
-  }
-  return found;
+  return readProjectDeclarations(lines.join("\n")).map((entry) => ({
+    name: entry.id,
+    ...(entry.version ? { version: entry.version } : {}),
+    ...(entry.dev ? { dev: true } : {}),
+    ...(entry.kind === "build" ? { kind: "build" as const } : {}),
+    ...(entry.conditional ? { conditional: true } : {}),
+    ...(entry.path ? { path: entry.path } : {}),
+    ...(entry.git ? { git: entry.git } : {}),
+  }));
 }
 
 /* ------------------------------------------------------------------ mcpp.lock */
@@ -736,41 +661,26 @@ function dependencyNodes(project: ProjectSummary, options: ProjectTreeOptions): 
       icon: "library",
       tooltip: plain("Declared in mcpp.toml; the resolved version comes from mcpp.lock."),
       expanded: true,
-      children: declared.map((entry) => dependencyNode(entry, lock)),
+      children: declared.map((entry) => dependencyNode(entry, lock, project.root)),
     },
   ];
 }
 
-/**
- * One declared dependency.
- *
- * Level 1 is the declaration, with its markers; level 2 is the single version
- * `mcpp.lock` resolved, or `Resolved —` when the lock has nothing to say. There
- * is deliberately no third level and no connector glyph: `mcpp.lock` is a flat
- * set with no parent/child edges, so a deeper tree would be invented.
- */
-function dependencyNode(declaration: DependencyDeclaration, lock: readonly LockPackage[]): TreeNode {
+/** One clickable direct dependency; transitive edges belong exclusively to the graph. */
+function dependencyNode(declaration: DependencyDeclaration, lock: readonly LockPackage[], root: string): TreeNode {
   const resolved = resolveLockedPackage(lock, declaration.name);
-  const resolvedLabel: Label =
-    resolved?.version === undefined ? plain("Resolved —") : { key: "Resolved {0}", args: [resolved.version] };
-  const marker = dependencyMarker(declaration);
-  const node: TreeNode = {
-    id: `project.dependency.${declaration.name}`,
-    label: plain(declaration.name),
-    description: marker === undefined ? resolvedLabel : { key: "{0} · {1}", args: [marker, resolvedLabel] },
-    icon: declaration.path === undefined ? "package" : "folder",
+  const version = declaration.version ?? resolved?.version;
+  const coordinate = declaration.name + (version ? `@${version}` : "");
+  const source = declaration.path ? `path · ${declaration.path}` : declaration.git ? "git" : "index";
+  const markers = [plain(source), ...(declaration.dev ? [plain("dev")] : []), ...(declaration.kind === "build" ? [plain("build")] : []), ...(declaration.conditional ? [plain("conditional")] : [])];
+  return {
+    id: `project.dependency.${declaration.name}${declaration.dev ? ":dev" : declaration.kind === "build" ? ":build" : ""}${declaration.conditional ? ":conditional" : ""}`,
+    label: plain(coordinate), description: joined(markers),
+    tooltip: plain(coordinate + "\n" + source + (resolved?.version && resolved.version !== version ? `\nResolved ${resolved.version}` : "")),
+    icon: declaration.path ? "folder" : declaration.git ? "git-branch" : "package",
+    iconColor: declaration.path ? "charts.purple" : declaration.git ? "charts.orange" : "charts.green",
+    command: { command: "mcpp.project.showDependencyGraph", title: plain("Project dependency graph"), arguments: [{ root, dependency: declaration.name, kind: declaration.dev ? "dev" : declaration.kind ?? "normal", path: declaration.path }] },
   };
-  return node;
-}
-
-function dependencyMarker(declaration: DependencyDeclaration): Label | undefined {
-  if (declaration.path !== undefined) {
-    return { key: "path · {0}", args: [declaration.path] };
-  }
-  if (declaration.git !== undefined) {
-    return { key: "git · {0}", args: [declaration.git] };
-  }
-  return declaration.dev === true ? plain("dev") : undefined;
 }
 
 function languageServiceNodes(block: LanguageServiceBlock | undefined): TreeNode[] {

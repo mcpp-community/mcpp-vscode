@@ -1,8 +1,29 @@
-body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 20px 28px; }
-header { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 16px; }
-h1 { font-size: 20px; margin: 0 0 8px; } p { line-height: 1.6; } header p, .hint { color: var(--vscode-descriptionForeground); font-size: 12px; overflow-wrap: anywhere; }
-nav, .zoom { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-button { color: var(--vscode-button-secondaryForeground); background: var(--vscode-button-secondaryBackground); border: 1px solid var(--vscode-contrastBorder, transparent); padding: 6px 10px; cursor: pointer; }
-button:hover { background: var(--vscode-button-secondaryHoverBackground); } button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; }
-#graph { overflow: auto; min-height: 200px; margin: 20px 0; border: 1px solid var(--vscode-panel-border); padding: 12px; }
-#graph svg { display: block; margin: auto; height: auto; } pre { overflow: auto; } details { margin: 16px 0; } summary { cursor: pointer; } #feedback { color: var(--vscode-descriptionForeground); }
+body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 20px 24px; margin: 0; }
+.graph-header,.graph-heading,nav,.zoom,.graph-legend { display:flex;align-items:center;gap:10px; }
+.graph-header { justify-content:space-between; gap:16px; padding-bottom:16px; }
+.graph-heading { min-width:0; flex-wrap:wrap; } h1 { font-size:17px;font-weight:600;margin:0; }
+.project-name { color:var(--vscode-descriptionForeground); font-size:12px; } .depth-pill { font:11px var(--vscode-editor-font-family,monospace); padding:2px 6px;border-radius:4px;background:var(--vscode-badge-background);color:var(--vscode-badge-foreground); }
+button { display:inline-flex;align-items:center;justify-content:center;color:var(--vscode-descriptionForeground);background:transparent;border:1px solid transparent;border-radius:5px;padding:5px 8px;cursor:pointer;font:inherit;font-size:12px;white-space:nowrap; }
+button:hover { background:var(--vscode-toolbar-hoverBackground);color:var(--vscode-foreground); } button:focus-visible { outline:1px solid var(--vscode-focusBorder);outline-offset:2px; }
+.graph-stage { position:relative; border:1px solid var(--vscode-panel-border);border-radius:8px;background:var(--vscode-editor-background); }
+#graph { overflow:hidden; position:relative; cursor:grab; user-select:none; touch-action:none; min-height:260px; height:calc(100vh - 185px);box-sizing:border-box; }
+#graph svg { display:block;position:absolute;left:0;top:0;transform-origin:0 0;height:auto; }
+#graph.is-grabbing,#graph.is-grabbing .node { cursor:grabbing; } .zoom { position:absolute;right:12px;bottom:12px;gap:2px;background:var(--vscode-editorWidget-background);border:1px solid var(--vscode-panel-border);border-radius:6px;padding:2px; }
+.zoom button { min-width:28px; } #feedback { color:var(--vscode-descriptionForeground);font-size:11px;white-space:nowrap; }
+.graph-help { margin-top:12px;color:var(--vscode-descriptionForeground);font-size:11px; } summary { cursor:pointer; } pre { overflow:auto;max-height:240px;line-height:1.6; } .graph-legend { margin:12px 0; } .graph-legend span { border-radius:4px;padding:3px 7px; }
+#graph svg .node rect { filter:none !important;stroke-width:1.25px; }
+#graph .node.project rect { fill:color-mix(in srgb,var(--vscode-charts-blue) 13%,var(--vscode-editor-background));stroke:var(--vscode-charts-blue) !important; }
+#graph .node.manifest rect { fill:color-mix(in srgb,var(--vscode-charts-purple) 10%,var(--vscode-editor-background));stroke:var(--vscode-charts-purple) !important; }
+#graph .node.index rect { fill:color-mix(in srgb,var(--vscode-charts-green) 10%,var(--vscode-editor-background));stroke:var(--vscode-charts-green) !important; }
+#graph .node.unknown rect { fill:color-mix(in srgb,var(--vscode-charts-orange) 8%,var(--vscode-editor-background));stroke:var(--vscode-charts-orange) !important;stroke-dasharray:4 3; }
+#graph .node text { fill:var(--vscode-foreground);font-size:13px; } #graph .node text>tspan:first-child { font-weight:600; }
+#graph .node text>tspan:nth-child(n+2) { fill:var(--vscode-descriptionForeground);font-size:11px; }
+#graph .node { cursor:pointer; } #graph .node.is-focused rect,#graph .node:focus-visible rect { stroke:var(--vscode-focusBorder) !important;stroke-width:3px !important;filter:drop-shadow(0 0 5px var(--vscode-focusBorder)) !important; }
+#graph .edgeLabel { color:var(--vscode-descriptionForeground);font-size:11px; } #graph .edgeLabel text { fill:var(--vscode-descriptionForeground); } #graph .edgeLabel .labelBkg { background:var(--vscode-editor-background);fill:var(--vscode-editor-background); }
+#graph .edgePath path { stroke:var(--vscode-descriptionForeground); } .legend-project { color:var(--vscode-charts-blue); } .legend-path { color:var(--vscode-charts-purple); } .legend-index { color:var(--vscode-charts-green); } .legend-unknown { color:var(--vscode-charts-orange); }
+.vscode-high-contrast button,.vscode-high-contrast-light button { border-color:var(--vscode-contrastBorder); }
+@media(max-width:600px) { body { padding:16px 12px; } .graph-header { flex-wrap:wrap; } }
+
+#graph .edgeLabel rect.background { fill:var(--vscode-editor-background) !important;opacity:1 !important; }
+#graph .node text>tspan:first-child .text-inner-tspan { font-weight:600 !important; }
+#graph .node text>tspan:nth-child(n+2) { font-size:11px !important; }

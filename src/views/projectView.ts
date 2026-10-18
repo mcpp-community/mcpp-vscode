@@ -55,7 +55,13 @@ export function summariseProject(project: McppProjectDiscovery | undefined): Pro
     const text = readFileSync(project.manifestPath, "utf8");
     const lines = text.split(/\r?\n/);
     const summary = readProjectSummary(project.root, lines);
-    const dependencies = readDependencies(lines);
+    const dependencies = readDependencies(lines).map((entry) => {
+      if (!entry.path || entry.version) { return entry; }
+      try {
+        const local = readProjectSummary(path.resolve(project.root, entry.path), readFileSync(path.resolve(project.root, entry.path, "mcpp.toml"), "utf8").split(/\r?\n/));
+        return { ...entry, ...(local.version ? { version: local.version } : {}) };
+      } catch { return entry; }
+    });
     return dependencies.length === 0 ? summary : { ...summary, dependencies };
   } catch (error) {
     return {
@@ -110,7 +116,11 @@ export function registerProjectView(context: vscode.ExtensionContext, deps: Proj
   context.subscriptions.push(view.disposable);
 
   const reload = (freshSources: boolean): void => {
-    current = snapshot(deps.currentProject(), freshSources);
+    const active = vscode.window.activeTextEditor;
+    const project = (!active || active.document.uri.scheme !== "file") && current.summary
+      ? { root: current.summary.root, manifestPath: path.join(current.summary.root, "mcpp.toml") }
+      : deps.currentProject();
+    current = snapshot(project, freshSources);
     view.provider.refresh();
   };
 
@@ -126,7 +136,7 @@ export function registerProjectView(context: vscode.ExtensionContext, deps: Proj
     lockWatcher.onDidChange(() => reload(false)),
     lockWatcher.onDidDelete(() => reload(false)),
     vscode.window.onDidChangeActiveTextEditor(() => reload(false)),
-    vscode.workspace.onDidChangeWorkspaceFolders(() => reload(true)),
+    vscode.workspace.onDidChangeWorkspaceFolders(() => { current = snapshot(deps.currentProject(), true); view.provider.refresh(); }),
     vscode.workspace.onDidGrantWorkspaceTrust(() => reload(true)),
   );
 

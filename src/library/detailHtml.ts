@@ -160,6 +160,7 @@ export const DETAIL_UI = {
   retry: "detail.retry",
   openManifest: "detail.openManifest",
   openFile: "detail.openFile",
+  readOnlySource: "detail.readOnlySource",
   preview: "detail.preview",
   platforms: "detail.platforms",
   kind: "detail.kind",
@@ -279,17 +280,22 @@ function renderLine(line: string, usage: boolean): string {
   return `<span class="code-line"${flag("data-usage", usage)}>${tokens}</span>\n`;
 }
 
+function actionIcon(kind: "copy" | "source"): string {
+  const paths = kind === "copy" ? '<rect x="6" y="6" width="8" height="8" rx="1.5"/><path d="M10 3H3v7"/>' : '<path d="M3 6V2h6l4 4v3M9 2v4h4M3 9v5h3"/><rect x="8" y="10" width="6" height="5" rx="1"/><path d="M9.5 10V8.5a1.5 1.5 0 0 1 3 0V10"/>';
+  return `<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true">${paths}</svg>`;
+}
+
 function renderSnippets(model: DetailModel, label: UiLabel): string {
   if (model.snippets.length === 0) {
     return `<p class="detail-hint">${escapeHtml(label(DETAIL_UI.codeNone))}</p>`;
   }
-  const blocks = model.snippets.map((snippet) => {
+  const blocks = model.snippets.map((snippet, index) => {
     const lines = snippet.lines
       .map((line, index) => renderLine(line, snippet.startLine + index === snippet.usageLine))
       .join("");
     const caption = fill(label, DETAIL_UI.codeSource, [snippet.file, snippet.startLine]);
     return [
-      `<div class="snippet-actions"><button class="detail-copy" type="button" data-copy="${escapeHtml(snippet.lines.join("\n"))}">${escapeHtml(label(DETAIL_UI.copy))}</button>${snippet.fileKey === undefined ? "" : `<button class="link-button" type="button" data-open-file="${escapeHtml(snippet.fileKey)}">${escapeHtml(label(DETAIL_UI.openFile))}</button>`}</div>`,
+      `<div class="example-heading"><h2>${escapeHtml(index === 0 ? label(DETAIL_UI.code) : snippet.file.split("/").pop() ?? snippet.file)}</h2><div class="snippet-actions"><button class="snippet-action" type="button" data-copy="${escapeHtml(snippet.lines.join("\n"))}">${actionIcon("copy")}<span data-action-label>${escapeHtml(label(DETAIL_UI.copy))}</span></button>${snippet.fileKey === undefined ? "" : `<button class="snippet-action" type="button" data-open-file="${escapeHtml(snippet.fileKey)}" title="${escapeHtml(label(DETAIL_UI.readOnlySource))}" aria-label="${escapeHtml(label(DETAIL_UI.readOnlySource))}">${actionIcon("source")}<span>${escapeHtml(label(DETAIL_UI.openFile))}</span></button>`}</div></div>`,
       `<pre class="detail-code"><code>${lines}</code></pre>`,
       `<p class="detail-code-file">${escapeHtml(caption)}</p>`,
     ].join("\n");
@@ -435,13 +441,14 @@ function clientScript(initialModel: string): string {
   var kind = state.kind || "normal";
   var copyId = 0;
   var copyRequests = {};
+  function copyLabel(button, text) { (button.querySelector("[data-action-label]") || button).textContent = text; }
   function restoreCopyFeedback() {
     Object.keys(copyRequests).forEach(function (token) {
       var request = copyRequests[token];
       if (request.key !== pageKey() || request.until < Date.now()) { delete copyRequests[token]; return; }
       var buttons = Array.from(document.querySelectorAll(request.command ? "[data-copy-command]" : "[data-copy]"));
       var button = buttons.find(function (node) { return request.command ? document.getElementById("detail-command").textContent === request.text : node.getAttribute("data-copy") === request.text; });
-      if (button) { button.setAttribute("data-copy-token", token); if (request.message) { button.textContent = request.message; } }
+      if (button) { button.setAttribute("data-copy-token", token); if (request.message) { copyLabel(button, request.message); } }
     });
   }
   function pageKey() { return state.key + "|" + (state.projectRoot || ""); }
@@ -562,7 +569,7 @@ function clientScript(initialModel: string): string {
       var request = copyRequests[data.token];
       if (request) {
         request.message = data.message; request.until = Date.now() + 1800; restoreCopyFeedback();
-        setTimeout(function () { var button = document.querySelector('[data-copy-token="' + data.token + '"]'); if (button) { button.textContent = state.labels.copy; } delete copyRequests[data.token]; }, 1800);
+        setTimeout(function () { var button = document.querySelector('[data-copy-token="' + data.token + '"]'); if (button) { copyLabel(button, state.labels.copy); } delete copyRequests[data.token]; }, 1800);
       }
     }
     if (data.type === "linkResult") { var status = document.getElementById("detail-link-result"); status.textContent = data.message; status.hidden = !data.message; }
@@ -609,7 +616,7 @@ export function renderDetailHtml(model: DetailModel, assets: DetailAssets): stri
     <section class="detail-section detail-usage" data-section="code">
       <h2>${escapeHtml(label(DETAIL_UI.usage))}</h2>
       ${model.usage.length ? `<p class="detail-hint">${escapeHtml(label(DETAIL_UI.usageSource))}</p>` + model.usage.map((line) => `<div class="detail-usage-line"><code>${escapeHtml(line)}</code><button type="button" class="detail-copy" data-copy="${escapeHtml(line)}">${escapeHtml(label(DETAIL_UI.copy))}</button></div>`).join("") : model.snippets.length ? "" : `<p class="detail-hint">${escapeHtml(label(DETAIL_UI.unknownUsage))}</p>`}
-      ${model.snippets.length ? `<h2>${escapeHtml(label(DETAIL_UI.code))}</h2>${renderSnippets(model, label)}` : ""}
+      ${model.snippets.length ? renderSnippets(model, label) : ""}
       ${model.exampleProject === undefined ? "" : `<p class="detail-hint">${escapeHtml(fill(label, DETAIL_UI.codeProject, [model.exampleProject]))}</p>`}
       ${model.exampleProvenance === undefined ? "" : `<p class="detail-hint">${escapeHtml(model.exampleProvenance)}</p>`}
     </section>

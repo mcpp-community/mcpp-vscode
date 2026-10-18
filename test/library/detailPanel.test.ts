@@ -19,6 +19,7 @@ const panel = {
   },
 };
 const vscode = {
+  EventEmitter: class { event = () => ({ dispose() {} }); fire() {} dispose() {} },
   Uri: { joinPath: (base: { fsPath: string }, ...parts: string[]) => uri(path.join(base.fsPath, ...parts)), file: uri },
   ViewColumn: { Active: 1 }, ProgressLocation: { Window: 1, Notification: 2 },
   workspace: { isTrusted: true, registerTextDocumentContentProvider: () => ({ dispose() {} }), getConfiguration: () => ({ inspect: (key: string) => ({ globalValue: key === "library.indexPath" ? index : undefined }) }) },

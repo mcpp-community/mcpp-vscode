@@ -8,6 +8,7 @@ export interface ProjectDeclaration extends DeclaredDependencyEntry {
   source?: boolean;
   conditional?: boolean;
   path?: string;
+  git?: string;
 }
 
 /** Reuse the editor's TOML parser so quoted keys, comments and source+version tables keep their meaning. */
@@ -23,7 +24,8 @@ export function readProjectDeclarations(text: string): ProjectDeclaration[] {
     const specKeys = new Set(["version", "path", "git", "url", "branch", "rev", "tag", "features", "backend", "tools", "host-module", "reexport", "workspace"]);
     if (source || entries.some((entry) => specKeys.has(entry.keyPath[0]?.name))) {
       const localPath = entries.find((entry) => entry.keyPath[0]?.name === "path")?.value?.text;
-      out.push({ id, version, dev, kind, source, conditional, ...(localPath ? { path: localPath } : {}) });
+      const git = entries.find((entry) => entry.keyPath[0]?.name === "git")?.value?.text;
+      out.push({ id, version, dev, kind, source, conditional, ...(localPath ? { path: localPath } : {}), ...(git ? { git } : {}) });
     } else if (entries.length) {
       for (const entry of entries) { collect(`${id}.${entry.keyPath.map((key) => key.name).join(".")}`, entry.value, kind, conditional); }
     } else { out.push({ id, dev, kind, conditional }); }

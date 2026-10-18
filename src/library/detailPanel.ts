@@ -43,7 +43,7 @@ import {
   type Surface,
 } from "./indexModel";
 import { cachedDescriptorText, loadSnapshot, readDescriptorText, readExampleFiles } from "./indexLocator";
-import { bundledExample, bundledExampleText, EXAMPLE_SCHEME } from "./examples";
+import { bundledExample, ExampleDocuments, EXAMPLE_SCHEME } from "./examples";
 import {
   DETAIL_UI,
   decodeDetailMessage,
@@ -84,11 +84,15 @@ export function createLibraryDetailOpener(
   context: vscode.ExtensionContext,
   deps: DetailPanelDeps,
 ): LibraryDetailOpener {
-  context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(EXAMPLE_SCHEME, {
-    provideTextDocumentContent: (uri) => bundledExampleText(uri.path) ?? "",
+  const sourceChanged = new vscode.EventEmitter<vscode.Uri>();
+  const exampleDocuments = new ExampleDocuments((uri) => sourceChanged.fire(vscode.Uri.parse(uri)));
+  context.subscriptions.push(sourceChanged, vscode.workspace.registerTextDocumentContentProvider(EXAMPLE_SCHEME, {
+    onDidChange: sourceChanged.event,
+    provideTextDocumentContent: (uri) => exampleDocuments.read(uri.toString()) ?? "",
   }));
   const session: DetailSession = {
     context,
+    exampleDocuments,
     deps,
     panel: undefined,
     id: undefined,
@@ -124,6 +128,7 @@ export interface LibraryDetailOpener {
 
 /** One panel per window, remembered so a second `open` reveals rather than stacks. */
 export interface DetailSession {
+  exampleDocuments: ExampleDocuments;
   context: vscode.ExtensionContext;
   deps: DetailPanelDeps;
   panel: vscode.WebviewPanel | undefined;
@@ -229,7 +234,8 @@ async function handle(session: DetailSession, raw: unknown): Promise<void> {
       return;
     case "openFile": {
       if (!session.model?.snippets.some((snippet) => snippet.fileKey === message.key)) { return; }
-      await vscode.window.showTextDocument(message.key.startsWith(`${EXAMPLE_SCHEME}:`) ? vscode.Uri.parse(message.key) : vscode.Uri.file(message.key)); return;
+      if (message.key.startsWith(`${EXAMPLE_SCHEME}:`)) { await vscode.window.showTextDocument(vscode.Uri.parse(message.key)); }
+      return;
     }
     case "copy": {
       let result: string;
@@ -384,8 +390,7 @@ async function buildModel(session: DetailSession, id: string, request: number): 
   const exampleFiles = localExamples.length ? localExamples : bundled?.files ?? [];
   const snippets = exampleFiles.slice(0, 2).map((file) => ({
     file: file.path, startLine: 1, usageLine: 0, lines: file.text.split(/\r?\n/).slice(0, 80),
-  })).map((snippet) => ({
-    ...snippet, ...(bundled ? { fileKey: `${EXAMPLE_SCHEME}:/${snippet.file}` } : root ? { fileKey: path.join(root.path, snippet.file) } : {}),
+    fileKey: session.exampleDocuments.capture(file),
   }));
   // Only verified lines from real example source are copyable.
   const realUsage = usageLinesFor(exampleFiles, entry.id);
@@ -553,7 +558,8 @@ function labels(): Record<string, string> {
     [DETAIL_UI.output]: t("Show output"),
     [DETAIL_UI.retry]: t("Retry reading details"),
     [DETAIL_UI.openManifest]: t("Open mcpp.toml"),
-    [DETAIL_UI.openFile]: t("Open source file"),
+    [DETAIL_UI.openFile]: t("Source"),
+    [DETAIL_UI.readOnlySource]: t("Open read-only source"),
     [DETAIL_UI.preview]: t("Search preview: only the fields returned by mcpp search are available."),
     [DETAIL_UI.title]: t("Library package {0}"),
     [DETAIL_UI.overview]: t("Build shape"),

@@ -1,4 +1,5 @@
 import snapshot from "../../data/library-examples.json";
+import { createHash } from "node:crypto";
 import { exampleCatalog, type CodeFile } from "./indexModel";
 
 const catalog = exampleCatalog(snapshot.projects.map((project) => ({
@@ -14,3 +15,22 @@ export function bundledExample(id: string): { project: string; files: CodeFile[]
 
 export function bundledExampleText(path: string): string | undefined { return files.get(path.replace(/^\//, "")); }
 export const EXAMPLE_SCHEME = "mcpp-example";
+
+/** Immutable virtual documents keep local and bundled index sources equally read-only. */
+export class ExampleDocuments {
+  private readonly documents = new Map<string, string>();
+  constructor(private readonly captured?: (uri: string) => void) {}
+  capture(file: CodeFile): string {
+    const digest = createHash("sha256").update(file.text).digest("hex");
+    const uri = `${EXAMPLE_SCHEME}:/${file.path.split("/").map(encodeURIComponent).join("/")}?snapshot=${digest}`;
+    this.documents.set(digest, file.text);
+    this.captured?.(uri);
+    return uri;
+  }
+  read(uri: string): string | undefined {
+    try {
+      const digest = /[?&]snapshot=([a-f0-9]{64})(?:$|&)/.exec(decodeURIComponent(uri))?.[1];
+      return digest ? this.documents.get(digest) : undefined;
+    } catch { return undefined; }
+  }
+}

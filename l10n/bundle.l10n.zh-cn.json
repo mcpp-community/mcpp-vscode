@@ -342,7 +342,7 @@
   "Toolchain": "工具链",
   "Toolchain managed by mcpp": "mcpp 管理的工具链",
   "Toolchain {0} installed. Choose a global default from the latest list?": "工具链 {0} 安装完成。是否从最新列表中选择全局默认？",
-  "Unavailable": "不可用",
+  "Unavailable": "暂无元数据",
   "Unexpected error: {0}": "发生未预期错误：{0}",
   "Unknown": "未知",
   "Use": "用法",
@@ -557,5 +557,18 @@
   "Could not read project dependencies: {0}": "无法读取项目依赖：{0}",
   "Open an mcpp project first.": "请先打开一个 mcpp 项目。",
   "The project manifest is missing or unreadable.": "项目清单不存在或无法读取。",
-  "Reading project dependencies…": "正在读取项目依赖…"
+  "Reading project dependencies…": "正在读取项目依赖…",
+  "Source": "源码",
+  "Open read-only source": "打开只读源码",
+  "Dependency graph": "依赖图",
+  "Maximum dependency depth: 3": "最多展示 3 层依赖",
+  "Zoom out": "缩小",
+  "Zoom in": "放大",
+  "Legend and source": "图例与源码",
+  "Project": "项目",
+  "Declaration graph · dashed edges are conditional · lockfile supplies versions": "声明关系图 · 虚线为条件依赖 · 锁文件提供版本",
+  "index": "索引",
+  "build": "构建",
+  "conditional": "条件",
+  "Scroll to zoom · drag to pan": "滚轮缩放 · 按住拖动画布"
 }

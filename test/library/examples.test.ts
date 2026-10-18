@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { bundledExample, bundledExampleText } from "../../src/library/examples";
+import { bundledExample, bundledExampleText, ExampleDocuments } from "../../src/library/examples";
 import { exampleCatalog, usageLinesFor } from "../../src/library/indexModel";
 
 test("official offline examples are real own-library tests with pinned provenance", () => {
@@ -21,4 +21,17 @@ test("local catalogs prefer the package's own example while preserving exact nam
   const catalog = exampleCatalog([{project:"archive",text:manifest,sources:["archive.cpp"]},{project:"zlib",text:manifest,sources:["zlib.cpp"]}]);
   assert.equal(catalog.get("compat.zlib")?.path,"zlib.cpp");
   assert.equal(catalog.get("foreign.zlib"), undefined);
+});
+
+test("local and bundled source documents are immutable snapshots, never editable file URIs", () => {
+  const documents = new ExampleDocuments();
+  const file = { path: "tests/examples/custom/tests/main.cpp", text: "int main() {}" };
+  const first = documents.capture(file);
+  file.text = "int main() { return 1; }";
+  const second = documents.capture(file);
+  assert.match(first, /^mcpp-example:/);
+  assert.notEqual(first, second);
+  assert.equal(documents.read(first), "int main() {}");
+  assert.equal(documents.read(first.replace("snapshot=", "snapshot%3D")), "int main() {}", "VS Code URI serialization may encode query separators");
+  assert.equal(documents.read(second), file.text);
 });

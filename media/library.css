@@ -467,6 +467,11 @@ body.detail {
 }
 
 pre.detail-code code {
+  display: block;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  border-radius: 0;
   font-family: var(--vscode-editor-font-family, monospace);
   font-size: 12px;
   line-height: 1.5;
@@ -667,7 +672,13 @@ span.detail-version[data-installed] { color: var(--vscode-testing-iconPassed, va
 .detail-command-row { min-width: 0; }
 .detail-command-row .detail-command { flex: 1; }
 .detail-command-row .detail-copy { flex-shrink: 0; }
-.snippet-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 10px; }
+.example-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 20px 0 8px; }
+.example-heading h2 { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.snippet-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.snippet-action { display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 4px 7px; border: 1px solid transparent; border-radius: 4px; color: var(--vscode-descriptionForeground); background: transparent; font: inherit; font-size: 11px; cursor: pointer; }
+.snippet-action:hover { background: var(--vscode-toolbar-hoverBackground); color: var(--vscode-foreground); }
+.snippet-action:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
+.vscode-high-contrast .snippet-action, .vscode-high-contrast-light .snippet-action { border-color: var(--vscode-contrastBorder); }
 .result-actions { display: flex; flex-wrap: wrap; gap: 12px; }
 button:disabled, select:disabled { cursor: default; opacity: 0.65; }
 button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; }
