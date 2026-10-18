@@ -36,7 +36,7 @@ test("module entry conventions use explicit main/lib paths and preserve isolated
   assert.ok(inferred.has(path.join(root,"src/core.cppm")));
   const graph=buildModuleGraph(root,{modules:[{name:"core",files:["src/core.cppm"],external:false}],imports:[]},new Set([path.join(root,"src/core.cppm"),path.join(root,"src/main.cpp")]),inferred);
   assert.ok(graph.nodes.find(node=>node.id==="core")?.entry);
-  assert.ok(graph.nodes.find(node=>node.id==="src/main.cpp")?.entry);
+  assert.ok(graph.nodes.find(node=>node.files?.includes(path.join(root,"src/main.cpp")))?.entry);
 });
 test("partitions and unknown imported modules retain identity without fabricated files", () => {
   const graph=buildModuleGraph(root,{modules:[{name:"app:types",files:["src/types.cppm"],external:false}],imports:[{from:"app:types",to:"missing"}]},new Set([path.join(root,"src/types.cppm")]),new Map());
