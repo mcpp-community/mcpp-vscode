@@ -1,6 +1,6 @@
 {
-  "sourceVersion": "2026.10.11.1",
-  "sourceCommit": "3fb2d0cc89296c527fcda710792b67bb7a481bed",
+  "sourceVersion": "2026.10.17.1",
+  "sourceCommit": "684a306bced037014da08b038412f57c203d0bc9",
   "protocolVersion": 15,
   "cacheEpoch": 3,
   "roles": [
@@ -132,7 +132,7 @@
       "mustExist": false,
       "since": 4,
       "rules": [],
-      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/3fb2d0cc89296c527fcda710792b67bb7a481bed/docs/30-build-mcpp.md#runner-how-the-artifact-is-executed-20268192"
+      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/684a306bced037014da08b038412f57c203d0bc9/docs/30-build-mcpp.md#runner-how-the-artifact-is-executed-20268192"
     },
     {
       "wire": "runner-named",
@@ -263,7 +263,7 @@
         "R2.1",
         "R9.4"
       ],
-      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/3fb2d0cc89296c527fcda710792b67bb7a481bed/docs/30-build-mcpp.md#warning-succeeding-and-still-being-heard-20268212"
+      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/684a306bced037014da08b038412f57c203d0bc9/docs/30-build-mcpp.md#warning-succeeding-and-still-being-heard-20268212"
     },
     {
       "wire": "diagnostic",
@@ -314,7 +314,7 @@
       "rules": [
         "R2.1"
       ],
-      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/3fb2d0cc89296c527fcda710792b67bb7a481bed/docs/30-build-mcpp.md#the-probe-channel-fact-floor-2026952"
+      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/684a306bced037014da08b038412f57c203d0bc9/docs/30-build-mcpp.md#the-probe-channel-fact-floor-2026952"
     },
     {
       "wire": "floor",
@@ -327,7 +327,7 @@
       "rules": [
         "R2.1"
       ],
-      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/3fb2d0cc89296c527fcda710792b67bb7a481bed/docs/30-build-mcpp.md#the-probe-channel-fact-floor-2026952"
+      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/684a306bced037014da08b038412f57c203d0bc9/docs/30-build-mcpp.md#the-probe-channel-fact-floor-2026952"
     },
     {
       "wire": "pack-format",
@@ -376,7 +376,7 @@
         "R9.2",
         "R9.5"
       ],
-      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/3fb2d0cc89296c527fcda710792b67bb7a481bed/docs/30-build-mcpp.md#deploying-what-the-program-generated-deploy-20269123-protocol-11"
+      "docsUrl": "https://github.com/mcpp-community/mcpp/blob/684a306bced037014da08b038412f57c203d0bc9/docs/30-build-mcpp.md#deploying-what-the-program-generated-deploy-20269123-protocol-11"
     },
     {
       "wire": "runtime-search-dir",

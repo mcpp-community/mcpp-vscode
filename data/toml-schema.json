@@ -1,6 +1,6 @@
 {
-  "sourceVersion": "2026.10.11.1",
-  "sourceCommit": "3fb2d0cc89296c527fcda710792b67bb7a481bed",
+  "sourceVersion": "2026.10.17.1",
+  "sourceCommit": "684a306bced037014da08b038412f57c203d0bc9",
   "sections": [
     {
       "header": "[build]",
@@ -714,6 +714,11 @@
             "wWinMain"
           ],
           "since": "2026.9.12.2"
+        },
+        {
+          "key": "windows_long_paths",
+          "type": "string",
+          "unmodelled": true
         },
         {
           "key": "windows_subsystem",
