@@ -31,14 +31,15 @@ beside the example heading. Custom indexes only use their own tests. Packages wi
 keep an explicit empty state. Platform versions, build information and source
 diagnostics can be expanded without leaving the page.
 
-In **Project → Basics → Dependencies**, use the graph icon to open the nearest
-three dependency levels as Mermaid. The palette command is **mcpp: Show Project
+In **Project → Dependencies**, use the graph icon to open a Mermaid view,
+initially expanded to three dependency levels. The palette command is **mcpp: Show Project
 Dependency Graph**. Relations come from project/local-path manifests and local
 index descriptors; lockfiles supply versions rather than parent edges. This is a
 declaration graph, so conditional or descriptor-level relations may differ from a
 resolved build. Missing local metadata is marked with a dashed node. The page
-supports zoom, refresh, opening the manifest and copying Mermaid source, and caps
-large graphs at 120 nodes or 240 edges.
+supports zoom, refresh, opening the manifest and copying Mermaid source. The
+package provider retains its 120-node/240-edge data limit; the shared canvas also
+bounds every layout before rendering.
 
 The dependency list shows direct `namespace.package@version` declarations and
 distinguishes index, path and git sources. Click a row to open the graph focused
@@ -57,3 +58,26 @@ checkout. The legacy official path is supported, while the xlings tool catalog
 is not automatically substituted for mcpp-index.
 
 The dependency graph supports cursor-centered wheel zoom and click-and-drag panning. Use Fit to restore the complete graph; keyboard `+`, `-`, and `0` provide zoom and reset.
+
+The project sidebar keeps **C++ Modules Deps** inside **Basics**, followed by a
+separate, initially collapsed **Dependencies** section containing direct packages.
+The graph panel switches between **Packages** and **C++ Modules**, preserving each
+view's selection and viewport.
+
+Module relationships come from the installed C++ Modules language server's
+`mcppls query module --graph --format json` output. No C++ source parser is added.
+Internal relationships can be explored at any depth; external modules, including
+local path packages, stop after one outgoing hop from the project. Entry cards
+identify explicit target main files, `[lib].path`, or existing default entry files.
+Click a module to open its provider source read-only beside the graph.
+
+The initial depth is 3; choose 5 or All, or activate a card's `＋N` control to
+expand one branch. Collapse keeps shared nodes reached by other branches. Search
+also finds hidden nodes and opens a focused neighborhood with direct importers;
+Back to project restores the overview. Each Mermaid layout is limited to 150
+nodes and 300 edges, computed before rendering. All respects these budgets.
+The mcppls CLI currently limits its full graph response to 500 module records;
+truncated or still-indexing results carry a compact incomplete-data notice.
+Use Refresh after source edits or indexing completes. Precise declaration lines
+and per-import re-export flags are not supplied by this graph endpoint, so this
+view opens the source file and does not invent those details.

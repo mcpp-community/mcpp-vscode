@@ -89,6 +89,15 @@ extension.ts                 VS Code 装配层：激活、命令注册、provide
 本地真实 UI 验证入口：`tools/test-libraries-ui.mjs`；专用 profile 和产物均在 gitignored 的 `.dev-profile/`。
 
 - `library/examples.ts`：官方安装版索引未携带测试时，读取带来源提交的内置测试快照；checkout 的本地测试优先，自定义索引不使用此兜底。完整代码通过只读 `mcpp-example` 文档打开。
-- `projects/dependencyGraph.ts`：纯声明图遍历，最多三跳，处理路径包、共享节点和循环；lock 只补版本。`dependencyGraphPanel.ts` 负责只读文件编排和本地 Mermaid Webview。Mermaid 固定版本与许可证由编译脚本复制至 `dist/vendor`，无需 CDN。
+- `projects/dependencyGraph.ts`：纯声明图遍历，默认三跳（公共画布可请求更深数据），处理路径包、共享节点和循环；lock 只补版本。`dependencyGraphPanel.ts` 负责只读文件编排和本地 Mermaid Webview。Mermaid 固定版本与许可证由编译脚本复制至 `dist/vendor`，无需 CDN。
 
 - `views/models.ts` 与 Libraries 共用直接声明解析，树节点携带项目、依赖和分组身份；点击进入声明图并居中高亮对应节点。Webview 使用 SVG 平移/缩放变换，滚轮保留鼠标锚点，Pointer Events 区分点击与拖动；Fit 可恢复完整图。
+
+## 8. Shared dependency canvas and C++ Modules graph
+
+- `graphs/model.ts` defines a provider-independent graph, component roots, depth/branch projection, 150-node/300-edge layout budgets and escaped Mermaid output. Complete module data is retained independently of the visible subgraph.
+- `projects/dependencyGraphPanel.ts` owns one persistent Webview with separate per-project/per-kind graph and navigation states. `graphs/panelHtml.ts` and `media/graph.js` share rendering, wheel/pointer navigation, folding, focus, search and theme handling. Layouts are serialized; obsolete provider requests are discarded.
+- `cli/moduleGraph.ts` is a trust-gated, time/output-bounded consumer of mcppls CLI JSON. This extends the integration boundary with structured queries, without taking over C++ parsing, resolution, LSP ownership or mcppls settings. Prefer the installed dependency extension's payload, with PATH fallback when absent.
+- `projects/moduleGraph.ts` validates the result, reads manifest entry conventions and determines file ownership by the nearest project manifest. Preserve all internal edges and just the first hop into another package; `external=false` alone cannot identify project ownership. Generated sources outside the project boundary are conservatively treated as external.
+- `webview/readOnlyDocuments.ts` is the shared content-addressed virtual-document store used by examples and graph navigation; graph messages contain node identities, and the host opens only provider files attached to those identities.
+- Basics contains C++ Modules Deps; declared package Dependencies follow as a collapsed sibling before Common commands. Existing language-server module-graph forwarding commands remain compatible.

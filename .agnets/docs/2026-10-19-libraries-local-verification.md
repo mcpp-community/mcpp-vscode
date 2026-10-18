@@ -44,10 +44,10 @@ node tools/review-libraries.mjs --no-package
 
 | 验证 | 结果 |
 | --- | --- |
-| `npm test`，包含配置、翻译、图标、生成文件一致性检查 | 697 通过，0 失败 |
+| `npm test`，包含配置、翻译、图标、生成文件一致性检查 | 709 通过，0 失败 |
 | `npm run test:e2e`，真实 VS Code，语言服务五种能力变体 | 每种 8 项，共 40 通过 |
-| `node tools/test-libraries-ui.mjs`，真实 VS Code Webview | 18 项通过 |
-| `npm run package` | VSIX 152 文件，约 1.37 MB（含 Mermaid 与官方测试快照） |
+| `node tools/test-libraries-ui.mjs`，真实 VS Code Webview | 20 项通过 |
+| `npm run package` | VSIX 158 文件，约 1.38 MB（含 Mermaid 与官方测试快照） |
 
 Webview 验证覆盖：官方源及已有声明；lock 新建与删除；索引更新失败保留数据；键盘搜索及文档稳定；真实 `add --dev` 与磁盘核对；添加过程中切包；慢查询过期丢弃及跨源有限预览；项目切换后的写入位置；标签和依赖二级菜单；搜索/解析失败重试；真实 20 秒解析超时恢复；添加失败重试；侧栏宽度及过滤延迟；三种主题下的响应式布局。
 
@@ -86,3 +86,35 @@ Webview 验证覆盖：官方源及已有声明；lock 新建与删除；索引�
 - 核心逻辑测试覆盖 URI 编码后的只读内容恢复、本地内容快照、命名空间直接依赖和图导航身份；真实 UI 验证代码背景、标题同行、源码只读、颜色差异及两类节点定位。
 
 - 依赖图支持以鼠标位置为中心的滚轮缩放、按住鼠标拖动画布；保留节点点击高亮，拖动不会误触节点。提供 Fit 复位和 `+` / `-` / `0` 键盘操作。真实 UI 校验缩放锚点、双轴平移及复位。
+
+
+## 第四轮：共享画布、C++ Modules 与侧栏层级
+
+- 设计以方案文档 §14 为准。Basics 内保留 C++ Modules Deps；Dependencies 是其后第 2 个顶层分组，默认折叠，Common commands 随后。默认状态尊重 VS Code 保存的用户偏好；无直接依赖时省略空分组。
+- 真实依赖扩展 0.0.16 的 mcppls CLI 验证 `query module --graph --root … --format json`。实际 fixture 有 `src/main.cpp → demo.l0 → … → demo.l6 → external.api → external.hidden`，以及 `[lib].path="src/l0.cppm"`。
+- 图展示 main 默认入口和 lib 显式入口；3 层显示折叠控件，单支展开下一层，5 层及全部均实际验证。全部内部深度能够看到 demo.l6 和 external.api；external.hidden 始终被外部一层边界过滤，尽管这个 path 包在原始 JSON 中 external=false。
+- 搜索隐藏节点进入聚焦视图，保留直接导入者并可返回项目。点击 demo.l0 在旁边打开只读虚拟源码，真实键盘写入被阻止且原始文件字节未改变；画布保持打开。切换 Packages / C++ Modules 后，选中节点与缩放平移恢复。
+- Mermaid 使用全局 `htmlLabels:false`，模块卡片上的 `＋N` 是可鼠标/键盘操作的 SVG 控件。展开只重新投影已有数据，不重复运行 CLI；图布局串行执行，过期请求不覆盖当前项目或视图。
+- 原有 18 项 UI 回归全部通过，新增上述 2 项，共 20 项；扩展宿主五种语言服务变体仍共 40 项通过；完整逻辑/契约测试 709 项通过。VSIX 158 文件、1,450,834 字节，包含共享画布脚本和离线 Mermaid，没有本地 profile/源码/设计文档泄漏。
+
+### 性能探测
+
+入口 `tools/benchmark-dependency-graphs.mjs`，使用仓库外 Playwright 和离线 Mermaid，在独立 Chromium 中测试 1,000 节点深链、1,000 节点宽扇出、45 节点/450 边共享依赖；分别投影 3 层和全部。
+
+| 数据 | 实际渲染上限 | 子图计算 | Mermaid 布局 |
+| --- | --- | --- | --- |
+| 深链 | 150 节点 / 149 边 | 约 0.43–0.59 ms | 约 52–463 ms |
+| 宽扇出 | 150 节点 / 149 边 | 约 0.51–0.70 ms | 约 436–529 ms |
+| 共享依赖 | 45 节点 / 300 边 | 约 0.23–0.28 ms | 约 436–488 ms |
+
+这是本机单次探测结果，不作为跨平台耗时保证。所有可见图都满足 150 节点/300 边预算；原始结果在 gitignored 的 `.dev-profile/libraries-ui-artifacts/graph-performance.json`。
+
+### 数据边界
+
+- mcppls 此版本全图接口最多输出 500 个模块记录；上游 truncated 或索引尚未完成会显示简短的不完整提示，不声称已展示全部项目数据。截断后缺失的模块名不会被伪造成源码文件。
+- 当前接口不含声明精确行号或逐边的重导出属性，因此跳到准确文件，不自行重解析 C++、猜行号或伪造 export-import 边。
+- 归属按源码最近的项目 manifest 判断；项目边界外的生成源码保守视为外部。更新源码后使用刷新重新查询。
+
+![模块入口与深度折叠](assets/libraries-module-graph.png)
+
+![模块图与旁边只读源码](assets/libraries-module-source-readonly.png)

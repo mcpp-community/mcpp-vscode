@@ -178,3 +178,13 @@ mcppls 侧发生以下任一变化时，本文件与 `src/languageServer.ts` 必
 - 平台矩阵变化；
 - 出现新的公开刷新/状态命令；
 - 服务器 `executeCommandProvider` 列表变化（影响 §3 的命名约束）。
+
+## 结构化模块图查询（2026-10-19）
+
+项目的共享依赖画布另通过依赖扩展随附的 mcppls CLI 调用
+`query module --graph --root <root> --timeout 20 --format json`。这与原有
+`mcppls.showModuleGraph` UI 转发入口并存，不解析那个命令生成的 Markdown。
+`modules{name,files,external}` / `imports{from,to}` / `snapshot` / `truncated`
+在消费边界校验，非零退出或不兼容结果可刷新重试。仅受信任工作区调用，宿主
+30 秒超时、8 MiB 输出限制；全图接口自身当前最多返回 500 个模块并标明截断。
+本扩展负责图布局、项目边界过滤和只读文件导航，C++ 语法与语义仍完全归 mcppls。
