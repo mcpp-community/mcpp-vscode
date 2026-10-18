@@ -107,8 +107,12 @@ jobs:
           COUNT=$(unzip -l "$VSIX" | tail -1 | awk '{print $2}')
           echo "VSIX: $COUNT files, $((SIZE / 1024)) KiB"
           if [ "$COUNT" -gt 200 ]; then echo "the VSIX has $COUNT files; something local leaked in"; exit 1; fi
-          if [ "$SIZE" -gt 1048576 ]; then echo "the VSIX is over 1 MiB ($SIZE bytes)"; exit 1; fi
-          for forbidden in .dev-profile/ .agents/ test/ tools/ src/ node_modules/; do
+          # Offline Mermaid and the pinned official tests are shipped assets (~1.37 MB VSIX).
+          if [ "$SIZE" -gt 2097152 ]; then echo "the VSIX is over 2 MiB ($SIZE bytes)"; exit 1; fi
+          for required in dist/vendor/mermaid.js dist/vendor/MERMAID-LICENSE dist/data/library-examples.json; do
+            unzip -p "$VSIX" "extension/$required" > /dev/null
+          done
+          for forbidden in .dev-profile/ .agents/ .agnets/ test/ tools/ src/ node_modules/; do
             if unzip -l "$VSIX" | grep -q "extension/$forbidden"; then
               echo "leaked into the VSIX: $forbidden"
               exit 1

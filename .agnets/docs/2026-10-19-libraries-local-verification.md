@@ -71,6 +71,7 @@ Webview 验证覆盖：官方源及已有声明；lock 新建与删除；索引�
 - 实际 Mermaid 图验证三层本地路径依赖、索引 `compat.libpng → compat.zlib`、条件关系和第四层截断，以及复制和缩放。
 - 新增纯逻辑测试覆盖共享节点、循环、开发/构建关系、路径清单、未知来源、规模上限与 Mermaid 标签转义。
 - `data/library-examples.json` 由 `npm run gen:examples` 生成；可通过 `MCPP_INDEX_REPO` 指定 checkout、`MCPP_INDEX_REF` 固定提交，仅提取 Git 已跟踪的测试源文件和清单，不读取构建产物。
+- 离线 Mermaid 和测试快照使 VSIX 从约 414 KB 增至约 1.37 MB，因此 CI 的体积预算从 1 MiB 调整为 2 MiB；仍限制 200 文件并禁止源码、本地 profile、文档目录泄漏，另检查 Mermaid、许可证和示例快照均已打包。
 
 ![真实索引测试示例](assets/libraries-test-example.png)
 
