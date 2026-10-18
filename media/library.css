@@ -646,7 +646,7 @@ pre.detail-code code {
 
 body.detail { max-width: 1120px; margin: 0 auto; padding: 0 24px 40px; }
 .detail-title { overflow-wrap: anywhere; }
-.detail-primary { padding: 12px 0 4px; }
+.detail-primary { margin: 0; padding: 8px 0 10px; }
 .project-context, .detail-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 8px 0; }
 .project-context { color: var(--vscode-descriptionForeground); }
 .project-context strong { font-weight: 500; overflow-wrap: anywhere; }
@@ -684,3 +684,20 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .toolbar .count { margin: 0 0 0 auto; align-self: center; }
 .detail-actions .link-button { color: var(--vscode-textLink-foreground); background: transparent; border-color: transparent; padding: 4px 0; }
 .detail-actions .link-button:hover { background: transparent; text-decoration: underline; }
+
+/* A single, compact context row; empty feedback reserves no vertical space. */
+.project-context { margin: 0 0 8px; gap: 8px; font-size: 11px; }
+.project-picker { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; margin: 0; padding: 2px 0; font: inherit; color: var(--vscode-descriptionForeground); background: transparent; border: 0; cursor: pointer; }
+.project-picker strong { color: var(--vscode-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-picker:hover strong { color: var(--vscode-textLink-foreground); }
+.context-platform::before { content: "·"; margin-right: 8px; }
+.detail-controls { margin: 4px 0 10px; gap: 8px 14px; }
+.detail-command-row { margin-top: 8px; }
+.detail-command { margin: 0; }
+.detail-result { margin: 8px 0 0; }
+.detail-layout { gap: 24px; }
+.detail-aside .detail-section { padding: 10px 0; margin: 0; }
+.detail-aside summary { font-size: 12px; font-weight: 500; }
+.detail-aside details[open] > summary { margin-bottom: 10px; }
+.detail-usage { padding-top: 12px; }
+.detail-footer { margin-top: 14px; }

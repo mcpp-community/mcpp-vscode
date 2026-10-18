@@ -41,6 +41,7 @@ import { readCacheSnapshot, registerCacheView } from "./cache/cacheView";
 import { registerLanguageServerCommands } from "./views/languageServerView";
 import { createLibraryDetailOpener } from "./library/detailPanel";
 import { loadSnapshot, invalidateIndexCache } from "./library/indexLocator";
+import { watchProjectFiles } from "./library/projectWatcher";
 import { registerLibraryView } from "./library/libraryView";
 import { registerProjectView } from "./views/projectView";
 
@@ -334,13 +335,14 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
     const selected = await vscode.window.showQuickPick(roots.map((root) => ({ label: vscode.workspace.asRelativePath(root), description: root, root })), {
       title: t("Choose the target mcpp project"), placeHolder: t("Dependencies will be added to this project's mcpp.toml"),
     });
-    if (selected) { libraryProjectRoot = selected.root; }
+    if (selected) { libraryProjectRoot = selected.root; watchSelectedLibraryProject(); refreshLibraries(); }
     return selected?.root;
   };
   const openLibraryDetail = createLibraryDetailOpener(extensionContext, {
     mcppExecutable: (root) => cliController.mcppExecutable(root ? { root, manifestPath: `${root}/mcpp.toml` } : undefined),
     projectRoot: libraryProject,
     chooseProject: chooseLibraryProject,
+    onPackageOpened: (key) => library.select(key),
     output,
     isTrusted: () => vscode.workspace.isTrusted,
     onDependenciesChanged: () => { void library.refresh(); },
@@ -353,6 +355,7 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
     isTrusted: () => vscode.workspace.isTrusted,
   });
   const dependencyWatcher = vscode.workspace.createFileSystemWatcher("**/mcpp.{toml,lock}");
+  let selectedLibraryWatcher: vscode.Disposable | undefined;
   let libraryTimer: NodeJS.Timeout | undefined;
   const refreshLibraries = (): void => {
     if (libraryTimer) { clearTimeout(libraryTimer); }
@@ -362,13 +365,24 @@ export async function activate(extensionContext: vscode.ExtensionContext): Promi
       void openLibraryDetail.refresh();
     }, 120);
   };
+  // A non-recursive RelativePattern also observes scratch/gitignored projects
+  // which a workspace's recursive watcher may intentionally exclude.
+  function watchSelectedLibraryProject(): void {
+    selectedLibraryWatcher?.dispose();
+    selectedLibraryWatcher = undefined;
+    if (!libraryProjectRoot) { return; }
+    const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(libraryProjectRoot), "mcpp.{toml,lock}"));
+    selectedLibraryWatcher = vscode.Disposable.from(watchProjectFiles(libraryProjectRoot, refreshLibraries), watcher, watcher.onDidCreate(refreshLibraries), watcher.onDidChange(refreshLibraries), watcher.onDidDelete(refreshLibraries));
+  }
+  watchSelectedLibraryProject();
   extensionContext.subscriptions.push(
+    { dispose: () => selectedLibraryWatcher?.dispose() },
     dependencyWatcher,
     dependencyWatcher.onDidCreate(refreshLibraries),
     dependencyWatcher.onDidChange(refreshLibraries),
     dependencyWatcher.onDidDelete(refreshLibraries),
-    vscode.window.onDidChangeActiveTextEditor((editor) => { if (editor?.document.uri.scheme === "file") { const active = findCurrentProject()?.root; if (active) { libraryProjectRoot = active; } refreshLibraries(); } }),
-    vscode.workspace.onDidChangeWorkspaceFolders(() => { libraryProjectRoot = undefined; refreshLibraries(); }),
+    vscode.window.onDidChangeActiveTextEditor((editor) => { if (editor?.document.uri.scheme === "file") { const active = findCurrentProject()?.root; if (active && active !== libraryProjectRoot) { libraryProjectRoot = active; watchSelectedLibraryProject(); } refreshLibraries(); } }),
+    vscode.workspace.onDidChangeWorkspaceFolders(() => { libraryProjectRoot = undefined; watchSelectedLibraryProject(); refreshLibraries(); }),
     vscode.workspace.onDidGrantWorkspaceTrust(refreshLibraries),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("mcpp.library") || event.affectsConfiguration("mcpp.path") || event.affectsConfiguration("mcpp.ui.language")) { refreshLibraries(); }

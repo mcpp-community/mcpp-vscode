@@ -528,5 +528,10 @@
   "mcpp add failed (exit {0}). See output for details.": "mcpp add 失败（退出码 {0}），请查看输出了解详情。",
   "Choose the target mcpp project": "选择目标 mcpp 项目",
   "Dependencies will be added to this project's mcpp.toml": "依赖将添加到此项目的 mcpp.toml",
-  "Updating the global mcpp index; a configured custom checkout is only reread.": "正在更新全局 mcpp 索引；已配置的自定义检出目录仅会被重新读取。"
+  "Updating the global mcpp index; a configured custom checkout is only reread.": "正在更新全局 mcpp 索引；已配置的自定义检出目录仅会被重新读取。",
+  "The current environment platform is not recognized by this index.": "索引无法识别当前环境平台。",
+  "Versions are from descriptor text; mcpp will confirm availability when adding.": "版本来自描述符文本，添加时将由 mcpp 确认可用性。",
+  "Platforms and versions": "平台与版本",
+  "Add dependency": "添加依赖",
+  "Usage": "用法"
 }

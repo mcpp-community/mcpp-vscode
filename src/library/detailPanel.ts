@@ -18,7 +18,7 @@
  *   file.
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 
@@ -65,6 +65,7 @@ const PARSE_TIMEOUT_MS = 20_000;
 export interface DetailPanelDeps {
   mcppExecutable: (projectRoot?: string) => string;
   chooseProject?: () => Promise<string | undefined>;
+  onPackageOpened?: (key: string) => void;
   projectRoot: () => string | undefined;
   output: vscode.OutputChannel;
   isTrusted: () => boolean;
@@ -103,7 +104,10 @@ export function createLibraryDetailOpener(
   opener.refresh = async () => {
     if (session.id === undefined || session.panel === undefined) { return; }
     const root = deps.projectRoot();
-    if (root !== session.projectRoot) { session.projectRoot = root; session.generation++; }
+    if (root !== session.projectRoot) {
+      session.projectRoot = root; session.generation++; session.result = undefined;
+      if (session.model) { paintModel(session, { ...session.model, generation: session.generation, projectRoot: root, projectState: undefined, installed: undefined, loading: true, blockedReason: t("Reading package details…"), result: undefined }); }
+    }
     await render(session, session.id);
   };
   return opener;
@@ -123,10 +127,12 @@ export interface DetailSession {
   /** `mcpp add` in flight: a second click must not start a second command. */
   busy: boolean;
   generation: number;
+  renderRequest?: number;
   projectRoot?: string;
   preview?: LibraryRow;
   model?: DetailModel;
   painted: boolean;
+  lastHtml?: string;
   result?: DetailResult;
   /**
    * The document and its nonce, kept per session so re-opening the *same*
@@ -157,6 +163,7 @@ export async function open(session: DetailSession, id: string, preview?: Library
       session.id = undefined;
       session.generation++;
       session.painted = false;
+      session.lastHtml = undefined;
       // The next open creates a brand-new webview: what was on screen says
       // nothing about it, so the document comparison starts from nothing.
       session.webviewDocument.invalidate();
@@ -169,6 +176,7 @@ export async function open(session: DetailSession, id: string, preview?: Library
   const changed = session.id !== id;
   session.id = id;
   session.preview = preview;
+  session.deps.onPackageOpened?.(id);
   if (changed) { session.generation++; session.result = undefined; }
   const nextProject = session.deps.projectRoot();
   if (nextProject !== session.projectRoot) { session.generation++; session.result = undefined; }
@@ -200,6 +208,7 @@ async function handle(session: DetailSession, raw: unknown): Promise<void> {
       const root = await session.deps.chooseProject?.();
       if (root !== undefined && current()) {
         session.projectRoot = root; session.generation++; session.result = undefined;
+        if (session.model) { paintModel(session, { ...session.model, generation: session.generation, projectRoot: root, projectState: undefined, installed: undefined, loading: true, blockedReason: t("Reading package details…"), result: undefined }); }
         await render(session, session.id);
       }
       return;
@@ -276,6 +285,8 @@ function paintModel(session: DetailSession, model: DetailModel, replay = false):
   if (!panel) { return; }
   session.model = model;
   const html = renderDetailHtml(model, session.webviewDocument.assets(vscode.Uri.joinPath(session.context.extensionUri, MEDIA_DIRECTORY), panel.webview));
+  if (session.lastHtml === html && !replay) { return; }
+  session.lastHtml = html;
   if (!session.painted && !replay) {
     session.webviewDocument.paint(panel.webview, html); session.painted = true;
   } else {
@@ -286,21 +297,22 @@ function paintModel(session: DetailSession, model: DetailModel, replay = false):
 async function render(session: DetailSession, id: string): Promise<void> {
   const panel = session.panel;
   const generation = session.generation;
+  const request = session.renderRequest = (session.renderRequest ?? 0) + 1;
   const root = session.projectRoot;
   if (!panel) { return; }
   let model: DetailModel;
-  try { model = await buildModel(session, id); }
+  try { model = await buildModel(session, id, request); }
   catch (error) {
     session.deps.output.appendLine(String(error));
     model = emptyModel(path.basename(id, ".lua"), labels(), t("Could not read package details. See output for details."));
     model.blockedReason = model.parseNotice;
     model.result = { state: "error", message: model.parseNotice ?? "" };
   }
-  if (session.panel !== panel || session.id !== id || generation !== session.generation || root !== session.projectRoot) { return; }
+  if (session.panel !== panel || session.id !== id || generation !== session.generation || request !== session.renderRequest || root !== session.projectRoot) { return; }
   paintModel(session, { ...model, key: id, generation, busy: session.busy, result: session.result ?? model.result });
 }
 
-async function buildModel(session: DetailSession, id: string): Promise<DetailModel> {
+async function buildModel(session: DetailSession, id: string, request: number): Promise<DetailModel> {
   const projectRoot = session.projectRoot;
   const generation = session.generation;
   const snapshot = await loadSnapshot(projectRoot === undefined ? {} : { projectRoot });
@@ -313,6 +325,7 @@ async function buildModel(session: DetailSession, id: string): Promise<DetailMod
     const preview = session.preview;
     const model = emptyModel(preview?.id ?? path.basename(id, ".lua"), ui, preview ? t("This is a search preview. Set an index path containing this package to read its complete details.") : t("This package is not in the local index any more."));
     model.preview = preview !== undefined;
+    model.previewVersion = preview?.version;
     model.description = preview?.description;
     model.registry = preview?.source ?? "";
     model.projectRoot = projectRoot;
@@ -326,7 +339,7 @@ async function buildModel(session: DetailSession, id: string): Promise<DetailMod
   const cacheKey = `${snapshot.revision}\u0000${entry.file}\u0000${session.deps.isTrusted()}\u0000${session.deps.mcppExecutable(projectRoot)}\u0000${projectRoot ?? ""}`;
   let info = parsed.get(cacheKey);
   if (!parsed.has(cacheKey)) {
-    if (session.id === id && session.generation === generation && session.model?.loading) {
+    if (session.id === id && session.generation === generation && session.renderRequest === request && session.model?.loading) {
       const lightweight: DetailModel = {
         ...emptyModel(entry.id, ui, t("Reading package details…")),
         key: id, generation, projectRoot, platform: platform ?? process.platform,
@@ -376,11 +389,13 @@ async function buildModel(session: DetailSession, id: string): Promise<DetailMod
     platform: platform ?? process.platform,
     projectState: state,
     blockedReason: !session.deps.isTrusted() ? t("Trust this workspace to run mcpp and add dependencies.")
-      : !projectRoot ? t("Select an mcpp project before adding this library.")
+      : !projectRoot || !existsSync(path.join(projectRoot, "mcpp.toml")) ? t("Select an mcpp project before adding this library.")
       : state.ambiguous ? t("This dependency name is ambiguous. Use a qualified package name in mcpp.toml.")
       : state.sourceType === "path-or-git" ? t("This project uses a source dependency. Edit its manifest to change the source.")
+      : platform === undefined ? t("The current environment platform is not recognized by this index.")
       : latest === undefined ? info === undefined ? t("Version availability could not be confirmed. Retry reading this descriptor.") : t("No version is published for the current environment platform.")
       : undefined,
+    versionNotice: info === undefined ? t("Versions are from descriptor text; mcpp will confirm availability when adding.") : undefined,
     id: entry.id,
     name: entry.name,
     ...(entry.description === undefined ? {} : { description: entry.description }),
@@ -485,7 +500,8 @@ function readTextTolerantly(file: string): string {
 function labels(): Record<string, string> {
   return {
     [DETAIL_UI.htmlLang]: htmlLanguage(),
-    [DETAIL_UI.project]: t("Target project"),
+    [DETAIL_UI.project]: t("Project"),
+    [DETAIL_UI.platforms]: t("Platforms and versions"),
     [DETAIL_UI.chooseProject]: t("Choose project"),
     [DETAIL_UI.platform]: t("Environment platform"),
     [DETAIL_UI.version]: t("Version"),
@@ -528,7 +544,7 @@ function labels(): Record<string, string> {
     [DETAIL_UI.codeNone]: t("This package has no test project in the index, so there is no example to show."),
     [DETAIL_UI.codeSource]: t("{0} · line {1}"),
     [DETAIL_UI.codeProject]: t("Example project: {0} — built and run by the index's CI, not written for this page."),
-    [DETAIL_UI.add]: t("Add to mcpp.toml"),
+    [DETAIL_UI.add]: t("Add dependency"),
     [DETAIL_UI.addDev]: t("dev dependency"),
     [DETAIL_UI.addLatest]: t("The version is required: mcpp accepts an exact version only."),
     [DETAIL_UI.switchTo]: t("Switch to {0}"),
@@ -537,7 +553,7 @@ function labels(): Record<string, string> {
     [DETAIL_UI.opening]: t("Opening {0}…"),
     [DETAIL_UI.addNoVersion]: t("This index publishes no version for this platform, so there is nothing to add."),
     [DETAIL_UI.command]: t("Command"),
-    [DETAIL_UI.usage]: t("Bring it into your code"),
+    [DETAIL_UI.usage]: t("Usage"),
     [DETAIL_UI.copy]: t("Copy"),
     [DETAIL_UI.copied]: t("Copied to the clipboard."),
     [DETAIL_UI.copying]: t("Copying…"),

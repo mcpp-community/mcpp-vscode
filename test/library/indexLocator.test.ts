@@ -4,6 +4,7 @@ import Module, { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { watchProjectFiles } from "../../src/library/projectWatcher";
 import { projectDependencyState, readProjectDeclarations, operationMatches } from "../../src/library/projectState";
 
 const loader = Module as unknown as { _load(request: string, parent: unknown, main: boolean): unknown };
@@ -112,4 +113,23 @@ json = "1"
   assert.equal(state.declaredVersion, "3.2");
   assert.equal(projectDependencyState("compat.zlib", declarations, [], ["compat.zlib"]).dev, true);
   assert.equal(projectDependencyState("json", declarations, [], ["json"]).ambiguous, true);
+});
+
+
+test("selected-project fallback observes disk changes and stops on disposal", async () => {
+  const root = await fs.mkdtemp(path.join(tmpdir(), "mcpp-project-watch-"));
+  await fs.writeFile(path.join(root, "mcpp.toml"), "before");
+  let changes = 0;
+  const watcher = watchProjectFiles(root, () => { changes++; }, 30);
+  try {
+    await fs.writeFile(path.join(root, "mcpp.toml"), "after edit");
+    const start = Date.now();
+    while (changes === 0 && Date.now() - start < 2000) { await new Promise((resolve) => setTimeout(resolve, 40)); }
+    assert.ok(changes > 0);
+    watcher.dispose();
+    const previous = changes;
+    await fs.writeFile(path.join(root, "mcpp.lock"), "new lock");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(changes, previous);
+  } finally { watcher.dispose(); await fs.rm(root, { recursive: true, force: true }); }
 });

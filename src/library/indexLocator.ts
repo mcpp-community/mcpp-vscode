@@ -122,8 +122,9 @@ async function rootAt(directory: string, official = false): Promise<IndexRoot | 
 }
 
 /** Explicit paths never silently fall back. Only the official library source is auto-discovered. */
-export async function readIndexRoots(): Promise<IndexRoot[]> {
-  return discoverIndexRoots(read<string>("mcpp.library.indexPath"), await activeHome());
+export async function readIndexRoots(projectRoot?: string): Promise<IndexRoot[]> {
+  const configured = read<string>("mcpp.library.indexPath");
+  return discoverIndexRoots(configured, configured.trim() ? path.join(os.homedir(), ".mcpp") : await activeHome(projectRoot));
 }
 
 /** Filesystem seam used by the extension and fixture-based tests. */
@@ -147,59 +148,35 @@ export async function discoverIndexRoots(configured: string, home: string): Prom
   return [];
 }
 
-let probedHome: string | undefined;
-let probeAttempted = false;
+let homeProbe: { key: string; promise: Promise<string | undefined> } | undefined;
 
 /** CLI also supports self-contained installs: ask it once rather than merge unrelated homes. */
-async function activeHome(): Promise<string> {
+async function activeHome(projectRoot?: string): Promise<string> {
   const explicit = process.env.MCPP_HOME?.trim();
   if (explicit) { return path.resolve(expandHome(explicit)); }
-  return (await mcppHomeFromCli()) ?? path.join(os.homedir(), ".mcpp");
+  return (await mcppHomeFromCli(projectRoot)) ?? path.join(os.homedir(), ".mcpp");
 }
 
 export function invalidateIndexCache(): void {
   cache = undefined;
-  probeAttempted = false;
-  probedHome = undefined;
+  homeProbe = undefined;
 }
 
-/**
- * `mcpp self env --format json`, for the one field that says where the index is.
- *
- * It runs at most once per session and never in an untrusted workspace. A
- * missing or failing mcpp is not an error here: the caller falls back to the
- * directories it already has, and the view says "no index" the way it does when
- * there is none.
- */
-async function mcppHomeFromCli(): Promise<string | undefined> {
-  if (probeAttempted) {
-    return probedHome;
-  }
-  probeAttempted = true;
-  const executable = read<string>("mcpp.path").trim();
-  // `mcpp.path` is resource-scoped, so the probe goes through the trust-gated
-  // seam; a refusal is the same "no answer" as a failing mcpp.
-  const result = await runMcpp(
-    vscode.workspace.isTrusted,
-    executable.length === 0 ? "mcpp" : executable,
-    ["self", "env", "--format", "json"],
-    undefined,
-    { timeoutMs: SELF_ENV_TIMEOUT_MS, maxBufferMiB: 1 },
-  );
-  if (result === undefined || result.exitCode !== 0) {
-    return undefined;
-  }
-  const env = parseSelfEnv(result.stdout);
-  if (env === undefined) {
-    return undefined;
-  }
-  if (env.mcppHome !== undefined) {
-    probedHome = env.mcppHome;
-  } else if (env.registry !== undefined) {
-    // `registry` is `<home>/registry`; the home is what the other paths hang off.
-    probedHome = path.dirname(env.registry);
-  }
-  return probedHome;
+/** Share concurrent probes, with separate answers for different configured executables/projects. */
+async function mcppHomeFromCli(projectRoot?: string): Promise<string | undefined> {
+  const resource = projectRoot === undefined ? undefined : vscode.Uri.file(projectRoot);
+  const executable = read<string>("mcpp.path", resource).trim() || "mcpp";
+  const key = `${executable}\u0000${projectRoot ?? ""}\u0000${vscode.workspace.isTrusted}`;
+  if (homeProbe?.key === key) { return homeProbe.promise; }
+  const promise = (async () => {
+    const result = await runMcpp(vscode.workspace.isTrusted, executable, ["self", "env", "--format", "json"], projectRoot,
+      { timeoutMs: SELF_ENV_TIMEOUT_MS, maxBufferMiB: 1 });
+    if (result === undefined || result.exitCode !== 0) { return undefined; }
+    const env = parseSelfEnv(result.stdout);
+    return env?.mcppHome ?? (env?.registry === undefined ? undefined : path.dirname(env.registry));
+  })();
+  homeProbe = { key, promise };
+  return promise;
 }
 
 export { readIndexRoots as locateIndexRoots };
@@ -348,12 +325,11 @@ let cache: Cache | undefined;
 /**
  * The list, read from disk only when the revision changed.
  *
- * `projectRoot` is the workspace folder whose `mcpp.toml` decides the "already
- * declared" state; it is part of the cache key, because switching workspaces
- * changes the answer without changing the index.
+ * Only descriptor contents are cached. Project declarations are reapplied on
+ * every read, so disk writes and project switches cannot reuse old badges.
  */
 export async function loadSnapshot(options: { projectRoot?: string; platform?: string } = {}): Promise<LibrarySnapshot> {
-  const roots = await readIndexRoots();
+  const roots = await readIndexRoots(options.projectRoot);
   const revision = `${await revisionOf(roots)}|${options.platform ?? platformKey(process.platform)}`;
   if (cache !== undefined && cache.revision === revision) {
     return withProject(cache.snapshot, options.projectRoot);
@@ -371,14 +347,12 @@ export async function loadSnapshot(options: { projectRoot?: string; platform?: s
   const exampleRefs = new Map<string, ExampleRef>();
   for (const root of roots) {
     for (const [id, ref] of exampleCatalog(await readExamples(root))) {
-      if (!exampleRefs.has(id)) {
-        exampleRefs.set(id, ref);
-      }
+      exampleRefs.set(`${root.path}\u0000${id}`, ref);
     }
   }
-  const openkal = await readOpenkal(roots);
 
   for (const root of roots) {
+    const openkal = await readOpenkal([root]);
     for (const file of await descriptorFiles(root.pkgs)) {
       let text: string;
       try {
@@ -391,7 +365,7 @@ export async function loadSnapshot(options: { projectRoot?: string; platform?: s
       // `descriptorEntry` decides the identity; the example and openkal lookups
       // below must use that same id, so it is computed the same way here.
       const id = descriptorId(fields, fileName).id;
-      const example = exampleRefs.get(id);
+      const example = exampleRefs.get(`${root.path}\u0000${id}`);
       const facet = openkalFacetFor(openkal, id);
       const entry = descriptorEntry({
         fileName,

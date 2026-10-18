@@ -64,6 +64,7 @@ export interface LibraryModel {
   /** Everything is already localized by the caller. */
   ui: Record<string, string>;
   rows: LibraryRow[];
+  selectedKey?: string;
   query: string;
   networkSearch: boolean;
   /**
@@ -135,18 +136,8 @@ const BADGE_KEY_UI: Readonly<Record<BadgeKey, string>> = {
   "openkal-platform": LIBRARY_UI.badgeOpenkalPlatform,
 };
 
-/**
- * What the document says to the host.
- *
- * There deliberately **no `ready` message**. The document is the data — every
- * row, badge and count is already in it — so a "I have loaded" announcement can
- * only invite the host to render the same thing again. It did exactly that, and
- * because assigning `webview.html` reloads the document while every render mints
- * a fresh CSP nonce, the page never matched the previous one: the view reloaded
- * itself forever (flicker, unclickable rows, a pegged CPU). The host now also
- * refuses to re-assign an identical document — both rules live in
- * `src/webview/document.ts` (`WebviewDocument`) and `src/webview/render.ts`
- * (`documentNeedsRender`) — so this cannot come back by accident.
+/** A mounted handshake replays data in place after the initial document loads.
+ * The host never assigns webview.html in response, so it cannot create a reload loop.
  */
 export type LibraryMessage =
   | { type: "refresh" | "settings" | "update" | "output" | "mounted" }
@@ -208,7 +199,7 @@ function renderRow(row: LibraryRow, label: UiLabel): string {
     ...badges.map((badge) => `<span class="badge">${escapeHtml(badge)}</span>`),
     row.added ? `<span class="badge badge-added" data-badge="added">${escapeHtml(label(LIBRARY_UI.added))}</span>` : "",
     row.unreadable ? `<span class="badge badge-warn" data-badge="unreadable">${escapeHtml(label(LIBRARY_UI.unreadable))}</span>` : "",
-    row.crossRegistry === true ? `<span class="badge" data-badge="cross">${escapeHtml(row.source ?? label(LIBRARY_UI.crossRegistry))}</span>` : "",
+    row.crossRegistry === true || row.source ? `<span class="badge" data-badge="cross">${escapeHtml(row.source ?? label(LIBRARY_UI.crossRegistry))}</span>` : "",
   ]
     .filter((part) => part.length > 0)
     .join("");
@@ -291,7 +282,7 @@ function clientScript(initialModel: string): string {
   var saved = api && api.getState ? api.getState() || {} : {};
   var searchInput = document.getElementById("library-search");
   var networkInput = document.getElementById("library-network");
-  var selected = saved.selected || "";
+  var selected = state.selectedKey || saved.selected || "";
   if (searchInput && typeof saved.query === "string") { searchInput.value = saved.query; }
   function post(message) { if (api) { api.postMessage(message); } }
   function persist() {
@@ -365,6 +356,7 @@ function clientScript(initialModel: string): string {
       if (old && next) { old.replaceWith(next); }
     });
     state = payload.state;
+    if (state.selectedKey) { selected = state.selectedKey; }
     networkInput.checked = payload.networkSearch;
     apply();
     var nextDetails = document.querySelector("footer details"); if (nextDetails) { nextDetails.open = expanded; }
@@ -388,6 +380,7 @@ function clientScript(initialModel: string): string {
 export function libraryClientState(model: LibraryModel): Record<string, unknown> {
   return {
     countTemplate: model.countTemplate,
+    selectedKey: model.selectedKey,
     total: model.total,
     localTotal: model.rows.filter((row) => !row.crossRegistry).length,
     query: model.query,

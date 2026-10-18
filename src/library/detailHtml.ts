@@ -76,8 +76,10 @@ export interface DetailModel {
   platform?: string;
   projectState?: ProjectDependencyState;
   blockedReason?: string;
+  versionNotice?: string;
   loading?: boolean;
   preview?: boolean;
+  previewVersion?: string;
   busy?: boolean;
   id: string;
   name: string;
@@ -155,6 +157,7 @@ export const DETAIL_UI = {
   openManifest: "detail.openManifest",
   openFile: "detail.openFile",
   preview: "detail.preview",
+  platforms: "detail.platforms",
   overview: "detail.overview",
   license: "detail.license",
   repo: "detail.repo",
@@ -209,14 +212,8 @@ const BADGE_KEY_UI: Readonly<Record<BadgeKey, string>> = {
   "openkal-platform": DETAIL_UI.badgeOpenkalPlatform,
 };
 
-/**
- * What the page says to the host.
- *
- * There is no `ready`: the document is already the whole model, and a page that
- * announces its own load only invites the host to render it again — which is
- * exactly the reload loop the *library sidebar* shipped with (see the note in
- * `libraryHtml.ts`). This host happened to answer `ready` with an empty `return`,
- * so the trap never fired here; it is gone all the same.
+/** Messages carry a page key and generation at the transport boundary.
+ * Mounting replays the latest model in place; it never rebuilds the document.
  */
 export type DetailMessage =
   | { type: "add"; version: string; dev: boolean }
@@ -289,15 +286,7 @@ function renderSnippets(model: DetailModel, label: UiLabel): string {
   return blocks.join("\n");
 }
 
-/**
- * The version matrix, as the page's **selector**: each version is a button that
- * aims the command at the top of the page at itself.
- *
- * A `<select>` and a printed list of the same versions used to sit in two
- * different places, and only the select was interactive, so the list was
- * something to read and the choice was something else to find. One clickable
- * list is both.
- */
+/** Read-only platform information; the current-environment select owns the command. */
 function renderVersions(model: DetailModel, label: UiLabel): string {
   if (!model.versions.length) { return `<p class="detail-hint">${escapeHtml(label(DETAIL_UI.versionsNone))}</p>`; }
   const row = (group: DetailVersionGroup) => `<li class="detail-version-group"${flag("data-current", group.current)}>
@@ -333,9 +322,7 @@ function renderDependencies(model: DetailModel, label: UiLabel): string {
 }
 
 function renderMeta(model: DetailModel, label: UiLabel): string {
-  const parts: string[] = [
-    `<span class="badge">${escapeHtml(label(DETAIL_UI.registry))}: ${escapeHtml(model.registry)}</span>`,
-  ];
+  const parts: string[] = [];
   if (model.surface !== undefined) {
     parts.push(
       `<span class="badge">${escapeHtml(label(DETAIL_UI.surface))}: ${escapeHtml(surfaceLabel(model.surface, label))}</span>`,
@@ -343,9 +330,6 @@ function renderMeta(model: DetailModel, label: UiLabel): string {
   }
   if (model.standard !== undefined) {
     parts.push(`<span class="badge">${escapeHtml(label(DETAIL_UI.standard))}: ${escapeHtml(model.standard)}</span>`);
-  }
-  for (const badge of badgeLabels(model.badges, label)) {
-    parts.push(`<span class="badge">${escapeHtml(badge)}</span>`);
   }
   for (const license of model.licenses) {
     parts.push(`<span class="badge">${escapeHtml(license)}</span>`);
@@ -393,17 +377,17 @@ function renderActions(model: DetailModel, label: UiLabel): string {
   const link = (url: string, text: string) => `<button type="button" data-secondary data-open-url="${escapeHtml(url)}">${escapeHtml(text)}</button>`;
   const command = (dev ? model.commandDevTemplate : model.commandTemplate).replace("{0}", model.id).replace("{1}", version ?? "?");
   return `<section class="detail-primary" data-section="add" aria-busy="${model.loading || model.busy ? "true" : "false"}">
-    <div class="project-context"><span>${escapeHtml(label(DETAIL_UI.project))}: <strong title="${escapeHtml(model.projectRoot ?? "")}">${escapeHtml(model.projectRoot?.split(/[\\/]/).pop() ?? "—")}</strong></span>
-      <button class="link-button" type="button" data-action="selectProject">${escapeHtml(label(DETAIL_UI.chooseProject))}</button>
-      <span>${escapeHtml(label(DETAIL_UI.platform))}: ${escapeHtml(model.platform ?? "—")}</span></div>
+    <div class="project-context">
+      <button type="button" class="project-picker" data-action="selectProject" title="${escapeHtml(model.projectRoot ?? label(DETAIL_UI.chooseProject))}" aria-label="${escapeHtml(label(DETAIL_UI.chooseProject))}"><span>${escapeHtml(label(DETAIL_UI.project))}</span><strong>${escapeHtml(model.projectRoot?.split(/[\\/]/).pop() ?? label(DETAIL_UI.chooseProject))}</strong><span aria-hidden="true">⌄</span></button>
+      <span class="context-platform" title="${escapeHtml(label(DETAIL_UI.platform))}">${escapeHtml(model.platform ?? "—")}</span>
+    </div>
     ${model.loading ? `<p class="detail-hint" role="status">${escapeHtml(label(DETAIL_UI.loading))}</p>` : ""}
-    ${model.preview ? `<p class="detail-hint">${escapeHtml(label(DETAIL_UI.preview))}</p>` : ""}
+    ${model.preview ? `<p class="detail-hint">${escapeHtml(label(DETAIL_UI.preview))}</p><p>${escapeHtml(label(DETAIL_UI.version))}: ${escapeHtml(model.previewVersion ?? "—")}</p>` : ""}
     ${model.preview ? "" : `<div class="detail-controls">
       <label>${escapeHtml(label(DETAIL_UI.version))} <select id="detail-version"${flag("disabled", !!model.loading || !!model.busy || !model.currentVersions.length)}>${model.currentVersions.map((item) => `<option value="${escapeHtml(item)}"${flag("selected", item === version)}>${escapeHtml(item)}</option>`).join("")}</select></label>
       <label class="detail-toggle"><input id="detail-dev" type="checkbox"${flag("checked", dev)}${flag("disabled", !!model.loading || !!model.busy)}><span>${escapeHtml(label(DETAIL_UI.addDev))}</span></label>
-      ${declared === undefined ? "" : `<span>${escapeHtml(label(DETAIL_UI.declared))}: ${escapeHtml(declared)}</span>`}
       ${declared && model.latest && model.latest !== declared ? `<span class="detail-current">${escapeHtml(label(DETAIL_UI.version))}: ${escapeHtml(model.latest)} ↑</span>` : ""}
-      ${current?.resolvedVersion === undefined ? "" : `<span>${escapeHtml(label(DETAIL_UI.locked))}: ${escapeHtml(current.resolvedVersion)}</span>`}
+      ${current?.resolvedVersion === undefined || current.resolvedVersion === declared ? "" : `<span>${escapeHtml(label(DETAIL_UI.locked))}: ${escapeHtml(current.resolvedVersion)}</span>`}
       ${current?.sourceType === "path-or-git" ? `<span>${escapeHtml(label(DETAIL_UI.sourceDependency))}</span>` : ""}
     </div>`}
     <div class="detail-actions">
@@ -412,9 +396,10 @@ function renderActions(model: DetailModel, label: UiLabel): string {
       ${model.indexUrl === undefined ? "" : link(model.indexUrl, label(DETAIL_UI.indexLink))}
       ${current?.declared ? `<button class="link-button" type="button" data-secondary data-action="openManifest">${escapeHtml(label(DETAIL_UI.openManifest))}</button>` : ""}
     </div>
+    ${model.versionNotice ? `<p class="detail-hint">${escapeHtml(model.versionNotice)} <button class="link-button" type="button" data-action="retry">${escapeHtml(label(DETAIL_UI.retry))}</button></p>` : ""}
     ${blocked ? `<p class="detail-hint" id="detail-blocked">${escapeHtml(blocked)}</p>` : ""}
     <div class="detail-command-row"><p class="detail-command" id="detail-command">${escapeHtml(model.preview ? `mcpp search ${model.id}` : command)}</p><button type="button" class="detail-copy" data-copy-command>${escapeHtml(label(DETAIL_UI.copy))}</button></div>
-    <p id="detail-selection-note" class="detail-hint"></p>
+    <p id="detail-selection-note" class="detail-hint" hidden></p>
     <p class="detail-result" id="detail-result" role="status"${attribute("data-state", model.result?.state)}${flag("hidden", !model.result)}>${escapeHtml(model.result?.message ?? "")}</p>
     <div class="result-actions" id="detail-result-actions"${flag("hidden", model.result?.state !== "error")}><button class="link-button" type="button" data-action="retry">${escapeHtml(label(DETAIL_UI.retry))}</button><button class="link-button" type="button" data-action="showOutput">${escapeHtml(label(DETAIL_UI.output))}</button></div>
   </section>`;
@@ -442,6 +427,16 @@ function clientScript(initialModel: string): string {
   var busy = state.busy;
   var version = state.version || "";
   var copyId = 0;
+  var copyRequests = {};
+  function restoreCopyFeedback() {
+    Object.keys(copyRequests).forEach(function (token) {
+      var request = copyRequests[token];
+      if (request.key !== pageKey() || request.until < Date.now()) { delete copyRequests[token]; return; }
+      var buttons = Array.from(document.querySelectorAll(request.command ? "[data-copy-command]" : "[data-copy]"));
+      var button = buttons.find(function (node) { return request.command || node.getAttribute("data-copy") === request.text; });
+      if (button) { button.setAttribute("data-copy-token", token); if (request.message) { button.textContent = request.message; } }
+    });
+  }
   function pageKey() { return state.key + "|" + (state.projectRoot || ""); }
   function post(message) { message.pageKey = state.key; message.generation = state.generation; if (api) { api.postMessage(message); } }
   function persist() {
@@ -467,7 +462,7 @@ function clientScript(initialModel: string): string {
       button.textContent = busy ? state.labels.pending : same ? state.labels.alreadyAdded : state.declared ? state.labels.switchTo.split("{0}").join(version) : state.labels.add;
       if (same) { button.setAttribute("data-installed", ""); } else { button.removeAttribute("data-installed"); }
     }
-    var note = document.getElementById("detail-selection-note"); if (note) { note.textContent = groupChange ? state.labels.groupChange : ""; }
+    var note = document.getElementById("detail-selection-note"); if (note) { note.textContent = groupChange ? state.labels.groupChange : ""; note.hidden = !groupChange; }
     var command = document.getElementById("detail-command");
     if (command) { command.textContent = (isDev ? state.commandDev : state.command).split("{0}").join(state.id).split("{1}").join(version || "?"); }
   }
@@ -494,6 +489,7 @@ function clientScript(initialModel: string): string {
     if (target.hasAttribute("data-open-url")) { post({ type: "openUrl", url: target.getAttribute("data-open-url") }); return; }
     if (target.hasAttribute("data-copy") || target.hasAttribute("data-copy-command")) {
       var token = "copy-" + (++copyId); target.setAttribute("data-copy-token", token);
+      copyRequests[token] = { key: pageKey(), command: target.hasAttribute("data-copy-command"), text: target.getAttribute("data-copy"), until: Date.now() + 20000 };
       post({ type: "copy", text: target.hasAttribute("data-copy") ? target.getAttribute("data-copy") : document.getElementById("detail-command").textContent, token: token }); return;
     }
     if (target.id === "detail-add" && !busy && version) {
@@ -511,16 +507,19 @@ function clientScript(initialModel: string): string {
       var doc = new DOMParser().parseFromString(data.html, "text/html");
       ["detail-header", "detail-main", "detail-footer"].forEach(function (id) { var old = document.getElementById(id); var next = doc.getElementById(id); if (old && next) { old.replaceWith(next); } });
       state = data.state; busy = state.busy; version = state.version || "";
-      restore();
+      restore(); restoreCopyFeedback();
       var nextFocus = focused && document.getElementById(focused); if (nextFocus) { nextFocus.focus({ preventScroll: true }); }
       return;
     }
     if (data.key !== state.key || data.generation !== state.generation) { return; }
     if (data.type === "copyResult") {
-      var copy = document.querySelector('[data-copy-token="' + data.token + '"]');
-      if (copy) { copy.textContent = data.message; setTimeout(function () { copy.textContent = state.labels.copy; }, 1800); }
+      var request = copyRequests[data.token];
+      if (request) {
+        request.message = data.message; request.until = Date.now() + 1800; restoreCopyFeedback();
+        setTimeout(function () { var button = document.querySelector('[data-copy-token="' + data.token + '"]'); if (button) { button.textContent = state.labels.copy; } delete copyRequests[data.token]; }, 1800);
+      }
     }
-    if (data.type === "linkResult") { var status = document.getElementById("detail-link-result"); status.textContent = data.message; }
+    if (data.type === "linkResult") { var status = document.getElementById("detail-link-result"); status.textContent = data.message; status.hidden = !data.message; }
   });
   restore();
   post({ type: "mounted" });
@@ -560,23 +559,22 @@ export function renderDetailHtml(model: DetailModel, assets: DetailAssets): stri
 </header>
 <main id="detail-main">
   ${renderActions(model, label)}
-  <p class="detail-hint" id="detail-link-result" role="status"></p>
-  <div class="detail-layout">
+  <p class="detail-hint" id="detail-link-result" role="status" hidden></p>
+  ${model.preview ? "" : `<div class="detail-layout">
     <section class="detail-section detail-usage" data-section="code">
       <h2>${escapeHtml(label(DETAIL_UI.usage))}</h2>
-      ${model.usage.length ? `<p class="detail-hint">${escapeHtml(label(DETAIL_UI.usageSource))}</p>` + model.usage.map((line) => `<div class="detail-usage-line"><code>${escapeHtml(line)}</code><button type="button" class="detail-copy" data-copy="${escapeHtml(line)}">${escapeHtml(label(DETAIL_UI.copy))}</button></div>`).join("") : `<p class="detail-hint">${escapeHtml(label(DETAIL_UI.unknownUsage))}</p>`}
-      <h2>${escapeHtml(label(DETAIL_UI.code))}</h2>
-      ${renderSnippets(model, label)}
+      ${model.usage.length ? `<p class="detail-hint">${escapeHtml(label(DETAIL_UI.usageSource))}</p>` + model.usage.map((line) => `<div class="detail-usage-line"><code>${escapeHtml(line)}</code><button type="button" class="detail-copy" data-copy="${escapeHtml(line)}">${escapeHtml(label(DETAIL_UI.copy))}</button></div>`).join("") : model.snippets.length ? "" : `<p class="detail-hint">${escapeHtml(label(DETAIL_UI.unknownUsage))}</p>`}
+      ${model.snippets.length ? `<h2>${escapeHtml(label(DETAIL_UI.code))}</h2>${renderSnippets(model, label)}` : ""}
       ${model.exampleProject === undefined ? "" : `<p class="detail-hint">${escapeHtml(fill(label, DETAIL_UI.codeProject, [model.exampleProject]))}</p>`}
     </section>
     <aside class="detail-aside">
-      <section class="detail-section" data-section="versions"><h2>${escapeHtml(versionsHeading)}</h2>${renderVersions(model, label)}</section>
-      <section class="detail-section" data-section="dependencies"><h2>${escapeHtml(label(DETAIL_UI.dependencies))} (${model.dependencies.length})</h2>${renderDependencies(model, label)}</section>
+      <details class="detail-section" data-section="versions" data-persist="versions"><summary>${escapeHtml(label(DETAIL_UI.platforms))}</summary>${renderVersions(model, label)}</details>
+      ${model.dependencies.length ? `<details class="detail-section" data-section="dependencies" data-persist="dependencies"><summary>${escapeHtml(label(DETAIL_UI.dependencies))} (${model.dependencies.length})</summary>${renderDependencies(model, label)}</details>` : ""}
       ${!model.targets.length && !model.includeDirs.length ? "" : `<details class="detail-section" data-section="build" data-persist="build"><summary>${escapeHtml(label(DETAIL_UI.overview))}</summary>${renderExtras(model, label)}</details>`}
     </aside>
-  </div>
+  </div>`}
 </main>
-<footer class="detail-footer" id="detail-footer"><details data-persist="source"><summary>${escapeHtml(label(DETAIL_UI.source))}</summary><p>${escapeHtml(model.dataSource)}</p>${model.parseNotice === undefined ? "" : `<p>${escapeHtml(model.parseNotice)}</p>`}</details></footer>
+<footer class="detail-footer" id="detail-footer"><details data-persist="source"><summary>${escapeHtml(label(DETAIL_UI.source))}</summary><p>${escapeHtml(model.dataSource)}</p><p>${escapeHtml(badgeLabels(model.badges, label).join(" · "))}</p>${model.parseNotice === undefined ? "" : `<p>${escapeHtml(model.parseNotice)}</p>`}</details></footer>
 <script nonce="${escapeHtml(assets.nonce)}">
 ${clientScript(embedJson(detailClientState(model)))}
 </script>

@@ -19,6 +19,7 @@ const UI: Record<string, string> = {
   [DETAIL_UI.htmlLang]: "en",
   [DETAIL_UI.title]: "Library package {0}",
   [DETAIL_UI.overview]: "Build shape",
+  [DETAIL_UI.platforms]: "Platforms and versions",
   [DETAIL_UI.license]: "License",
   [DETAIL_UI.repo]: "Repository",
   [DETAIL_UI.openRepo]: "Open the repository",
@@ -118,7 +119,7 @@ test("the detail page is a strict, self-contained webview", () => {
 
 test("the overview names the vocabulary the index site uses", () => {
   const html = renderDetailHtml(model(), ASSETS);
-  assert.match(html, /<span class="badge">Registry: mcpplibs<\/span>/);
+  assert.doesNotMatch(html, /<span class="badge">Registry:/);
   assert.match(html, /<span class="badge">Use: #include<\/span>/);
   assert.match(html, /<span class="badge">Standard: c\+\+23<\/span>/);
   assert.match(html, /✓ Has examples/);
@@ -143,7 +144,7 @@ test("the overview names the vocabulary the index site uses", () => {
 
 test("the platform matrix is read only and secondary platforms are collapsed", () => {
   const html = renderDetailHtml(model(), ASSETS);
-  assert.match(html, /Versions \(linux\)/);
+  assert.match(html, /Platforms and versions/);
   assert.match(html, /<span class="detail-version">3\.2<\/span>/);
   assert.doesNotMatch(html, /<button[^>]*data-version/);
   assert.match(html, /<details data-persist="platforms">/);
@@ -188,7 +189,7 @@ test("dependencies are listed as declared, and the resolved column is left out w
   );
   assert.match(resolved, /<code>compat\.zlib<\/code> — 1\.3 · resolved 1\.2\.13/);
   const none = renderDetailHtml(model({ dependencies: [] }), ASSETS);
-  assert.match(none, /This descriptor declares no dependencies\./);
+  assert.doesNotMatch(none, /data-section="dependencies"/);
 });
 
 test("the current-environment selector is the single source of the add command", () => {

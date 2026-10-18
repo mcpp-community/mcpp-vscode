@@ -24,7 +24,7 @@
 import * as vscode from "vscode";
 
 import { runMcpp } from "../cli/process";
-import { read, write } from "../config/access";
+import { effective, read, write } from "../config/access";
 import { languagePreference, t } from "../i18n/t";
 import { localeFromEditorLanguage } from "../i18n/translate";
 import { WebviewDocument } from "../webview/document";
@@ -100,6 +100,7 @@ export function registerLibraryView(context: vscode.ExtensionContext, deps: Libr
   );
   return {
     refresh: () => provider.refresh(),
+    select: (key: string) => provider.select(key),
     dispose: () => provider.dispose(),
   };
 }
@@ -116,6 +117,7 @@ export function registerLibraryView(context: vscode.ExtensionContext, deps: Libr
  */
 export interface LibraryViewHandle {
   refresh(): Promise<void>;
+  select(key: string): void;
   dispose(): void;
 }
 
@@ -123,6 +125,7 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
   private view: vscode.WebviewView | undefined;
   private snapshot: LibrarySnapshot | undefined;
   private query = "";
+  private selectedKey = "";
   /** Cross-registry hits for the current query, from `mcpp search`. */
   private extra: LibraryRow[] = [];
   private searchNote: string | undefined;
@@ -147,7 +150,10 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
     private readonly deps: LibraryViewDeps,
   ) {}
 
+  public select(key: string): void { this.selectedKey = key; this.paint(); }
+
   public dispose(): void {
+    this.requestGeneration++;
     if (this.searchTimer !== undefined) {
       clearTimeout(this.searchTimer);
       this.searchTimer = undefined;
@@ -254,7 +260,8 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
     this.extra = [];
     this.searchNote = undefined;
     try {
-      await write("mcpp.library.networkSearch", enabled, "user");
+      const source = effective<boolean>("mcpp.library.networkSearch").source;
+      await write("mcpp.library.networkSearch", enabled, source === "workspace" || source === "workspaceFolder" ? "workspace" : "user");
     } catch (error) {
       this.deps.output?.appendLine(
         `mcpp library: could not write mcpp.library.networkSearch: ${error instanceof Error ? error.message : String(error)}`,
@@ -345,7 +352,7 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
       .map((hit) => ({
         id: hit.id,
         key: `search:${hit.id}`,
-        source: hit.id.includes(".") ? hit.id.slice(0, hit.id.indexOf(".")) : t("Other registry"),
+        source: t("Other registry"),
         name: hit.id.includes(".") ? hit.id.slice(hit.id.indexOf(".") + 1) : hit.id,
         ...(hit.id.includes(".") ? { namespace: hit.id.slice(0, hit.id.indexOf(".")) } : {}),
         ...(hit.version === undefined ? {} : { version: hit.version }),
@@ -437,7 +444,7 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
       return this.emptyModel(ui, this.error ?? t("Reading the index…"), t("Reading the index…"));
     }
     const entries = snapshot.entries;
-    const rows = [...entries.map(rowOf), ...this.extra];
+    const rows = [...entries.map((entry) => rowOf(entry, snapshot.roots.some((root) => root.kind === "custom"))), ...this.extra];
     const notice =
       snapshot.roots.length === 0
         ? ui[LIBRARY_UI.noIndex]
@@ -447,6 +454,7 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
     return {
       ui,
       rows,
+      selectedKey: this.selectedKey,
       query: this.query,
       networkSearch: this.networkSearch(),
       networkSearchSetting: "mcpp.library.networkSearch",
@@ -483,11 +491,11 @@ class LibraryViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
 }
 
 /** One entry as the row the document renders. */
-function rowOf(entry: LibraryEntry): LibraryRow {
+function rowOf(entry: LibraryEntry, showSource = false): LibraryRow {
   return {
     id: entry.id,
     key: entry.file,
-    source: entry.registry,
+    ...(showSource ? { source: entry.registry } : {}),
     haystack: searchText(entry),
     ...(entry.namespace === undefined ? {} : { namespace: entry.namespace }),
     name: entry.name,
