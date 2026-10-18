@@ -8,12 +8,12 @@ type Stub = "full" | "partial" | "renamed" | "noapi" | "throwing";
 
 const STUB = (process.env.MCPP_E2E_STUB ?? "full") as Stub;
 
-async function waitForFile(file: string, timeoutMs: number): Promise<string> {
+async function waitForFile(file: string, timeoutMs: number, expectedLine?: string): Promise<string> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (existsSync(file)) {
       const content = readFileSync(file, "utf8");
-      if (content.trim().length > 0) {
+      if (content.trim().length > 0 && (expectedLine === undefined || content.trim().split(/\r?\n/).includes(expectedLine))) {
         return content;
       }
     }
@@ -65,7 +65,7 @@ suite(`mcpp extension smoke (mcppls stub: ${STUB})`, () => {
       .update("path", fakeMcpp, vscode.ConfigurationTarget.Workspace);
 
     void vscode.commands.executeCommand("mcpp.build");
-    assert.equal((await waitForFile(mcppLog, 20_000)).trim(), "build");
+    assert.ok((await waitForFile(mcppLog, 20_000, "build")).trim().split(/\r?\n/).includes("build"), "a build must run even when a read-only self env probe also ran");
 
     // Which command the refresh chain lands on is exactly what the variant decides.
     const recorded = await waitForFile(mcpplsLog, 20_000);
