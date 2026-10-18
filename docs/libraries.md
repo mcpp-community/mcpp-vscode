@@ -26,7 +26,8 @@ Usage shows the index's real test examples, preferring the package's own named
 test project. Local checkout tests take priority. Official packaged indexes often
 omit tests, so the extension includes a pinned upstream test snapshot for offline
 use, with its commit shown on the page. Open the complete source in a read-only
-editor; custom indexes only use their own tests. Packages without matching tests
+editor; this also applies to local checkout sources. Copy and source actions sit
+beside the example heading. Custom indexes only use their own tests. Packages without matching tests
 keep an explicit empty state. Platform versions, build information and source
 diagnostics can be expanded without leaving the page.
 
@@ -39,6 +40,12 @@ resolved build. Missing local metadata is marked with a dashed node. The page
 supports zoom, refresh, opening the manifest and copying Mermaid source, and caps
 large graphs at 120 nodes or 240 edges.
 
+The dependency list shows direct `namespace.package@version` declarations and
+distinguishes index, path and git sources. Click a row to open the graph focused
+on that dependency. Graph edges keep the full package coordinate together;
+colored nodes show minimal tags and dependency counts. The primary canvas omits
+absolute paths and diagnostic paragraphs; the legend and source are folded.
+
 **Search other registries** is optional and off by default. Results from these
 registries appear in a separate group and open limited previews. They cannot be
 added directly without a complete local descriptor.
@@ -48,3 +55,5 @@ If the official catalog is missing, update the mcpp index or configure
 is identified as a custom source; global index updates do not update an arbitrary
 checkout. The legacy official path is supported, while the xlings tool catalog
 is not automatically substituted for mcpp-index.
+
+The dependency graph supports cursor-centered wheel zoom and click-and-drag panning. Use Fit to restore the complete graph; keyboard `+`, `-`, and `0` provide zoom and reset.

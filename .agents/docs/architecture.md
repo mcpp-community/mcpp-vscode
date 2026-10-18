@@ -90,3 +90,5 @@ extension.ts                 VS Code 装配层：激活、命令注册、provide
 
 - `library/examples.ts`：官方安装版索引未携带测试时，读取带来源提交的内置测试快照；checkout 的本地测试优先，自定义索引不使用此兜底。完整代码通过只读 `mcpp-example` 文档打开。
 - `projects/dependencyGraph.ts`：纯声明图遍历，最多三跳，处理路径包、共享节点和循环；lock 只补版本。`dependencyGraphPanel.ts` 负责只读文件编排和本地 Mermaid Webview。Mermaid 固定版本与许可证由编译脚本复制至 `dist/vendor`，无需 CDN。
+
+- `views/models.ts` 与 Libraries 共用直接声明解析，树节点携带项目、依赖和分组身份；点击进入声明图并居中高亮对应节点。Webview 使用 SVG 平移/缩放变换，滚轮保留鼠标锚点，Pointer Events 区分点击与拖动；Fit 可恢复完整图。

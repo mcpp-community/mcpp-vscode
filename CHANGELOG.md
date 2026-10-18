@@ -1,5 +1,6 @@
 ## Unreleased
 
+- Example code uses a uniform background and compact heading actions; local and bundled example sources both open read-only. Direct dependency rows now resolve namespaces correctly, show package coordinates and sources, and focus the selected node in the simplified colored graph.
 - Usage pages restore real index test examples even when the installed index omits tests, using a pinned offline snapshot with full read-only source access. Focused search shows a single clear button.
 - Project dependencies offer a Mermaid graph of the nearest three levels, based on manifests and local index metadata, with refresh, zoom and Mermaid copy controls.
 - Libraries now defaults to the official `mcpp-index` in `<mcpp home>/indices/mcpplibs`, with support for the old location. The xlings tool index is no longer substituted for the library catalog.
