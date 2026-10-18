@@ -1,6 +1,7 @@
 /** Local package discovery. Official indexes are separate from the xlings tool registry.
  * Descriptor contents are cached independently from the project's dependency state.
  */
+import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -8,11 +9,10 @@ import * as vscode from "vscode";
 
 import { runMcpp } from "../cli/process";
 import { read } from "../config/access";
-import { projectDependencyState } from "./projectState";
+import { projectDependencyState, readProjectDeclarations } from "./projectState";
 import {
   descriptorEntry,
   descriptorId,
-  declaredDependencyEntries,
   exampleCatalog,
   openkalFacetFor,
   parseDescriptorLua,
@@ -250,7 +250,7 @@ async function revisionOf(roots: readonly IndexRoot[]): Promise<string> {
     const stats = await Promise.all(files.map(async (file) => `${file}:${JSON.stringify(await statSafe(file))}`));
     parts.push(`${root.path}:${root.kind}:${root.updatedAt ?? ""}:${stats.join(";")}`);
   }
-  return parts.join("|");
+  return createHash("sha256").update(parts.join("|")).digest("hex");
 }
 
 async function statSafe(target: string): Promise<{ mtimeMs: number; size: number } | undefined> {
@@ -329,7 +329,7 @@ async function readOpenkal(roots: readonly IndexRoot[]): Promise<OpenkalIndex | 
 /** Project overlay is always fresh and never changes the descriptor cache. */
 async function withProject(snapshot: LibrarySnapshot, projectRoot?: string): Promise<LibrarySnapshot> {
   const text = projectRoot === undefined ? "" : await fs.readFile(path.join(projectRoot, "mcpp.toml"), "utf8").catch(() => "");
-  const declarations = declaredDependencyEntries(text);
+  const declarations = readProjectDeclarations(text);
   const ids = snapshot.entries.map((entry) => entry.id);
   return { ...snapshot, entries: snapshot.entries.map((entry) => ({
     ...entry, added: projectDependencyState(entry.id, declarations, [], ids).declared,

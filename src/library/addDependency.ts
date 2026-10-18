@@ -38,6 +38,7 @@ export interface AddDependencyDeps {
   output?: vscode.OutputChannel;
   /** `vscode.workspace.isTrusted`; an untrusted workspace may not be written to. */
   isTrusted: () => boolean;
+  quiet?: boolean;
 }
 
 export interface AddDependencyRequest {
@@ -82,18 +83,18 @@ export async function addDependency(
   const version = request.version?.trim() ?? "";
   if (request.id.trim().length === 0 || version.length === 0) {
     const message = t("mcpp add needs an exact version: mcpp add {0}@<version>.", request.id);
-    void vscode.window.showWarningMessage(message);
+    if (!deps.quiet) void vscode.window.showWarningMessage(message);
     return failure(message);
   }
   const root = deps.projectRoot();
   if (root === undefined) {
     const message = t("This workspace has no mcpp.toml.");
-    void vscode.window.showWarningMessage(message);
+    if (!deps.quiet) void vscode.window.showWarningMessage(message);
     return failure(message);
   }
   if (!deps.isTrusted()) {
     const message = t("This workspace is not trusted. mcpp commands that write are disabled until you trust it.");
-    void vscode.window.showWarningMessage(message);
+    if (!deps.quiet) void vscode.window.showWarningMessage(message);
     return failure(message);
   }
 
@@ -128,7 +129,7 @@ export async function addDependency(
 
   if (result.exitCode === 0) {
     const message = t("Added {0} to mcpp.toml.", `${request.id}@${version}`);
-    void vscode.window.showInformationMessage(message);
+    if (!deps.quiet) void vscode.window.showInformationMessage(message);
     return { ok: true, argv, exitCode: 0, message };
   }
 
@@ -136,7 +137,7 @@ export async function addDependency(
   const message =
     detail.length === 0
       ? t("mcpp add failed with exit code {0}.", result.exitCode)
-      : t("mcpp add failed with exit code {0}: {1}", result.exitCode, detail);
-  void vscode.window.showErrorMessage(message);
+      : t("mcpp add failed (exit {0}). See output for details.", result.exitCode);
+  if (!deps.quiet) void vscode.window.showErrorMessage(message);
   return { ok: false, argv, exitCode: result.exitCode, message };
 }

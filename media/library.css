@@ -630,3 +630,57 @@ pre.detail-code code {
   font-size: 10px;
   border-top: 1px solid var(--vscode-panel-border, transparent);
 }
+
+/* Libraries: keep the search control stable while replacing results in place. */
+.toolbar { position: sticky; }
+.search { padding-right: 24px; }
+.clear-search { position: absolute; right: 18px; top: 10px; font-size: 16px; }
+.row[aria-current="true"] { background: var(--vscode-list-inactiveSelectionBackground); box-shadow: inset 2px 0 var(--vscode-focusBorder); }
+.group-title { margin: 12px 10px 4px; font-size: 11px; color: var(--vscode-descriptionForeground); }
+.search-status { margin: 8px 10px; color: var(--vscode-descriptionForeground); }
+.footer details { margin-bottom: 6px; }
+.footer summary, .detail-footer summary, .detail-aside summary { cursor: pointer; }
+.footer-actions { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+.source { white-space: pre-wrap; }
+.project-notice { margin-top: 2px; }
+
+body.detail { max-width: 1120px; margin: 0 auto; padding: 0 24px 40px; }
+.detail-title { overflow-wrap: anywhere; }
+.detail-primary { padding: 12px 0 4px; }
+.project-context, .detail-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 8px 0; }
+.project-context { color: var(--vscode-descriptionForeground); }
+.project-context strong { font-weight: 500; overflow-wrap: anywhere; }
+.detail-controls label { display: flex; align-items: center; gap: 6px; }
+.detail-controls select { padding: 3px 8px; font: inherit; color: var(--vscode-dropdown-foreground); background: var(--vscode-dropdown-background); border: 1px solid var(--vscode-dropdown-border, var(--vscode-input-border, transparent)); }
+.detail-layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 28px; }
+.detail-layout > *, .detail-command-row > *, .detail-usage-line > * { min-width: 0; }
+.detail-aside { min-width: 0; }
+.detail-aside .detail-version-group { display: block; }
+.detail-aside .detail-platform { display: block; margin-bottom: 4px; }
+.detail-version-list { display: flex; flex-wrap: wrap; gap: 4px; }
+span.detail-version { cursor: default; color: var(--vscode-descriptionForeground); background: var(--vscode-textCodeBlock-background); border-color: transparent; }
+span.detail-version[data-installed] { color: var(--vscode-testing-iconPassed, var(--vscode-foreground)); }
+.detail-usage > h2:not(:first-child) { margin-top: 20px; }
+.detail-command { white-space: pre; }
+.detail-command-row { min-width: 0; }
+.detail-command-row .detail-command { flex: 1; }
+.detail-command-row .detail-copy { flex-shrink: 0; }
+.snippet-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 10px; }
+.result-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+button:disabled, select:disabled { cursor: default; opacity: 0.65; }
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; }
+.detail-footer { overflow-wrap: anywhere; }
+@media (max-width: 899px) {
+  .detail-layout { display: block; }
+  body.detail { padding-left: 16px; padding-right: 16px; }
+}
+@media (max-width: 520px) {
+  .detail-actions { gap: 8px; }
+  .detail-actions button { padding: 5px 8px; }
+  .detail-command-row { flex-wrap: wrap; }
+  .detail-command-row .detail-command { flex-basis: 100%; }
+}
+
+.toolbar .count { margin: 0 0 0 auto; align-self: center; }
+.detail-actions .link-button { color: var(--vscode-textLink-foreground); background: transparent; border-color: transparent; padding: 4px 0; }
+.detail-actions .link-button:hover { background: transparent; text-decoration: underline; }

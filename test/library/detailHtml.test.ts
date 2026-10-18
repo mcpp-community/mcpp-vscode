@@ -141,30 +141,14 @@ test("the overview names the vocabulary the index site uses", () => {
   assert.doesNotMatch(html, /<a href="https:/, "no bare link is left in the facts line");
 });
 
-test("the version matrix marks the current platform, empty groups and all", () => {
+test("the platform matrix is read only and secondary platforms are collapsed", () => {
   const html = renderDetailHtml(model(), ASSETS);
   assert.match(html, /Versions \(linux\)/);
-  // Each version is a button that aims the command at the top of the page at
-  // itself, and the one the page opens on is marked.
-  assert.match(
-    html,
-    /<li class="detail-version-group" data-current><span class="detail-platform">linux<\/span><span class="detail-version-list"><button type="button" class="detail-version" data-version="3\.2" data-selected>3\.2<\/button><\/span><span class="detail-current">this platform<\/span><\/li>/,
-  );
-  assert.match(
-    html,
-    /<li class="detail-version-group"><span class="detail-platform">windows<\/span><span class="detail-version-list"><span class="detail-version-empty">—<\/span><\/span><\/li>/,
-  );
-  assert.match(html, /Click a version to aim the command above at it\./);
-
-  const none = renderDetailHtml(model({ versions: [], currentVersions: [], latest: undefined }), ASSETS);
-  assert.match(none, /This index publishes no version for any platform\./);
-
-  // No group is "current" when the host platform is not one the index knows.
-  const elsewhere = renderDetailHtml(
-    model({ versions: [{ platform: "windows", versions: ["3.2"], current: false }] }),
-    ASSETS,
-  );
-  assert.match(elsewhere, /<h2>Versions<\/h2>/);
+  assert.match(html, /<span class="detail-version">3\.2<\/span>/);
+  assert.doesNotMatch(html, /<button[^>]*data-version/);
+  assert.match(html, /<details data-persist="platforms">/);
+  assert.match(html, /<span class="detail-platform">windows<\/span>/);
+  assert.match(renderDetailHtml(model({ versions: [] }), ASSETS), /This index publishes no version for any platform/);
 });
 
 test("the example block is highlighted, escaped and marked at the usage line", () => {
@@ -207,80 +191,40 @@ test("dependencies are listed as declared, and the resolved column is left out w
   assert.match(none, /This descriptor declares no dependencies\./);
 });
 
-test("the add button carries the exact command, and is disabled when there is no version", () => {
+test("the current-environment selector is the single source of the add command", () => {
   const html = renderDetailHtml(model(), ASSETS);
-  // One place chooses the version (the matrix) and one place shows what the
-  // choice produces; there is no second, redundant `<select>` any more.
-  assert.doesNotMatch(html, /<select/);
-  assert.match(html, /id="detail-command" data-selected-version="3\.2" data-template="mcpp add \{0\}@\{1\}"/);
-  assert.match(html, /data-template-dev="mcpp add \{0\}@\{1\} --dev"/);
-  assert.match(html, /<button type="button" id="detail-add" class="detail-add">Add to mcpp\.toml<\/button>/);
-  assert.match(html, /<input id="detail-dev" type="checkbox"/);
-
-  // The primary block comes before the sections, right under the header.
-  const primary = html.indexOf('data-section="add"');
-  const versions = html.indexOf('data-section="versions"');
-  assert.ok(primary !== -1 && versions !== -1 && primary < versions, "the action must sit above the version matrix");
-
-  const none = renderDetailHtml(model({ latest: undefined, currentVersions: [] }), ASSETS);
-  assert.match(none, /<button type="button" id="detail-add" class="detail-add" disabled>/);
-  assert.match(none, /This index publishes no version for this platform\./);
+  assert.match(html, /<select id="detail-version"><option value="3\.2" selected>3\.2<\/option><\/select>/);
+  assert.match(html, /id="detail-command">mcpp add compat\.argparse@3\.2<\/p>/);
+  assert.match(html, /id="detail-add" class="detail-add">Add to mcpp\.toml/);
+  assert.ok(html.indexOf('data-section="add"') < html.indexOf('data-section="code"'));
+  assert.ok(html.indexOf('data-section="code"') < html.indexOf('data-section="versions"'));
+  const none = renderDetailHtml(model({ latest: undefined, currentVersions: [], blockedReason: "No version for this environment" }), ASSETS);
+  assert.match(none, /id="detail-add" class="detail-add" disabled/);
+  assert.match(none, /No version for this environment/);
 });
 
-test("a package the project already has says so, and the button offers the switch", () => {
-  // Same version as the manifest: nothing to do, and the button says so — with
-  // `data-installed`, which paints it the thinned green of a done thing.
-  const same = renderDetailHtml(model({ installed: { version: "3.2", dev: false } }), ASSETS);
-  assert.match(
-    same,
-    /<button type="button" id="detail-add" class="detail-add" disabled data-installed>Already added<\/button>/,
-  );
-  assert.match(same, /data-version="3\.2" data-selected data-installed>3\.2<\/button><span class="detail-installed">added<\/span>/);
-
-  // A different version: the button names the switch, and the marker stays on the
-  // version the project actually has.
-  const other = renderDetailHtml(
-    model({
-      latest: "3.3",
-      currentVersions: ["3.3", "3.2"],
-      versions: [{ platform: "linux", versions: ["3.3", "3.2"], current: true }],
-      installed: { version: "3.2", dev: false },
-    }),
-    ASSETS,
-  );
-  assert.match(other, /<button type="button" id="detail-add" class="detail-add">Switch to 3\.3<\/button>/);
-  assert.doesNotMatch(other, /id="detail-add"[^>]*disabled/);
-  assert.match(other, /data-version="3\.2"[^>]*data-installed>3\.2<\/button><span class="detail-installed">added<\/span>/);
-
-  // Not a dependency at all: the original label, and no marker anywhere.
-  const fresh = renderDetailHtml(model(), ASSETS);
-  assert.match(fresh, />Add to mcpp\.toml<\/button>/);
-  // The script can move a marker, so the check is on the markup, not the page.
-  assert.doesNotMatch(fresh, /class="detail-installed"/);
+test("an existing declaration is preserved by default, including dev group", () => {
+  const html = renderDetailHtml(model({
+    latest: "3.3", currentVersions: ["3.3", "3.2"],
+    projectState: { declared: true, declaredVersion: "3.2", resolvedVersion: "3.1", dev: true, sourceType: "registry", ambiguous: false },
+  }), ASSETS);
+  assert.match(html, /<option value="3\.2" selected>/);
+  assert.match(html, /id="detail-dev" type="checkbox" checked/);
+  assert.match(html, /id="detail-add" class="detail-add" disabled data-installed/);
+  assert.match(html, /mcpp add compat\.argparse@3\.2 --dev/);
+  assert.match(html, /"declared":"3\.2"/);
+  assert.match(html, /"dev":true/);
 });
 
-test("the client can re-decide the button, and a link click is never silent", () => {
-  const html = renderDetailHtml(model({ installed: { version: "3.1", dev: false } }), ASSETS);
-  // The labels and the installed version travel with the page: the button's
-  // meaning changes with the selection, and the selection lives in the client.
-  assert.match(html, /"installed":"3\.1"/);
-  assert.match(html, /"switchTo":"Switch to \{0\}"/);
-  assert.match(html, /"alreadyAdded":"Already added"/);
-  assert.match(html, /"opening":"Opening \{0\}…"/);
-  // The marker word belongs to the client too: `markInstalled()` writes it
-  // after a successful add, and an empty string there is a marker nobody can
-  // read (the §22 fix).
-  assert.match(html, /"installed":"added"/);
-  assert.match(html, /"copying":"Copying…"/);
-  const script = /<script nonce="[^"]*">([\s\S]*)<\/script>/.exec(html);
-  assert.ok(script !== null);
-  assert.match(script[1], /function updateButton\(\)/);
-  assert.match(script[1], /showResult\(\{ state: "pending"/);
-  assert.match(script[1], /updateButton\(\);/);
-  // The inert state is the one that paints green, so the client has to toggle
-  // the attribute exactly when it toggles the disabled state.
-  assert.match(script[1], /setAttribute\("data-installed", ""\)/);
-  assert.match(script[1], /removeAttribute\("data-installed"\)/);
+test("asynchronous updates preserve document context and match page lifetime", () => {
+  const html = renderDetailHtml(model({ key: "/index/pkg.lua", generation: 7 }), ASSETS);
+  assert.match(html, /data\.key !== state\.key \|\| data\.generation !== state\.generation/);
+  assert.match(html, /type: "mounted"/);
+  assert.match(html, /new DOMParser/);
+  assert.match(html, /api\.setState/);
+  assert.match(html, /copyResult/);
+  assert.match(html, /linkResult/);
+  assert.doesNotMatch(html, /webview\.html/);
 });
 
 test("the usage lines and the command each carry their own copy button (§22)", () => {
@@ -291,7 +235,7 @@ test("the usage lines and the command each carry their own copy button (§22)", 
   assert.match(html, />Bring it into your code</);
   assert.match(
     html,
-    /<p class="detail-usage-line"><code>import openkal\.types;<\/code><button type="button" class="detail-copy" data-copy="import openkal\.types;">Copy<\/button><\/p>/,
+    /<div class="detail-usage-line"><code>import openkal\.types;<\/code><button type="button" class="detail-copy" data-copy="import openkal\.types;">Copy<\/button><\/div>/,
   );
   assert.match(html, /data-copy="#include &lt;argparse\/argparse\.hpp&gt;"/);
   // The command's copy button sits beside the paragraph, not inside it, so
@@ -303,12 +247,12 @@ test("the usage lines and the command each carry their own copy button (§22)", 
   );
   // A page with nothing to import says nothing rather than inventing a line.
   const bare = renderDetailHtml(model({ usage: [] }), ASSETS);
-  assert.doesNotMatch(bare, /detail-usage-line/);
-  assert.doesNotMatch(bare, />Bring it into your code</);
+  assert.doesNotMatch(bare, /class="detail-usage-line"/);
+  assert.match(bare, />Bring it into your code</);
   // The client asks the host to copy, and says so while it waits.
   const script = /<script nonce="[^"]*">([\s\S]*)<\/script>/.exec(html);
   assert.ok(script !== null);
-  assert.match(script[1], /post\(\{ type: "copy", text: text \}\)/);
+  assert.match(script[1], /type: "copy"/);
 });
 
 test("a parse failure is stated on the page instead of leaving it blank", () => {
@@ -323,7 +267,7 @@ test("a parse failure is stated on the page instead of leaving it blank", () => 
 test("an index url is optional: a registry without a site gets no link", () => {
   const html = renderDetailHtml(model({ indexUrl: undefined, registry: "xim-pkgindex" }), ASSETS);
   assert.doesNotMatch(html, /mcpplibs\.github\.io/);
-  assert.doesNotMatch(html, /Open on the index site/);
+  assert.doesNotMatch(html, /data-open-url="[^"]*mcpp-index/);
   // The repository button is still there: only the index-site button is
   // registry-dependent.
   assert.match(html, /data-open-url="https:\/\/github\.com\/p-ranav\/argparse"/);
@@ -385,7 +329,7 @@ test("the client script is syntactically valid JavaScript, and posts no ready", 
   assert.doesNotThrow(() => new Function(script[1]));
   assert.doesNotMatch(script[1], /innerHTML/);
   assert.doesNotMatch(script[1], /"ready"/);
-  assert.match(script[1], /data-version/);
+  assert.match(script[1], /detail-version/);
   assert.match(script[1], /textContent/);
 });
 

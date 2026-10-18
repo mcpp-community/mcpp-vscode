@@ -35,6 +35,8 @@ import { BADGE_UI, SURFACE_TEXT, surfaceLabel, type BadgeKey, type Surface } fro
 /** One result row, already resolved for display. */
 export interface LibraryRow {
   id: string;
+  key?: string;
+  source?: string;
   namespace?: string;
   name: string;
   /** The greatest version this platform has, or `undefined`. */
@@ -71,6 +73,9 @@ export interface LibraryModel {
   networkSearchSetting: string;
   /** The data source, in plain words, for the footer. */
   dataSource: string;
+  sourceDetails?: string;
+  status?: string;
+  projectNotice?: string;
   /** `{0}` visible of `{1}` known, already localized; the header count uses it. */
   countTemplate: string;
   /** Rows before filtering; the count line shows it against what is visible. */
@@ -112,6 +117,12 @@ export const LIBRARY_UI = {
   count: "library.count",
   open: "library.open",
   refresh: "library.refresh",
+  sources: "library.sources",
+  other: "library.other",
+  settings: "library.settings",
+  update: "library.update",
+  output: "library.output",
+  clear: "library.clear",
 } as const;
 
 /** One badge key's `ui` key, so the renderer has a single lookup table. */
@@ -138,7 +149,7 @@ const BADGE_KEY_UI: Readonly<Record<BadgeKey, string>> = {
  * (`documentNeedsRender`) — so this cannot come back by accident.
  */
 export type LibraryMessage =
-  | { type: "refresh" }
+  | { type: "refresh" | "settings" | "update" | "output" | "mounted" }
   | { type: "search"; query: string }
   | { type: "networkSearch"; enabled: boolean }
   | { type: "open"; id: string };
@@ -187,7 +198,7 @@ export function badgeLabels(badges: readonly BadgeKey[], label: UiLabel): string
 }
 
 function renderRow(row: LibraryRow, label: UiLabel): string {
-  const badges = badgeLabels(row.badges, label);
+  const badges: string[] = [];
   const openTitle = fill(label, LIBRARY_UI.open, [row.id]);
   const surface = row.surface === undefined ? undefined : surfaceLabel(row.surface, label);
   const version =
@@ -197,14 +208,14 @@ function renderRow(row: LibraryRow, label: UiLabel): string {
     ...badges.map((badge) => `<span class="badge">${escapeHtml(badge)}</span>`),
     row.added ? `<span class="badge badge-added" data-badge="added">${escapeHtml(label(LIBRARY_UI.added))}</span>` : "",
     row.unreadable ? `<span class="badge badge-warn" data-badge="unreadable">${escapeHtml(label(LIBRARY_UI.unreadable))}</span>` : "",
-    row.crossRegistry === true ? `<span class="badge" data-badge="cross">${escapeHtml(label(LIBRARY_UI.crossRegistry))}</span>` : "",
+    row.crossRegistry === true ? `<span class="badge" data-badge="cross">${escapeHtml(row.source ?? label(LIBRARY_UI.crossRegistry))}</span>` : "",
   ]
     .filter((part) => part.length > 0)
     .join("");
   const description = row.description === undefined ? "" : row.description;
   return [
     `<li class="row-item">`,
-    `  <button type="button" class="row" data-row="${escapeHtml(row.id)}" data-namespace="${escapeHtml(row.namespace ?? "")}"` +
+    `  <button type="button" class="row" data-row="${escapeHtml(row.key ?? row.id)}" data-id="${escapeHtml(row.id)}" data-cross="${row.crossRegistry === true}" data-namespace="${escapeHtml(row.namespace ?? "")}"` +
       ` data-added="${row.added ? "true" : "false"}" data-surfaces="${escapeHtml(row.surfaces.join(" "))}"` +
       ` data-haystack="${escapeHtml(row.haystack)}"` +
       ` title="${escapeHtml(openTitle)}">`,
@@ -238,24 +249,29 @@ function renderToolbar(model: LibraryModel, label: UiLabel): string {
     `<div class="toolbar">`,
     `  <label class="search-label" for="library-search"><span class="sr-only">${escapeHtml(label(LIBRARY_UI.search))}</span></label>`,
     `  <input id="library-search" type="search" class="search" autocomplete="off" spellcheck="false" placeholder="${escapeHtml(label(LIBRARY_UI.search))}" aria-label="${escapeHtml(label(LIBRARY_UI.search))}"${attribute("value", model.query)}>`,
+    `  <button class="link-button clear-search" type="button" data-action="clear" aria-label="${escapeHtml(label(LIBRARY_UI.clear))}">×</button>`,
     `  <label class="network-toggle" title="${escapeHtml(label(LIBRARY_UI.networkSearchHint))}">`,
     `    <input id="library-network" type="checkbox" data-setting="${escapeHtml(model.networkSearchSetting)}"${flag("checked", model.networkSearch)}>`,
     `    <span>${escapeHtml(label(LIBRARY_UI.networkSearch))}</span>`,
     `  </label>`,
+    `  <span class="count" id="library-count">${escapeHtml(fill(label, LIBRARY_UI.count, [model.rows.filter((row) => !row.crossRegistry && rowMatchesClient(model, row)).length, model.rows.filter((row) => !row.crossRegistry).length]))}</span>`,
     `</div>`,
   ].join("\n");
 }
 
 function renderList(model: LibraryModel, label: UiLabel): string {
-  if (model.rows.length === 0) {
-    return `<p id="library-empty" class="empty">${escapeHtml(model.notice ?? label(LIBRARY_UI.noResults))}</p>`;
-  }
-  return [
-    `<ul id="library-list" class="rows">`,
-    model.rows.map((row) => renderRow(row, label)).join("\n"),
-    `</ul>`,
-    `<p id="library-empty" class="empty" hidden>${escapeHtml(label(LIBRARY_UI.noResults))}</p>`,
-  ].join("\n");
+  const local = model.rows.filter((row) => !row.crossRegistry);
+  const extra = model.rows.filter((row) => row.crossRegistry);
+  return `<div id="library-results">
+    ${model.projectNotice ? `<p class="empty project-notice">${escapeHtml(model.projectNotice)}</p>` : ""}
+    <ul id="library-list" class="rows">${local.map((row) => renderRow(row, label)).join("\n")}</ul>
+    <section id="library-extra"${extra.length === 0 ? " hidden" : ""}>
+      <h2 class="group-title">${escapeHtml(label(LIBRARY_UI.other))} (${extra.length})</h2>
+      <ul class="rows">${extra.map((row) => renderRow(row, label)).join("\n")}</ul>
+    </section>
+    <p id="library-empty" class="empty"${model.rows.length ? " hidden" : ""}>${escapeHtml(model.notice ?? label(LIBRARY_UI.noResults))}</p>
+    <p class="search-status" role="status">${escapeHtml(model.status ?? "")}</p>
+  </div>`;
 }
 
 /**
@@ -272,72 +288,93 @@ function clientScript(initialModel: string): string {
   "use strict";
   var api = typeof acquireVsCodeApi === "function" ? acquireVsCodeApi() : undefined;
   var state = ${initialModel};
+  var saved = api && api.getState ? api.getState() || {} : {};
   var searchInput = document.getElementById("library-search");
   var networkInput = document.getElementById("library-network");
-  var list = document.getElementById("library-list");
-  var empty = document.getElementById("library-empty");
-  var countElement = document.getElementById("library-count");
-
-  function post(message) {
-    if (api) { api.postMessage(message); }
+  var selected = saved.selected || "";
+  if (searchInput && typeof saved.query === "string") { searchInput.value = saved.query; }
+  function post(message) { if (api) { api.postMessage(message); } }
+  function persist() {
+    if (api && api.setState) { api.setState({ query: searchInput.value, selected: selected, scroll: window.scrollY }); }
   }
-
-  // Every whitespace-separated word has to appear in the row's haystack, which
-  // the host builds from the id, the name, the description and the usage labels.
-  function rowMatches(row, query) {
-    if (query.length === 0) { return true; }
-    var haystack = row.getAttribute("data-haystack") || "";
-    var parts = query.split(/\\s+/);
-    for (var index = 0; index < parts.length; index += 1) {
-      if (parts[index].length > 0 && haystack.indexOf(parts[index]) < 0) { return false; }
-    }
-    return true;
-  }
-
   function apply() {
-    var query = searchInput ? searchInput.value.trim().toLowerCase() : "";
-    var any = false;
-    var visible = 0;
+    var query = searchInput.value.trim().toLowerCase();
+    var parts = query.split(/\\s+/);
+    var rows = Array.from(document.querySelectorAll("[data-row]"));
+    var local = 0;
+    var extra = 0;
+    rows.forEach(function (row) {
+      var haystack = row.getAttribute("data-haystack") || "";
+      var shown = parts.every(function (part) { return !part || haystack.indexOf(part) >= 0; });
+      row.parentNode.hidden = !shown;
+      if (shown) { if (row.getAttribute("data-cross") === "true") { extra++; } else { local++; } }
+      if (row.getAttribute("data-row") === selected) { row.setAttribute("aria-current", "true"); }
+      else { row.removeAttribute("aria-current"); }
+    });
+    var list = document.getElementById("library-list");
     if (list) {
-      var rows = list.querySelectorAll("[data-row]");
-      for (var index = 0; index < rows.length; index += 1) {
-        var shown = rowMatches(rows[index], query);
-        rows[index].parentNode.hidden = !shown;
-        if (shown) { any = true; visible += 1; }
-      }
-      list.hidden = !any;
+      Array.from(list.children).sort(function (a, b) {
+        function rank(item) {
+          var id = item.firstElementChild.getAttribute("data-id").toLowerCase();
+          var name = id.slice(id.lastIndexOf(".") + 1);
+          return !query ? 2 : id === query || name === query ? 0 : id.indexOf(query) === 0 || name.indexOf(query) === 0 ? 1 : 2;
+        }
+        return rank(a) - rank(b) || a.firstElementChild.getAttribute("data-id").localeCompare(b.firstElementChild.getAttribute("data-id"));
+      }).forEach(function (item) { list.appendChild(item); });
     }
-    if (empty) { empty.hidden = any || !list; }
-    if (countElement) {
-      var template = state && state.countTemplate ? state.countTemplate : "";
-      var total = state && state.total ? state.total : 0;
-      countElement.textContent = template.split("{0}").join(String(visible)).split("{1}").join(String(total));
-    }
+    var empty = document.getElementById("library-empty");
+    if (empty) { empty.hidden = local + extra > 0; }
+    var group = document.getElementById("library-extra");
+    if (group) { group.hidden = extra === 0; }
+    document.getElementById("library-count").textContent = state.countTemplate.split("{0}").join(String(local)).split("{1}").join(String(state.localTotal));
+    persist();
   }
-
-  if (searchInput) {
-    searchInput.addEventListener("input", function () {
-      apply();
-      post({ type: "search", query: searchInput.value });
-    });
-  }
-  if (networkInput) {
-    networkInput.addEventListener("change", function () {
-      post({ type: "networkSearch", enabled: networkInput.checked === true });
-    });
-  }
+  searchInput.addEventListener("input", function () { apply(); post({ type: "search", query: searchInput.value }); });
+  networkInput.addEventListener("change", function () { post({ type: "networkSearch", enabled: networkInput.checked }); });
   document.addEventListener("click", function (event) {
-    var target = event.target;
-    if (!target || typeof target.closest !== "function") { return; }
-    var refresh = target.closest("[data-action]");
-    if (refresh && refresh.getAttribute("data-action") === "refresh") {
-      post({ type: "refresh" });
-      return;
+    var target = event.target.closest && event.target.closest("[data-action], [data-row]");
+    if (!target) { return; }
+    var action = target.getAttribute("data-action");
+    if (action === "clear") { searchInput.value = ""; searchInput.focus(); apply(); post({ type: "search", query: "" }); return; }
+    if (action) { post({ type: action }); return; }
+    selected = target.getAttribute("data-row"); apply(); post({ type: "open", id: selected });
+  });
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape" && event.target === searchInput) {
+      searchInput.value = ""; apply(); post({ type: "search", query: "" });
     }
-    var row = target.closest("[data-row]");
-    if (row) { post({ type: "open", id: row.getAttribute("data-row") }); }
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") { return; }
+    var rows = Array.from(document.querySelectorAll("[data-row]")).filter(function (row) { return !row.parentNode.hidden; });
+    if (!rows.length || (event.target !== searchInput && !event.target.hasAttribute("data-row"))) { return; }
+    event.preventDefault();
+    var index = rows.indexOf(document.activeElement);
+    var next = event.key === "ArrowDown" ? Math.min(rows.length - 1, index + 1) : Math.max(0, index - 1);
+    rows[next].focus();
+  });
+  window.addEventListener("scroll", persist);
+  window.addEventListener("message", function (event) {
+    var payload = event.data;
+    if (!payload || payload.type !== "libraryUpdate") { return; }
+    var scroll = window.scrollY;
+    var focused = document.activeElement && document.activeElement.getAttribute("data-row");
+    var details = document.querySelector("footer details");
+    var expanded = details && details.open;
+    var doc = new DOMParser().parseFromString(payload.html, "text/html");
+    ["library-results", "library-footer"].forEach(function (id) {
+      var old = document.getElementById(id); var next = doc.getElementById(id);
+      if (old && next) { old.replaceWith(next); }
+    });
+    state = payload.state;
+    networkInput.checked = payload.networkSearch;
+    apply();
+    var nextDetails = document.querySelector("footer details"); if (nextDetails) { nextDetails.open = expanded; }
+    if (focused) { Array.from(document.querySelectorAll("[data-row]")).some(function (row) { if (row.getAttribute("data-row") === focused) { row.focus(); return true; } return false; }); }
+    window.scrollTo(0, scroll);
   });
   apply();
+  window.scrollTo(0, saved.scroll || 0);
+  post({ type: "mounted" });
+  post({ type: "search", query: searchInput.value });
 })();`;
 }
 
@@ -348,10 +385,11 @@ function clientScript(initialModel: string): string {
  * embedding the model again would double the page for nothing. `<` is escaped in
  * `embedJson`, so even this cannot close the script element.
  */
-function clientState(model: LibraryModel): Record<string, unknown> {
+export function libraryClientState(model: LibraryModel): Record<string, unknown> {
   return {
     countTemplate: model.countTemplate,
     total: model.total,
+    localTotal: model.rows.filter((row) => !row.crossRegistry).length,
     query: model.query,
   };
 }
@@ -380,20 +418,24 @@ export function renderLibraryHtml(model: LibraryModel, assets: LibraryAssets): s
 <title>${escapeHtml(label(LIBRARY_UI.title))}</title>
 </head>
 <body>
-<header class="panel-header">
+<header class="sr-only">
   <h1 class="panel-title">${escapeHtml(label(LIBRARY_UI.title))}</h1>
-  <p class="count" id="library-count">${escapeHtml(count)}</p>
 </header>
 ${renderToolbar(model, label)}
 <main>
 ${renderList(model, label)}
 </main>
-<footer class="footer" role="note">
-  <span class="source">${escapeHtml(model.dataSource)}</span>
+<footer id="library-footer" class="footer" role="note">
+  <details><summary>${escapeHtml(model.dataSource)}</summary><p class="source">${escapeHtml(model.sourceDetails ?? "")}</p></details>
+  <div class="footer-actions">
+  <button type="button" class="link-button" data-action="update">${escapeHtml(label(LIBRARY_UI.update))}</button>
+  <button type="button" class="link-button" data-action="settings">${escapeHtml(label(LIBRARY_UI.settings))}</button>
+  <button type="button" class="link-button" data-action="output">${escapeHtml(label(LIBRARY_UI.output))}</button>
   <button type="button" class="link-button" data-action="refresh" title="${escapeHtml(label(LIBRARY_UI.refresh))}">${escapeHtml(label(LIBRARY_UI.refresh))}</button>
+  </div>
 </footer>
 <script nonce="${escapeHtml(assets.nonce)}">
-${clientScript(embedJson(clientState(model)))}
+${clientScript(embedJson(libraryClientState(model)))}
 </script>
 </body>
 </html>
@@ -431,8 +473,12 @@ export function decodeLibraryMessage(raw: unknown): LibraryMessage | undefined {
     return undefined;
   }
   switch (raw.type) {
+    case "mounted":
     case "refresh":
-      return { type: "refresh" };
+    case "settings":
+    case "update":
+    case "output":
+      return { type: raw.type };
     case "search":
       return typeof raw.query === "string" ? { type: "search", query: raw.query } : undefined;
     case "networkSearch":

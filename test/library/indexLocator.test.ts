@@ -4,12 +4,14 @@ import Module, { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { projectDependencyState, operationMatches } from "../../src/library/projectState";
+import { projectDependencyState, readProjectDeclarations, operationMatches } from "../../src/library/projectState";
 
 const loader = Module as unknown as { _load(request: string, parent: unknown, main: boolean): unknown };
+let configured = "";
+const vscodeStub = { workspace: { isTrusted: false, getConfiguration: () => ({ inspect: (key: string) => ({ globalValue: key === "library.indexPath" ? configured : undefined }) }) } };
 const original = loader._load;
 loader._load = function (request, parent, main) {
-  return request === "vscode" ? {} : original.call(loader, request, parent, main);
+  return request === "vscode" ? vscodeStub : original.call(loader, request, parent, main);
 };
 const locator: typeof import("../../src/library/indexLocator") = createRequire(__filename)("../../src/library/indexLocator");
 loader._load = original;
@@ -54,4 +56,60 @@ test("async results cannot cross package, project or page lifetime", () => {
   for (const page of [{ ...operation, key: "b" }, { ...operation, projectRoot: "/two" }, { ...operation, generation: 2 }]) {
     assert.equal(operationMatches(operation, page), false);
   }
+});
+
+
+test("catalog caching observes nested descriptor edits and reapplies fresh project declarations", async () => {
+  const base = await fs.mkdtemp(path.join(tmpdir(), "mcpp-snapshot-test-"));
+  const previousHome = process.env.MCPP_HOME;
+  process.env.MCPP_HOME = base;
+  const directory = path.join(base, "indices/mcpplibs/pkgs/c");
+  await fs.mkdir(directory, { recursive: true });
+  const file = path.join(directory, "compat.argparse.lua");
+  const descriptor = 'package = { name = "argparse", namespace = "compat", description = "before", xpm = { linux = { ["3.2"] = {} } } }';
+  try {
+    await fs.writeFile(file, descriptor);
+    await fs.writeFile(path.join(base, "mcpp.toml"), '[package]\nname = "test"\n');
+    locator.invalidateIndexCache();
+    const first = await locator.loadSnapshot({ projectRoot: base });
+    assert.equal(first.entries.length, 1);
+    assert.equal(first.entries[0].added, false);
+    await fs.writeFile(path.join(base, "mcpp.toml"), '[dependencies.compat]\nargparse = "3.2"\n');
+    const second = await locator.loadSnapshot({ projectRoot: base });
+    assert.equal(second.revision, first.revision);
+    assert.equal(second.entries[0].added, true);
+    assert.equal(first.entries[0].added, false, "project overlays must not mutate cached entries");
+    await fs.writeFile(file, descriptor.replace("before", "after edit"));
+    const edited = await locator.loadSnapshot({ projectRoot: base });
+    assert.notEqual(edited.revision, first.revision);
+    assert.equal(edited.entries[0].description, "after edit");
+    const other = path.join(base, "other/pkgs/c");
+    await fs.mkdir(other, { recursive: true });
+    await fs.writeFile(path.join(other, "compat.argparse.lua"), descriptor.replace("before", "other source"));
+    configured = path.join(base, "other");
+    const switched = await locator.loadSnapshot({ projectRoot: base });
+    assert.equal(switched.entries[0].description, "other source");
+  } finally {
+    configured = "";
+    if (previousHome === undefined) { delete process.env.MCPP_HOME; } else { process.env.MCPP_HOME = previousHome; }
+    locator.invalidateIndexCache();
+    await fs.rm(base, { recursive: true, force: true });
+  }
+});
+
+
+test("project TOML reads quoted identities and does not treat a versioned source dependency as registry", () => {
+  const text = `[dependencies]
+"compat.argparse" = { path = "../parser#local", version = "3.2" }
+[dev-dependencies.compat]
+zlib = "1.3"
+[target.linux.dependencies]
+json = "1"
+`;
+  const declarations = readProjectDeclarations(text);
+  const state = projectDependencyState("compat.argparse", declarations, [], ["compat.argparse"]);
+  assert.equal(state.sourceType, "path-or-git");
+  assert.equal(state.declaredVersion, "3.2");
+  assert.equal(projectDependencyState("compat.zlib", declarations, [], ["compat.zlib"]).dev, true);
+  assert.equal(projectDependencyState("json", declarations, [], ["json"]).ambiguous, true);
 });

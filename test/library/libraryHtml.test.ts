@@ -146,8 +146,7 @@ test("a row carries the state the client filters on, as text", () => {
   // The description is clamped by class, and the full text stays in the title.
   assert.match(html, /class="row-description" title="argparse — header-only/);
   assert.match(html, /class="row-surface" data-surface="header">#include</);
-  assert.match(html, /✓ Has examples/);
-  assert.match(html, /China mirror/);
+  assert.doesNotMatch(html, />✓ Has examples<|>China mirror</);
 });
 
 test("the toolbar is a search box and the network toggle, with no chip row", () => {
@@ -186,7 +185,7 @@ test("the header count starts at what the first render keeps, and the footer nam
 test("an empty view still says something", () => {
   const html = renderLibraryHtml(model({ rows: [], total: 0, notice: "No mcpp index was found." }), ASSETS);
   assert.match(html, /id="library-empty" class="empty">No mcpp index was found\.</);
-  assert.doesNotMatch(html, /id="library-list"/);
+  assert.match(html, /id="library-list"/);
 });
 
 test("badgeLabels reads the ui record in badge order", () => {
@@ -236,7 +235,8 @@ test("the document announces nothing, so it cannot make the host re-render it", 
   // `webview.html = …` reloads the document, so a document that answers its own
   // load with "render me again" never stops loading.
   assert.doesNotMatch(html, /post\(\{\s*type:\s*"ready"/);
-  assert.match(html, /post\(\{\s*type:\s*"refresh"\s*\}\)/);
+  assert.match(html, /post\(\{\s*type:\s*"mounted"\s*\}\)/);
+  assert.match(html, /libraryUpdate/);
 });
 
 test("the stylesheet uses theme tokens only, and clamps the description to two lines", () => {

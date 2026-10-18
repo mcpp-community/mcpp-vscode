@@ -783,7 +783,7 @@
       "applies": "immediate",
       "since": "0.6.0",
       "title": "Path to a mcpp package index checkout",
-      "description": "Leave it empty to use the indexes under the mcpp home. The home is `$MCPP_HOME`, then `~/.mcpp`; when neither holds an index, the extension asks `mcpp self env --format json` where it is.",
+      "description": "Leave empty to browse the official mcpp-index at <mcpp home>/indices/mcpplibs (legacy registry/data/mcpplibs is supported). MCPP_HOME takes precedence; otherwise the extension asks mcpp self env. Set a directory containing pkgs/ or a collection of indexes to browse a custom source.",
       "order": 8
     },
     {
@@ -796,7 +796,7 @@
       "applies": "immediate",
       "since": "0.6.0",
       "title": "Search every configured registry over the network",
-      "description": "The local index already lists every published package, so this is off by default. Turning it on also searches the other registries with `mcpp search`, which may use the network and can only be parsed on a best-effort basis.",
+      "description": "Off by default. Also searches other registries with mcpp search; remote results have limited previews and cannot be added directly.",
       "order": 9
     },
     {

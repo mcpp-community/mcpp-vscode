@@ -310,12 +310,12 @@ test("opening a link always produces an answer", () => {
   // somewhere the reader can use it.
   assert.doesNotMatch(panel, /void vscode\.env\.openExternal/);
   assert.match(panel, /opened = await vscode\.env\.openExternal\(/);
-  assert.match(panel, /postResult\(session, \{ state: "ok", message: t\("Opened \{0\} in your browser\."/);
-  assert.match(panel, /postResult\(session, \{\s*state: "error",/);
-  assert.match(panel, /vscode\.env\.clipboard\.writeText\(url\)/);
-  // The client's own line, so the click is visible before the host answers.
+  assert.match(panel, /type: "linkResult"/);
+  assert.match(panel, /opened \? t\("Opened in your browser\."/);
+  assert.match(panel, /vscode\.env\.clipboard\.writeText\(message\.url\)/);
+  assert.match(panel, /copied \? t\("Could not open the browser\. Link copied to clipboard\."/);
   const html = readFileSync(path.join(root, "src", "library", "detailHtml.ts"), "utf8");
-  assert.match(html, /state: "pending"/);
+  assert.match(html, /detail-link-result/);
 });
 
 /** `src/**\/*.ts`, relative path and text, for the source-level gates. */

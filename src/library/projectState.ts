@@ -1,4 +1,37 @@
 import type { DeclaredDependencyEntry, LockPackage } from "./indexModel";
+import { parseMcppToml, type TomlValueNode } from "../toml/parser";
+
+export interface ProjectDeclaration extends DeclaredDependencyEntry {
+  source?: boolean;
+  conditional?: boolean;
+}
+
+/** Reuse the editor's TOML parser so quoted keys, comments and source+version tables keep their meaning. */
+export function readProjectDeclarations(text: string): ProjectDeclaration[] {
+  const out: ProjectDeclaration[] = [];
+  let section: string[] = [];
+  const collect = (id: string, value: TomlValueNode | undefined, dev: boolean, conditional: boolean): void => {
+    if (!value) { return; }
+    if (value.kind === "string") { out.push({ id, version: value.text, dev, conditional }); return; }
+    const entries = value.entries ?? [];
+    const source = entries.some((entry) => ["path", "git", "url"].includes(entry.keyPath[0]?.name));
+    const version = entries.find((entry) => entry.keyPath[0]?.name === "version")?.value?.text;
+    const specKeys = new Set(["version", "path", "git", "url", "branch", "rev", "tag", "features", "backend", "tools", "host-module", "reexport", "workspace"]);
+    if (source || entries.some((entry) => specKeys.has(entry.keyPath[0]?.name))) {
+      out.push({ id, version, dev, source, conditional });
+    } else if (entries.length) {
+      for (const entry of entries) { collect(`${id}.${entry.keyPath.map((key) => key.name).join(".")}`, entry.value, dev, conditional); }
+    } else { out.push({ id, dev, conditional }); }
+  };
+  for (const node of parseMcppToml(text.split(/\r?\n/)).nodes) {
+    if (node.type === "section") { section = node.segments.map((segment) => segment.name); continue; }
+    const index = section.findIndex((part) => part === "dependencies" || part === "dev-dependencies");
+    if (index < 0 || section[0] === "workspace") { continue; }
+    const id = [...section.slice(index + 1), ...node.keyPath.map((key) => key.name)].join(".");
+    collect(id, node.value, section[index] === "dev-dependencies", index !== 0);
+  }
+  return out;
+}
 
 export interface ProjectDependencyState {
   declared: boolean;
@@ -12,7 +45,7 @@ export interface ProjectDependencyState {
 /** Qualified coordinates win. A short name is usable only when the catalog is unambiguous. */
 export function projectDependencyState(
   id: string,
-  declarations: readonly DeclaredDependencyEntry[],
+  declarations: readonly ProjectDeclaration[],
   locked: readonly LockPackage[],
   catalog: readonly string[],
 ): ProjectDependencyState {
@@ -27,8 +60,8 @@ export function projectDependencyState(
     ...(entry?.version === undefined ? {} : { declaredVersion: entry.version }),
     ...(resolved === undefined ? {} : { resolvedVersion: resolved.version }),
     dev: entry?.dev ?? false,
-    sourceType: entry === undefined ? "none" : entry.version === undefined ? "path-or-git" : "registry",
-    ambiguous: matches.length > 1 || (!unique && exact.length === 0 && declarations.some((entry) => entry.id === short)),
+    sourceType: entry === undefined ? "none" : entry.source || entry.version === undefined ? "path-or-git" : "registry",
+    ambiguous: matches.length > 1 || !!entry?.conditional || (!unique && exact.length === 0 && declarations.some((entry) => entry.id === short)),
   };
 }
 

@@ -738,9 +738,9 @@ Age buckets used to group cache entries in the cache view, written as "1d", "7d"
 
 ### `mcpp.library.indexPath` — advanced
 
-Leave it empty to use the indexes under the mcpp home. The home is `$MCPP_HOME`, then `~/.mcpp`; when neither holds an index, the extension asks `mcpp self env --format json` where it is.
+Leave empty to browse the official mcpp-index at <mcpp home>/indices/mcpplibs (legacy registry/data/mcpplibs is supported). MCPP_HOME takes precedence; otherwise the extension asks mcpp self env. Set a directory containing pkgs/ or a collection of indexes to browse a custom source.
 
-留空则使用 mcpp 主目录下的索引。主目录依次取 `$MCPP_HOME`、`~/.mcpp`；两者都没有索引时，扩展会用 `mcpp self env --format json` 询问 mcpp 主目录在哪。
+留空则读取 mcpp 主目录下 indices/mcpplibs 中的官方 mcpp-index，兼容旧位置 registry/data/mcpplibs。优先使用 MCPP_HOME，否则通过 mcpp self env 获取主目录。可指定带 pkgs/ 的目录或索引集合目录来浏览自定义来源。
 
 | | |
 |---|---|
@@ -752,9 +752,9 @@ Leave it empty to use the indexes under the mcpp home. The home is `$MCPP_HOME`,
 
 ### `mcpp.library.networkSearch`
 
-The local index already lists every published package, so this is off by default. Turning it on also searches the other registries with `mcpp search`, which may use the network and can only be parsed on a best-effort basis.
+Off by default. Also searches other registries with mcpp search; remote results have limited previews and cannot be added directly.
 
-本地索引已经列出所有已发布的包，所以默认关闭。打开后会额外用 `mcpp search` 搜索其它 registry，可能联网，且只能尽力解析。
+默认关闭。开启后额外用 mcpp search 搜索其它 registry；搜索结果仅提供有限预览，不能直接添加。
 
 | | |
 |---|---|

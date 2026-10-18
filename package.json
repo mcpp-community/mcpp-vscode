@@ -315,7 +315,8 @@
       {
         "command": "mcpp.library.updateIndex",
         "title": "%command.mcpp.library.updateIndex.title%",
-        "category": "%category%"
+        "category": "%category%",
+        "icon": "$(cloud-download)"
       }
     ],
     "configuration": {
