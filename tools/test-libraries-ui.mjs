@@ -104,6 +104,7 @@ async function palette(command) {
   await page.locator('.quick-input-list .monaco-list-row').filter({ hasText: command }).filter({ visible: true }).first().click();
 }
 async function check(name, action) {
+  if (process.env.MCPP_UI_ONLY_LAYOUT && name !== 'responsive layouts and themes') return;
   if (process.env.MCPP_UI_ONLY_MODULES && !name.startsWith('real mcppls modules') && !name.startsWith('module source')) return;
   const start = Date.now(); await action();
   checks.push({ name, elapsedMs: Date.now() - start, ok: true });
@@ -128,7 +129,7 @@ try {
   await page.keyboard.press('Control+P');
   await page.locator('.quick-input-widget:visible input').fill(manifestPath);
   await page.locator('.quick-input-list .monaco-list-row').filter({visible:true}).first().click();
-  await eventually(()=>page.locator('.monaco-editor:visible').innerText(),text=>text.includes('libraries-ui-test'),'initial scratch project editor');
+  await eventually(()=>page.locator('.monaco-editor:visible').allTextContents().then(texts=>texts.join('\n')),text=>text.includes('libraries-ui-test'),'initial scratch project editor');
   await palette('mcpp: Search and Add a Dependency');
   const list = await frameWith('#library-search');
   await eventually(() => list.locator('[data-row]').count(), (count) => count > 200, 'official catalog');
@@ -357,12 +358,21 @@ try {
       await page.locator('.quick-input-list .monaco-list-row:visible').filter({ hasText: theme.replace('Default ', '') }).first().click();
       await eventually(() => detail.locator('body').getAttribute('class'), (value) => value.includes(className), `theme ${theme}`);
       const occupied = page.viewportSize().width - await detail.evaluate(() => innerWidth);
-      for (const width of [480, 800, 1200]) {
+      for (const width of [480, 800, 1200, 1600, 2560]) {
         await page.setViewportSize({ width: width + occupied, height: 1000 });
         await page.waitForTimeout(150);
-        const geometry = await detail.evaluate(() => ({ width: innerWidth, document: document.documentElement.scrollWidth, display: getComputedStyle(document.querySelector('.detail-layout')).display, columns: getComputedStyle(document.querySelector('.detail-layout')).gridTemplateColumns }));
+        const geometry = await detail.evaluate(() => {
+          const header=document.querySelector('.detail-header').getBoundingClientRect();
+          return { width: innerWidth, document: document.documentElement.scrollWidth, display: getComputedStyle(document.querySelector('.detail-layout')).display, columns: getComputedStyle(document.querySelector('.detail-layout')).gridTemplateColumns,
+            left:header.left,right:document.documentElement.clientWidth-header.right,usage:document.querySelector('.detail-usage').getBoundingClientRect().width,aside:document.querySelector('.detail-aside').getBoundingClientRect().width };
+        });
         assert.equal(geometry.display, geometry.width < 900 ? 'block' : 'grid');
         assert.ok(geometry.document <= geometry.width + 1, `${theme} width ${width}: page overflows ${JSON.stringify(geometry)}`);
+        assert.ok(geometry.left >= 15 && geometry.left <= 41 && geometry.right >= 15 && geometry.right <= 41, 'detail uses editor width with bounded gutters');
+        if (geometry.width >= 1200) {
+          assert.ok(geometry.aside <= 321, 'metadata stays compact on wide screens');
+          assert.ok(geometry.usage >= (geometry.width-geometry.left-geometry.right)*.62, 'extra width is available to example code');
+        }
         layouts.push({ theme, viewport: width, ...geometry });
         await page.screenshot({ path: path.join(artifacts, `${className}-${width}.png`) });
       }

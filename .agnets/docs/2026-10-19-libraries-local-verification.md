@@ -118,3 +118,13 @@ Webview 验证覆盖：官方源及已有声明；lock 新建与删除；索引�
 ![模块入口与深度折叠](assets/libraries-module-graph.png)
 
 ![模块图与旁边只读源码](assets/libraries-module-source-readonly.png)
+
+## 第五轮：全屏与宽屏详情
+
+- 根因：详情 body 被 `max-width:1120px; margin:0 auto` 限制，且双栏固定 2:1，导致全屏时外侧空白大、辅助栏分配过宽。
+- 修正为随编辑器宽度铺开，实际内容边距 16–40px；双栏辅助信息固定在 240–320px，剩余宽度归示例代码。小于 900px 仍为单栏。
+- 本轮仅调整 CSS，运行 `npm run check`、打包以及真实 VS Code 的针对性布局回归。480/800/1200/1600/2560px × 深色/浅色/高对比，共 15 个组合通过；新增断言检查实际边距、代码区占比和辅助栏宽度，同时保留无横向溢出检查。
+- 测量右边距时扣除原生垂直滚动条宽度。UI 驱动的启动检查兼容 VS Code 临时空编辑器，避免误判编辑器数量。
+- 可用 `MCPP_UI_ONLY_LAYOUT=1` 运行针对性布局场景；矩阵记录于 `.dev-profile/libraries-ui-artifacts/layouts.json`。全量功能测试结果见上轮，本次未重复执行不受 CSS 影响的逻辑与语言服务测试。
+
+![宽屏包详情](assets/libraries-detail-wide.png)

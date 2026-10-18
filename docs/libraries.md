@@ -81,3 +81,8 @@ truncated or still-indexing results carry a compact incomplete-data notice.
 Use Refresh after source edits or indexing completes. Precise declaration lines
 and per-import re-export flags are not supplied by this graph endpoint, so this
 view opens the source file and does not invent those details.
+
+Package details use the available editor width, including fullscreen and ultrawide
+windows. Side gutters stay within 16–40px; the metadata column stays within
+240–320px and additional width goes to the example code. Below 900px the page
+uses a single column for split editors and narrow windows.
