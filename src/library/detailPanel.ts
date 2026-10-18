@@ -288,7 +288,7 @@ async function buildModel(session: DetailSession, id: string): Promise<DetailMod
   if (entry === undefined) {
     return emptyModel(id, ui, t("This package is not in the local index any more."));
   }
-  const text = cachedDescriptorText(id) ?? (await readDescriptorText(entry.file)) ?? "";
+  const text = cachedDescriptorText(entry.file) ?? (await readDescriptorText(entry.file)) ?? "";
   const platform = platformKey(process.platform);
   // Keyed by the index revision as well as the path, so a refreshed index is not
   // answered from a parse of the previous one.
