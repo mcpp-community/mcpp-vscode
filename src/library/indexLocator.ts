@@ -309,7 +309,7 @@ async function withProject(snapshot: LibrarySnapshot, projectRoot?: string): Pro
   const declarations = readProjectDeclarations(text);
   const ids = snapshot.entries.map((entry) => entry.id);
   return { ...snapshot, entries: snapshot.entries.map((entry) => ({
-    ...entry, added: projectDependencyState(entry.id, declarations, [], ids).declared,
+    ...entry, added: (["normal", "dev", "build"] as const).some((kind) => projectDependencyState(entry.id, declarations, [], ids, kind).declared),
   })) };
 }
 

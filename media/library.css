@@ -701,3 +701,31 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .detail-aside details[open] > summary { margin-bottom: 10px; }
 .detail-usage { padding-top: 12px; }
 .detail-footer { margin-top: 14px; }
+
+/* Package identity and context share one header; tags remain readable in every theme. */
+.detail-heading-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 10px 18px; }
+.detail-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0; }
+.detail-heading .detail-title { max-width: 100%; }
+.detail-heading-row .project-context { justify-content: flex-end; max-width: 220px; margin: 0; padding-top: 2px; }
+.detail-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.detail-tag { display: inline-block; padding: 1px 6px; border: 1px solid currentColor; border-radius: 4px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; line-height: 1.6; font-weight: 500; }
+.detail-tag[data-tag="surface"] { color: var(--vscode-symbolIcon-interfaceForeground, var(--vscode-textLink-foreground)); background: color-mix(in srgb, var(--vscode-symbolIcon-interfaceForeground, var(--vscode-textLink-foreground)) 12%, transparent); }
+.detail-tag[data-tag="standard"] { color: var(--vscode-charts-purple, var(--vscode-textLink-foreground)); background: color-mix(in srgb, var(--vscode-charts-purple, var(--vscode-textLink-foreground)) 12%, transparent); }
+.detail-tag[data-tag="license"] { color: var(--vscode-charts-green, var(--vscode-foreground)); background: color-mix(in srgb, var(--vscode-charts-green, var(--vscode-foreground)) 12%, transparent); }
+.vscode-high-contrast .detail-tag, .vscode-high-contrast-light .detail-tag { background: transparent; color: var(--vscode-foreground); }
+.dependency-kind-label { color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); font-size: 11px; }
+.detail-add-group { position: relative; display: inline-flex; align-items: stretch; }
+.detail-add-group .detail-add { border-radius: 2px 0 0 2px; }
+.detail-add-group .detail-kind-toggle { width: 28px; min-width: 28px; padding: 4px; border-radius: 0 2px 2px 0; border-left-color: var(--vscode-button-separator, var(--vscode-contrastBorder, transparent)); }
+.detail-kind-menu { position: absolute; z-index: 10; top: calc(100% + 4px); left: 0; width: 270px; max-width: calc(100vw - 36px); padding: 4px; border: 1px solid var(--vscode-widget-border, var(--vscode-contrastBorder, transparent)); border-radius: 4px; background: var(--vscode-menu-background, var(--vscode-editorWidget-background)); box-shadow: 0 4px 12px var(--vscode-widget-shadow, transparent); }
+.detail-actions .detail-kind-menu button { position: relative; display: grid; width: 100%; gap: 2px; padding: 7px 10px 7px 26px; text-align: left; color: var(--vscode-menu-foreground, var(--vscode-foreground)); background: transparent; border: 0; border-radius: 2px; }
+.detail-kind-menu button[aria-checked="true"]::before { content: "✓"; position: absolute; left: 7px; top: 7px; }
+.detail-kind-menu code { font-size: 10px; color: var(--vscode-descriptionForeground); }
+.detail-actions .detail-kind-menu button:hover, .detail-actions .detail-kind-menu button:focus { color: var(--vscode-menu-selectionForeground, var(--vscode-list-activeSelectionForeground)); background: var(--vscode-menu-selectionBackground, var(--vscode-list-activeSelectionBackground)); }
+@media (max-width: 520px) {
+  .detail-heading-row { display: flex; flex-direction: column; gap: 4px; }
+  .detail-heading-row .project-context { align-self: flex-end; }
+}
+
+.detail-kind-menu code { background: transparent; padding: 0; }
+.detail-kind-menu button:hover code, .detail-kind-menu button:focus code { color: inherit; }

@@ -85,6 +85,7 @@ run(code, ['--new-window', '--remote-debugging-port=9334', '--extensions-dir', e
 let browser;
 await eventually(async () => { browser = await chromium.connectOverCDP(endpoint); return true; }, Boolean, 'VS Code CDP startup');
 const page = browser.contexts()[0].pages()[0];
+await page.setViewportSize({ width: 1600, height: 1000 });
 page.on('pageerror', (error) => console.error('renderer:', error.message));
 async function frameWith(selector) {
   return eventually(async () => {
@@ -144,14 +145,15 @@ try {
   await check('real mcpp add --dev and fresh manifest/lock state', async () => {
     const detail = await openPackage('compat.zlib');
     await detail.evaluate(() => { window.__detailDocument = 'same'; });
-    await detail.locator('#detail-dev').check();
+    await detail.locator('#detail-kind-toggle').click();
+    await detail.locator('[data-kind=dev]').click();
     assert.match(await detail.locator('#detail-command').innerText(), /--dev$/);
     await detail.locator('#detail-add').click();
     await eventually(() => fs.readFile(manifestPath, 'utf8'), (text) => /\[dev-dependencies\.compat\][\s\S]*zlib/.test(text), 'real CLI manifest edit');
     await eventually(() => detail.locator('#detail-add').innerText(), (text) => text === 'Already declared', 'updated detail declaration');
     await eventually(() => list.locator('[data-id="compat.zlib"]').getAttribute('data-added'), (state) => state === 'true', 'updated sidebar declaration');
     assert.equal(await detail.evaluate(() => window.__detailDocument), 'same');
-    assert.equal(await detail.locator('#detail-dev').isChecked(), true);
+    assert.equal(await detail.locator('[data-kind=dev]').getAttribute('aria-checked'), 'true');
     await detail.locator('[data-copy-command]').click();
     await eventually(() => detail.locator('[data-copy-command]').innerText(), (text) => text === 'Copied', 'host clipboard reply');
     await fs.writeFile(manifestPath, baseManifest);
@@ -161,7 +163,8 @@ try {
   await check('add result cannot mark a different package', async () => {
     await fs.writeFile(path.join(scratch, 'delay-add'), '1');
     const a = await openPackage('compat.zlib');
-    await a.locator('#detail-dev').uncheck();
+    await a.locator('#detail-kind-toggle').click();
+    await a.locator('[data-kind=normal]').click();
     await a.locator('#detail-add').click();
     await eventually(() => fs.readFile(path.join(scratch, 'add-started'), 'utf8'), Boolean, 'delayed real add started');
     const b = await openPackage('compat.argparse');
@@ -203,6 +206,24 @@ try {
     await detail.locator('#detail-add').click();
     await eventually(() => fs.readFile(path.join(scratch, 'secondary/mcpp.toml'), 'utf8'), (text) => /argparse\s*=\s*"3.2"/.test(text), 'write to secondary project');
     assert.match(await fs.readFile(manifestPath, 'utf8'), /argparse = "3.2"/);
+  });
+  await check('secondary dependency menu, title tags and explicit build configuration', async () => {
+    const detail = await openPackage('compat.argparse');
+    assert.equal(await detail.locator('input[type=checkbox]').count(), 0);
+    assert.match(await detail.locator('.detail-heading').innerText(), /C\+\+23/);
+    assert.match(await detail.locator('.detail-heading').innerText(), /MIT/);
+    await detail.locator('#detail-kind-toggle').click();
+    await page.screenshot({ path: path.join(artifacts, 'dependency-menu.png') });
+    await detail.locator('[data-kind=build]').click();
+    assert.equal(await detail.locator('[data-kind=build]').getAttribute('aria-checked'), 'true');
+    assert.match(await detail.locator('#detail-command').innerText(), /\[build-dependencies\.compat\]/);
+    assert.equal(await detail.locator('#detail-add').innerText(), 'Open mcpp.toml');
+    const before = await fs.readFile(path.join(scratch, 'secondary/mcpp.toml'), 'utf8');
+    await detail.locator('[data-copy-command]').click();
+    await eventually(() => detail.locator('[data-copy-command]').innerText(), (text) => text === 'Copied', 'TOML snippet copy');
+    await detail.locator('#detail-add').click();
+    await eventually(() => page.locator('.tab.active').innerText(), (text) => text.includes('mcpp.toml'), 'manifest opened');
+    assert.equal(await fs.readFile(path.join(scratch, 'secondary/mcpp.toml'), 'utf8'), before, 'build mode must not write the manifest');
   });
   await check('search and parse failures retain usable local results and recover', async () => {
     await list.locator('#library-search').fill('argparse');

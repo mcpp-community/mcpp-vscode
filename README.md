@@ -53,7 +53,7 @@ Opening a project never runs `mcpp` on its own and never downloads a toolchain.
 - **mcpp CLI and tasks** — build, run, test, clean, the quick menu, toolchains: [docs/commands.md](docs/commands.md).
 - **`mcpp.toml` editing** — structural completion, hovers, go-to-definition, seven structural diagnostics, no formatting: [docs/mcpp-toml.md](docs/mcpp-toml.md).
 - **`build.mcpp` help** — `build.mcpp` is a `cpp` file that C++ Modules compiles as the build program; this extension adds the `mcpp::…` directive completion, hovers and snippets and the SPEC-007 rule checks no compiler makes: [docs/build-script.md](docs/build-script.md).
-- **Libraries** — browse the package index already on this machine, offline; the detail page shows the real example code, the version matrix, and whether the workspace already depends on it.
+- **Libraries** — browse the official mcpp-index offline, choose a target project and dependency type, and view available versions and verified example code. Other registry hits have separate previews. See [Libraries](docs/libraries.md).
 - **Cache views and cleanup** — project artifacts and the shared build cache, previewed before anything is deleted: [docs/cache.md](docs/cache.md).
 - **C++ Modules** — the other extension's state and actions, in the project view and the status-bar menu, forwarded not reimplemented: [docs/commands.md](docs/commands.md).
 - **Settings and diagnostics** — a registry-backed settings panel (`mcpp.openSettings`) and a copyable environment self-check (`mcpp.selfCheck`): [docs/settings.md](docs/settings.md). `mcpp.ui.language` overrides our messages and panels only; palette titles always follow VS Code ([docs/architecture.md](docs/architecture.md#language)).

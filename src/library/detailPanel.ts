@@ -248,13 +248,23 @@ async function handle(session: DetailSession, raw: unknown): Promise<void> {
     case "add": {
       const model = session.model;
       if (session.busy || !model || model.blockedReason || model.preview || !model.currentVersions.includes(message.version)) { return; }
-      const state = model.projectState;
-      if (state?.declared && (state.dev !== message.dev || state.sourceType !== "registry" || state.ambiguous)) { return; }
+      const state = model.dependencyGroups?.[message.dev ? "dev" : "normal"] ?? model.projectState;
+      const other = model.dependencyGroups?.[message.dev ? "normal" : "dev"];
+      if (state?.ambiguous || state?.declared && state.sourceType !== "registry" || !state?.declared && other?.declared) { return; }
       session.busy = true;
       session.result = { state: "pending", message: t("Adding dependency…") };
       paintModel(session, { ...model, busy: true, result: session.result });
       try {
         const executable = session.deps.mcppExecutable(operation.projectRoot);
+        const snapshot = await loadSnapshot({ projectRoot: operation.projectRoot });
+        const declarations = readProjectDeclarations(operation.projectRoot ? readTextTolerantly(path.join(operation.projectRoot, "mcpp.toml")) : "");
+        const catalog = snapshot.entries.map((entry) => entry.id);
+        const fresh = projectDependencyState(model.id, declarations, [], catalog, message.dev ? "dev" : "normal");
+        const otherGroup = projectDependencyState(model.id, declarations, [], catalog, message.dev ? "normal" : "dev");
+        if (fresh.ambiguous || fresh.declared && fresh.sourceType !== "registry" || !fresh.declared && otherGroup.declared) {
+          if (current()) { session.result = { state: "error", message: t("The dependency declaration changed. Review mcpp.toml before adding it.") }; }
+          return;
+        }
         const outcome = await addDependency({
           mcppExecutable: () => executable,
           projectRoot: () => operation.projectRoot,
@@ -377,7 +387,14 @@ async function buildModel(session: DetailSession, id: string, request: number): 
   // the same matching rule `installedFor` uses for this package itself.
   const lock = lockPackageVersions(projectRoot ? readTextTolerantly(path.join(projectRoot, "mcpp.lock")) : "");
   const declarations = readProjectDeclarations(projectRoot ? readTextTolerantly(path.join(projectRoot, "mcpp.toml")) : "");
-  const state = projectDependencyState(entry.id, declarations, lock, snapshot.entries.map((entry) => entry.id));
+  const catalog = snapshot.entries.map((entry) => entry.id);
+  const dependencyGroups = {
+    normal: projectDependencyState(entry.id, declarations, lock, catalog, "normal"),
+    dev: projectDependencyState(entry.id, declarations, [], catalog, "dev"),
+    build: projectDependencyState(entry.id, declarations, [], catalog, "build"),
+  };
+  const dependencyKind = dependencyGroups.normal.declared ? "normal" : dependencyGroups.dev.declared ? "dev" : dependencyGroups.build.declared ? "build" : "normal";
+  const state = dependencyGroups[dependencyKind];
   const dependencies = descriptorDependencies(text).map((dependency) => {
     const resolved = lock.find((entry) => entry.id === dependency.id)?.version;
     const local = snapshot.entries.find((entry) => entry.id === dependency.id);
@@ -386,12 +403,13 @@ async function buildModel(session: DetailSession, id: string, request: number): 
   const model: DetailModel = {
     ui,
     projectRoot,
+    manifestAvailable: !!projectRoot && existsSync(path.join(projectRoot, "mcpp.toml")),
     platform: platform ?? process.platform,
     projectState: state,
+    dependencyGroups,
+    dependencyKind,
     blockedReason: !session.deps.isTrusted() ? t("Trust this workspace to run mcpp and add dependencies.")
       : !projectRoot || !existsSync(path.join(projectRoot, "mcpp.toml")) ? t("Select an mcpp project before adding this library.")
-      : state.ambiguous ? t("This dependency name is ambiguous. Use a qualified package name in mcpp.toml.")
-      : state.sourceType === "path-or-git" ? t("This project uses a source dependency. Edit its manifest to change the source.")
       : platform === undefined ? t("The current environment platform is not recognized by this index.")
       : latest === undefined ? info === undefined ? t("Version availability could not be confirmed. Retry reading this descriptor.") : t("No version is published for the current environment platform.")
       : undefined,
@@ -500,8 +518,14 @@ function readTextTolerantly(file: string): string {
 function labels(): Record<string, string> {
   return {
     [DETAIL_UI.htmlLang]: htmlLanguage(),
-    [DETAIL_UI.project]: t("Project"),
     [DETAIL_UI.platforms]: t("Platforms and versions"),
+    [DETAIL_UI.kind]: t("Dependency type"),
+    [DETAIL_UI.kindNormal]: t("Project dependency"),
+    [DETAIL_UI.kindDev]: t("Development dependency"),
+    [DETAIL_UI.kindBuild]: t("Build dependency"),
+    [DETAIL_UI.addDevAction]: t("Add development dependency"),
+    [DETAIL_UI.buildHint]: t("Build dependencies are used by the build script. Copy this entry into mcpp.toml; mcpp add does not support this group yet."),
+    [DETAIL_UI.moveHint]: t("Changing this declaration requires a manifest edit. Copy the entry and update its dependency group in mcpp.toml."),
     [DETAIL_UI.chooseProject]: t("Choose project"),
     [DETAIL_UI.platform]: t("Environment platform"),
     [DETAIL_UI.version]: t("Version"),

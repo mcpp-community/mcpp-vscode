@@ -17,7 +17,7 @@
  * keyword list and punctuation. It is not a parser and is not meant to be.
  */
 
-import type { ProjectDependencyState } from "./projectState";
+import { dependencyLocation, type DependencyKind, type ProjectDependencyState } from "./projectState";
 
 import {
   BADGE_UI,
@@ -75,6 +75,9 @@ export interface DetailModel {
   projectRoot?: string;
   platform?: string;
   projectState?: ProjectDependencyState;
+  dependencyGroups?: Record<DependencyKind, ProjectDependencyState>;
+  dependencyKind?: DependencyKind;
+  manifestAvailable?: boolean;
   blockedReason?: string;
   versionNotice?: string;
   loading?: boolean;
@@ -158,6 +161,13 @@ export const DETAIL_UI = {
   openFile: "detail.openFile",
   preview: "detail.preview",
   platforms: "detail.platforms",
+  kind: "detail.kind",
+  kindNormal: "detail.kind.normal",
+  kindDev: "detail.kind.dev",
+  kindBuild: "detail.kind.build",
+  addDevAction: "detail.addDevAction",
+  buildHint: "detail.buildHint",
+  moveHint: "detail.moveHint",
   overview: "detail.overview",
   license: "detail.license",
   repo: "detail.repo",
@@ -322,21 +332,12 @@ function renderDependencies(model: DetailModel, label: UiLabel): string {
 }
 
 function renderMeta(model: DetailModel, label: UiLabel): string {
-  const parts: string[] = [];
-  if (model.surface !== undefined) {
-    parts.push(
-      `<span class="badge">${escapeHtml(label(DETAIL_UI.surface))}: ${escapeHtml(surfaceLabel(model.surface, label))}</span>`,
-    );
-  }
-  if (model.standard !== undefined) {
-    parts.push(`<span class="badge">${escapeHtml(label(DETAIL_UI.standard))}: ${escapeHtml(model.standard)}</span>`);
-  }
-  for (const license of model.licenses) {
-    parts.push(`<span class="badge">${escapeHtml(license)}</span>`);
-  }
-  // The repository and index links are actions, not facts, so they live in the
-  // button row below rather than at the end of this line.
-  return [`<div class="detail-meta">`, parts.join("\n"), `</div>`].join("\n");
+  const tag = (kind: string, value: string, title: string) => `<span class="detail-tag" data-tag="${kind}" title="${escapeHtml(title)}">${escapeHtml(value)}</span>`;
+  return `<div class="detail-tags">${model.surface ? tag("surface", surfaceLabel(model.surface, label), label(DETAIL_UI.surface)) : ""}${model.standard ? tag("standard", model.standard.toUpperCase(), label(DETAIL_UI.standard)) : ""}${model.licenses.map((license) => tag("license", license, license)).join("")}</div>`;
+}
+
+function renderProject(model: DetailModel, label: UiLabel): string {
+  return `<div class="project-context"><button type="button" class="project-picker" data-action="selectProject" title="${escapeHtml(model.projectRoot ?? label(DETAIL_UI.chooseProject))}" aria-label="${escapeHtml(label(DETAIL_UI.chooseProject))}"><strong>${escapeHtml(model.projectRoot?.split(/[\\/]/).pop() ?? label(DETAIL_UI.chooseProject))}</strong><span aria-hidden="true">⌄</span></button><span class="context-platform" title="${escapeHtml(label(DETAIL_UI.platform))}">${escapeHtml(model.platform ?? "—")}</span></div>`;
 }
 
 function renderExtras(model: DetailModel, label: UiLabel): string {
@@ -362,44 +363,47 @@ function renderExtras(model: DetailModel, label: UiLabel): string {
  * version is chosen in the list below (`renderVersions`), and this block shows
  * the command the choice produces.
  */
+function groupsFor(model: DetailModel): Record<DependencyKind, ProjectDependencyState> {
+  const empty: ProjectDependencyState = { declared: false, dev: false, sourceType: "none", ambiguous: false };
+  const kind = model.dependencyKind ?? (model.projectState?.dev || model.installed?.dev ? "dev" : "normal");
+  const state = model.projectState ?? (model.installed ? { ...empty, declared: true, declaredVersion: model.installed.version, dev: model.installed.dev, sourceType: "registry" as const } : empty);
+  return model.dependencyGroups ?? { normal: kind === "normal" ? state : empty, dev: kind === "dev" ? state : { ...empty, dev: true }, build: kind === "build" ? state : empty };
+}
+
 function selectedVersion(model: DetailModel): string | undefined {
-  const declared = model.projectState?.declaredVersion ?? model.installed?.version;
+  const kind = model.dependencyKind ?? (model.projectState?.dev || model.installed?.dev ? "dev" : "normal");
+  const declared = groupsFor(model)[kind].declaredVersion;
   return declared !== undefined && model.currentVersions.includes(declared) ? declared : model.latest;
 }
 
 function renderActions(model: DetailModel, label: UiLabel): string {
+  const kind = model.dependencyKind ?? (model.projectState?.dev || model.installed?.dev ? "dev" : "normal");
+  const groups = groupsFor(model);
+  const current = groups[kind];
   const version = selectedVersion(model);
-  const current = model.projectState;
-  const declared = current?.declaredVersion ?? model.installed?.version;
-  const dev = current?.dev ?? model.installed?.dev ?? false;
-  const already = declared !== undefined && declared === version;
-  const blocked = model.blockedReason;
+  const manual = kind === "build" || current.ambiguous || current.declared && current.sourceType !== "registry" || !current.declared && groups[kind === "dev" ? "normal" : "dev"].declared;
+  const already = current.declaredVersion !== undefined && current.declaredVersion === version && !manual;
+  const canOpen = model.manifestAvailable ?? !!model.projectRoot;
+  const disabled = !!model.busy || !!model.loading || (manual ? !canOpen : !!model.blockedReason || !version || already);
+  const location = dependencyLocation(model.id, kind);
+  const command = model.preview ? `mcpp search ${model.id}` : manual ? `[${location.table}]
+${location.name} = ${JSON.stringify(version ?? "<version>")}` : (kind === "dev" ? model.commandDevTemplate : model.commandTemplate).replace("{0}", model.id).replace("{1}", version ?? "?");
+  const addLabel = model.busy ? label(DETAIL_UI.pending) : manual ? label(DETAIL_UI.openManifest) : already ? label(DETAIL_UI.alreadyAdded) : current.declared ? fill(label, DETAIL_UI.switchTo, [version ?? "?"]) : label(kind === "dev" ? DETAIL_UI.addDevAction : DETAIL_UI.add);
   const link = (url: string, text: string) => `<button type="button" data-secondary data-open-url="${escapeHtml(url)}">${escapeHtml(text)}</button>`;
-  const command = (dev ? model.commandDevTemplate : model.commandTemplate).replace("{0}", model.id).replace("{1}", version ?? "?");
+  const kinds: Array<[DependencyKind, string, string]> = [["normal", DETAIL_UI.kindNormal, "dependencies"], ["dev", DETAIL_UI.kindDev, "dev-dependencies"], ["build", DETAIL_UI.kindBuild, "build-dependencies"]];
   return `<section class="detail-primary" data-section="add" aria-busy="${model.loading || model.busy ? "true" : "false"}">
-    <div class="project-context">
-      <button type="button" class="project-picker" data-action="selectProject" title="${escapeHtml(model.projectRoot ?? label(DETAIL_UI.chooseProject))}" aria-label="${escapeHtml(label(DETAIL_UI.chooseProject))}"><span>${escapeHtml(label(DETAIL_UI.project))}</span><strong>${escapeHtml(model.projectRoot?.split(/[\\/]/).pop() ?? label(DETAIL_UI.chooseProject))}</strong><span aria-hidden="true">⌄</span></button>
-      <span class="context-platform" title="${escapeHtml(label(DETAIL_UI.platform))}">${escapeHtml(model.platform ?? "—")}</span>
-    </div>
     ${model.loading ? `<p class="detail-hint" role="status">${escapeHtml(label(DETAIL_UI.loading))}</p>` : ""}
     ${model.preview ? `<p class="detail-hint">${escapeHtml(label(DETAIL_UI.preview))}</p><p>${escapeHtml(label(DETAIL_UI.version))}: ${escapeHtml(model.previewVersion ?? "—")}</p>` : ""}
-    ${model.preview ? "" : `<div class="detail-controls">
-      <label>${escapeHtml(label(DETAIL_UI.version))} <select id="detail-version"${flag("disabled", !!model.loading || !!model.busy || !model.currentVersions.length)}>${model.currentVersions.map((item) => `<option value="${escapeHtml(item)}"${flag("selected", item === version)}>${escapeHtml(item)}</option>`).join("")}</select></label>
-      <label class="detail-toggle"><input id="detail-dev" type="checkbox"${flag("checked", dev)}${flag("disabled", !!model.loading || !!model.busy)}><span>${escapeHtml(label(DETAIL_UI.addDev))}</span></label>
-      ${declared && model.latest && model.latest !== declared ? `<span class="detail-current">${escapeHtml(label(DETAIL_UI.version))}: ${escapeHtml(model.latest)} ↑</span>` : ""}
-      ${current?.resolvedVersion === undefined || current.resolvedVersion === declared ? "" : `<span>${escapeHtml(label(DETAIL_UI.locked))}: ${escapeHtml(current.resolvedVersion)}</span>`}
-      ${current?.sourceType === "path-or-git" ? `<span>${escapeHtml(label(DETAIL_UI.sourceDependency))}</span>` : ""}
-    </div>`}
+    ${model.preview ? "" : `<div class="detail-controls"><label>${escapeHtml(label(DETAIL_UI.version))} <select id="detail-version"${flag("disabled", !!model.loading || !!model.busy || !model.currentVersions.length)}>${model.currentVersions.map((item) => `<option value="${escapeHtml(item)}"${flag("selected", item === version)}>${escapeHtml(item)}</option>`).join("")}</select></label><span class="dependency-kind-label" id="detail-kind-label">${kind === "dev" ? "dev-dependencies" : kind === "build" ? "build-dependencies" : "dependencies"}</span>${current.resolvedVersion && current.resolvedVersion !== current.declaredVersion ? `<span>${escapeHtml(label(DETAIL_UI.locked))}: ${escapeHtml(current.resolvedVersion)}</span>` : ""}</div>`}
     <div class="detail-actions">
-      ${model.preview ? "" : `<button type="button" id="detail-add" class="detail-add"${flag("disabled", !!blocked || !version || already || !!model.busy)}${flag("data-installed", already)}>${escapeHtml(model.busy ? label(DETAIL_UI.pending) : already ? label(DETAIL_UI.alreadyAdded) : declared ? fill(label, DETAIL_UI.switchTo, [version ?? "?"]) : label(DETAIL_UI.add))}</button>`}
+      ${model.preview ? "" : `<div class="detail-add-group"><button type="button" id="detail-add" class="detail-add"${flag("disabled", disabled)}${flag("data-installed", already)}>${escapeHtml(addLabel)}</button><button type="button" id="detail-kind-toggle" class="detail-kind-toggle" aria-label="${escapeHtml(label(DETAIL_UI.kind))}" aria-haspopup="menu" aria-expanded="false" aria-controls="detail-kind-menu"${flag("disabled", !!model.loading || !!model.busy)}><span aria-hidden="true">⌄</span></button><div id="detail-kind-menu" class="detail-kind-menu" role="menu" aria-label="${escapeHtml(label(DETAIL_UI.kind))}" hidden>${kinds.map(([value, key, section]) => `<button type="button" role="menuitemradio" aria-checked="${value === kind}" data-kind="${value}"><span>${escapeHtml(label(key))}</span><code>${section}</code></button>`).join("")}</div></div>`}
       ${model.repo === undefined ? "" : link(model.repo, label(DETAIL_UI.openRepo))}
       ${model.indexUrl === undefined ? "" : link(model.indexUrl, label(DETAIL_UI.indexLink))}
-      ${current?.declared ? `<button class="link-button" type="button" data-secondary data-action="openManifest">${escapeHtml(label(DETAIL_UI.openManifest))}</button>` : ""}
     </div>
     ${model.versionNotice ? `<p class="detail-hint">${escapeHtml(model.versionNotice)} <button class="link-button" type="button" data-action="retry">${escapeHtml(label(DETAIL_UI.retry))}</button></p>` : ""}
-    ${blocked ? `<p class="detail-hint" id="detail-blocked">${escapeHtml(blocked)}</p>` : ""}
-    <div class="detail-command-row"><p class="detail-command" id="detail-command">${escapeHtml(model.preview ? `mcpp search ${model.id}` : command)}</p><button type="button" class="detail-copy" data-copy-command>${escapeHtml(label(DETAIL_UI.copy))}</button></div>
-    <p id="detail-selection-note" class="detail-hint" hidden></p>
+    ${model.blockedReason ? `<p class="detail-hint" id="detail-blocked">${escapeHtml(model.blockedReason)}</p>` : ""}
+    <p id="detail-selection-note" class="detail-hint"${flag("hidden", !manual)}>${escapeHtml(manual ? label(kind === "build" ? DETAIL_UI.buildHint : DETAIL_UI.moveHint) : "")}</p>
+    <div class="detail-command-row"><p class="detail-command" id="detail-command">${escapeHtml(command)}</p><button type="button" class="detail-copy" data-copy-command>${escapeHtml(label(DETAIL_UI.copy))}</button></div>
     <p class="detail-result" id="detail-result" role="status"${attribute("data-state", model.result?.state)}${flag("hidden", !model.result)}>${escapeHtml(model.result?.message ?? "")}</p>
     <div class="result-actions" id="detail-result-actions"${flag("hidden", model.result?.state !== "error")}><button class="link-button" type="button" data-action="retry">${escapeHtml(label(DETAIL_UI.retry))}</button><button class="link-button" type="button" data-action="showOutput">${escapeHtml(label(DETAIL_UI.output))}</button></div>
   </section>`;
@@ -409,9 +413,10 @@ export function detailClientState(model: DetailModel): Record<string, unknown> {
   return {
     key: model.key ?? model.id, generation: model.generation ?? 0, projectRoot: model.projectRoot,
     id: model.id, versions: model.currentVersions, version: selectedVersion(model),
-    declared: model.projectState?.declaredVersion ?? model.installed?.version,
-    dev: model.projectState?.dev ?? model.installed?.dev ?? false,
-    loading: !!model.loading, blocked: !!model.blockedReason, busy: !!model.busy, preview: !!model.preview,
+    groups: groupsFor(model), kind: model.dependencyKind ?? (model.projectState?.dev || model.installed?.dev ? "dev" : "normal"),
+    locations: Object.fromEntries((["normal", "dev", "build"] as const).map((kind) => [kind, dependencyLocation(model.id, kind)])),
+    loading: !!model.loading, canOpenManifest: model.manifestAvailable ?? !!model.projectRoot,
+    blocked: !!model.blockedReason, busy: !!model.busy, preview: !!model.preview,
     command: model.commandTemplate, commandDev: model.commandDevTemplate,
     labels: Object.fromEntries(Object.entries(DETAIL_UI).map(([name, key]) => [name, model.ui[key] ?? key])),
   };
@@ -426,6 +431,7 @@ function clientScript(initialModel: string): string {
   var pages = saved.pages || {};
   var busy = state.busy;
   var version = state.version || "";
+  var kind = state.kind || "normal";
   var copyId = 0;
   var copyRequests = {};
   function restoreCopyFeedback() {
@@ -433,7 +439,7 @@ function clientScript(initialModel: string): string {
       var request = copyRequests[token];
       if (request.key !== pageKey() || request.until < Date.now()) { delete copyRequests[token]; return; }
       var buttons = Array.from(document.querySelectorAll(request.command ? "[data-copy-command]" : "[data-copy]"));
-      var button = buttons.find(function (node) { return request.command || node.getAttribute("data-copy") === request.text; });
+      var button = buttons.find(function (node) { return request.command ? document.getElementById("detail-command").textContent === request.text : node.getAttribute("data-copy") === request.text; });
       if (button) { button.setAttribute("data-copy-token", token); if (request.message) { button.textContent = request.message; } }
     });
   }
@@ -441,47 +447,72 @@ function clientScript(initialModel: string): string {
   function post(message) { message.pageKey = state.key; message.generation = state.generation; if (api) { api.postMessage(message); } }
   function persist() {
     if (state.loading) { return; }
-    var dev = document.getElementById("detail-dev");
     var expanded = Array.from(document.querySelectorAll("details[data-persist]")).filter(function (node) { return node.open; }).map(function (node) { return node.getAttribute("data-persist"); });
-    pages[pageKey()] = { version: version, dev: dev ? dev.checked : false, scroll: window.scrollY, expanded: expanded };
+    pages[pageKey()] = { version: version, kind: kind, scroll: window.scrollY, expanded: expanded };
     var keys = Object.keys(pages); while (keys.length > 20) { delete pages[keys.shift()]; }
     if (api && api.setState) { api.setState({ pages: pages }); }
   }
+  function closeKindMenu(focus) {
+    var menu = document.getElementById("detail-kind-menu");
+    var toggle = document.getElementById("detail-kind-toggle");
+    if (menu) { menu.hidden = true; }
+    if (toggle) { toggle.setAttribute("aria-expanded", "false"); if (focus) { toggle.focus(); } }
+  }
+  function manualSelection() {
+    var group = state.groups[kind];
+    return kind === "build" || group.ambiguous || group.declared && group.sourceType !== "registry" || !group.declared && state.groups[kind === "dev" ? "normal" : "dev"].declared;
+  }
   function update() {
     var select = document.getElementById("detail-version");
-    var dev = document.getElementById("detail-dev");
     var button = document.getElementById("detail-add");
     if (state.preview) { return; }
-    if (select) { select.value = version; select.disabled = busy || !state.versions.length; }
-    if (dev) { dev.disabled = busy; }
-    var isDev = dev ? dev.checked : false;
-    var groupChange = !!state.declared && isDev !== state.dev;
-    var same = !!state.declared && state.declared === version && !groupChange;
+    var group = state.groups[kind];
+    var manual = manualSelection();
+    var same = !!group.declaredVersion && group.declaredVersion === version && !manual;
+    if (select) { select.value = version; select.disabled = busy || state.loading || !state.versions.length; }
+    var toggle = document.getElementById("detail-kind-toggle"); if (toggle) { toggle.disabled = busy || state.loading; }
+    var kindLabel = document.getElementById("detail-kind-label");
+    if (kindLabel) { kindLabel.textContent = kind === "dev" ? "dev-dependencies" : kind === "build" ? "build-dependencies" : "dependencies"; }
+    document.querySelectorAll("[data-kind]").forEach(function (item) { item.setAttribute("aria-checked", String(item.getAttribute("data-kind") === kind)); });
     if (button) {
-      button.disabled = busy || state.blocked || !version || same || groupChange;
-      button.textContent = busy ? state.labels.pending : same ? state.labels.alreadyAdded : state.declared ? state.labels.switchTo.split("{0}").join(version) : state.labels.add;
+      button.disabled = busy || state.loading || (manual ? !state.canOpenManifest : state.blocked || !version || same);
+      button.textContent = busy ? state.labels.pending : manual ? state.labels.openManifest : same ? state.labels.alreadyAdded : group.declared ? state.labels.switchTo.split("{0}").join(version) : kind === "dev" ? state.labels.addDevAction : state.labels.add;
       if (same) { button.setAttribute("data-installed", ""); } else { button.removeAttribute("data-installed"); }
     }
-    var note = document.getElementById("detail-selection-note"); if (note) { note.textContent = groupChange ? state.labels.groupChange : ""; note.hidden = !groupChange; }
+    var note = document.getElementById("detail-selection-note"); if (note) { note.textContent = manual ? kind === "build" ? state.labels.buildHint : state.labels.moveHint : ""; note.hidden = !manual; }
     var command = document.getElementById("detail-command");
-    if (command) { command.textContent = (isDev ? state.commandDev : state.command).split("{0}").join(state.id).split("{1}").join(version || "?"); }
+    var location = state.locations[kind];
+    if (command) { command.textContent = manual ? "[" + location.table + "]\\n" + location.name + " = " + JSON.stringify(version || "<version>") : (kind === "dev" ? state.commandDev : state.command).split("{0}").join(state.id).split("{1}").join(version || "?"); }
   }
   function restore() {
     var page = pages[pageKey()] || {};
     if (state.versions.indexOf(page.version) >= 0) { version = page.version; }
-    var dev = document.getElementById("detail-dev"); if (dev && typeof page.dev === "boolean") { dev.checked = page.dev; }
+    kind = ["normal", "dev", "build"].indexOf(page.kind) >= 0 ? page.kind : state.kind || "normal";
     document.querySelectorAll("details[data-persist]").forEach(function (node) { node.open = (page.expanded || []).indexOf(node.getAttribute("data-persist")) >= 0; });
     update(); window.scrollTo(0, page.scroll || 0);
   }
   document.addEventListener("change", function (event) {
     if (event.target.id === "detail-version") { version = event.target.value; }
-    if (event.target.id === "detail-version" || event.target.id === "detail-dev") { update(); persist(); }
+    if (event.target.id === "detail-version") { update(); persist(); }
   });
   document.addEventListener("toggle", persist, true);
   window.addEventListener("scroll", persist);
   document.addEventListener("click", function (event) {
     var target = event.target.closest && event.target.closest("button");
     if (!target || target.disabled) { return; }
+    if (target.id === "detail-kind-toggle") {
+      var menu = document.getElementById("detail-kind-menu"); menu.hidden = !menu.hidden;
+      target.setAttribute("aria-expanded", String(!menu.hidden));
+      if (!menu.hidden) { menu.querySelector('[aria-checked="true"]').focus(); }
+      return;
+    }
+    if (target.hasAttribute("data-kind")) {
+      kind = target.getAttribute("data-kind");
+      var declared = state.groups[kind].declaredVersion;
+      if (state.versions.indexOf(declared) >= 0) { version = declared; }
+      closeKindMenu(true); update(); persist(); return;
+    }
+    closeKindMenu(false);
     var action = target.getAttribute("data-action");
     if (action) { post({ type: action }); return; }
     if (target.hasAttribute("data-open-dependency")) { persist(); post({ type: "openDependency", key: target.getAttribute("data-open-dependency") }); return; }
@@ -489,14 +520,28 @@ function clientScript(initialModel: string): string {
     if (target.hasAttribute("data-open-url")) { post({ type: "openUrl", url: target.getAttribute("data-open-url") }); return; }
     if (target.hasAttribute("data-copy") || target.hasAttribute("data-copy-command")) {
       var token = "copy-" + (++copyId); target.setAttribute("data-copy-token", token);
-      copyRequests[token] = { key: pageKey(), command: target.hasAttribute("data-copy-command"), text: target.getAttribute("data-copy"), until: Date.now() + 20000 };
+      copyRequests[token] = { key: pageKey(), command: target.hasAttribute("data-copy-command"), text: target.hasAttribute("data-copy") ? target.getAttribute("data-copy") : document.getElementById("detail-command").textContent, until: Date.now() + 20000 };
       post({ type: "copy", text: target.hasAttribute("data-copy") ? target.getAttribute("data-copy") : document.getElementById("detail-command").textContent, token: token }); return;
     }
-    if (target.id === "detail-add" && !busy && version) {
+    if (target.id === "detail-add" && !busy) {
+      if (manualSelection()) { post({ type: "openManifest" }); return; }
+      if (!version) { return; }
       busy = true; update();
       var result = document.getElementById("detail-result"); result.hidden = false; result.dataset.state = "pending"; result.textContent = state.labels.pending;
-      persist(); post({ type: "add", version: version, dev: document.getElementById("detail-dev").checked });
+      persist(); post({ type: "add", version: version, dev: kind === "dev" });
     }
+  });
+  document.addEventListener("click", function (event) { if (!event.target.closest || !event.target.closest(".detail-add-group")) { closeKindMenu(false); } });
+  document.addEventListener("keydown", function (event) {
+    var menu = document.getElementById("detail-kind-menu");
+    if (!menu || menu.hidden) { return; }
+    if (event.key === "Escape") { event.preventDefault(); closeKindMenu(true); return; }
+    if (event.key === "Tab") { closeKindMenu(false); return; }
+    var options = Array.from(menu.querySelectorAll("[data-kind]"));
+    if (["ArrowDown", "ArrowUp", "Home", "End"].indexOf(event.key) < 0) { return; }
+    event.preventDefault(); var index = options.indexOf(document.activeElement);
+    index = event.key === "Home" ? 0 : event.key === "End" ? options.length - 1 : (index + (event.key === "ArrowDown" ? 1 : options.length - 1)) % options.length;
+    options[index].focus();
   });
   window.addEventListener("message", function (event) {
     var data = event.data;
@@ -506,7 +551,7 @@ function clientScript(initialModel: string): string {
       var focused = document.activeElement && document.activeElement.id;
       var doc = new DOMParser().parseFromString(data.html, "text/html");
       ["detail-header", "detail-main", "detail-footer"].forEach(function (id) { var old = document.getElementById(id); var next = doc.getElementById(id); if (old && next) { old.replaceWith(next); } });
-      state = data.state; busy = state.busy; version = state.version || "";
+      state = data.state; busy = state.busy; version = state.version || ""; kind = state.kind || "normal";
       restore(); restoreCopyFeedback();
       var nextFocus = focused && document.getElementById(focused); if (nextFocus) { nextFocus.focus({ preventScroll: true }); }
       return;
@@ -553,9 +598,8 @@ export function renderDetailHtml(model: DetailModel, assets: DetailAssets): stri
 </head>
 <body class="detail">
 <header class="detail-header" id="detail-header">
-  <h1 class="detail-title">${escapeHtml(model.id)}</h1>
+  <div class="detail-heading-row"><div class="detail-heading"><h1 class="detail-title">${escapeHtml(model.id)}</h1>${renderMeta(model, label)}</div>${renderProject(model, label)}</div>
   ${model.description === undefined ? "" : `<p class="detail-description">${escapeHtml(model.description)}</p>`}
-  ${renderMeta(model, label)}
 </header>
 <main id="detail-main">
   ${renderActions(model, label)}
@@ -574,7 +618,7 @@ export function renderDetailHtml(model: DetailModel, assets: DetailAssets): stri
     </aside>
   </div>`}
 </main>
-<footer class="detail-footer" id="detail-footer"><details data-persist="source"><summary>${escapeHtml(label(DETAIL_UI.source))}</summary><p>${escapeHtml(model.dataSource)}</p><p>${escapeHtml(badgeLabels(model.badges, label).join(" · "))}</p>${model.parseNotice === undefined ? "" : `<p>${escapeHtml(model.parseNotice)}</p>`}</details></footer>
+<footer class="detail-footer" id="detail-footer"><details data-persist="source"><summary>${escapeHtml(label(DETAIL_UI.source))}</summary><p>${escapeHtml(model.dataSource)}</p>${model.projectRoot ? `<button class="link-button" type="button" data-action="openManifest">${escapeHtml(label(DETAIL_UI.openManifest))}</button>` : ""}<p>${escapeHtml(badgeLabels(model.badges, label).join(" · "))}</p>${model.parseNotice === undefined ? "" : `<p>${escapeHtml(model.parseNotice)}</p>`}</details></footer>
 <script nonce="${escapeHtml(assets.nonce)}">
 ${clientScript(embedJson(detailClientState(model)))}
 </script>

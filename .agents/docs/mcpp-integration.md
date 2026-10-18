@@ -7,6 +7,11 @@
 
 | 调用点 | 命令 | 依赖的输出 |
 | --- | --- | --- |
+| `library/indexLocator` | `mcpp self env --format json` | `mcpp.env` 信封中的 `mcppHome`，按 CLI/项目上下文缓存 |
+| `library/detailPanel` | `mcpp xpkg parse <file> --json` | 裸 JSON；按需解析单个描述符，失败时标明文本回退 |
+| `library/libraryView` | `mcpp search <keyword>` | 尽力解析人类文本，仅产生有限预览 |
+| `library/addDependency` | `mcpp add <id>@<version> [--dev]` | 退出码；完成后重读 manifest/lock |
+| `extension` | `mcpp index update` | 退出码；与本地只读重载区分 |
 | `cliController.newProject` | `mcpp new <name>` | 退出码 |
 | `tasks.projectTaskPlan` | `mcpp build` / `run` / `test` / `clean` | 退出码（VS Code Task） |
 | `cliController.readToolchainInventory` | `mcpp toolchain list` | **人类文本**（正则解析） |
@@ -15,7 +20,7 @@
 
 `mcpp.path` 为空时用 `"mcpp"`，由 VS Code 进程的 `PATH` 解析。
 
-## 2. mcpp 已提供的稳定机读接口（本扩展未使用）
+## 2. mcpp 已提供的稳定机读接口
 
 mcpp 有正式的机读输出协议（`docs/50-machine-output.md`）。**检测规则**：解析 stdout，
 要求 `schemaVersion` 与 `kind` 存在；**不要**用退出码或"命令没报错"来判断支持与否。
@@ -78,3 +83,11 @@ mcpp 有正式的机读输出协议（`docs/50-machine-output.md`）。**检测�
 3. `mcpp new <name>` 的模板不做 TOML/C++ 转义，且名字包含 `PROJECT` 时模板替换不终止
    （mcpp#380）；`newProject.ts` 因此做名称白名单校验。
 4. `--configure-only` 会写 `compile_commands.json`，成功条件是退出码 0 且该文件可解析。
+
+
+## Libraries 的 CLI 边界（本机 mcpp 2026.10.16.3 验证）
+
+- 官方索引位于 `<mcppHome>/indices/mcpplibs`；`registry/data/xim-pkgindex` 是工具索引，不能作为官方库缺失时的替代。旧版官方路径 `registry/data/mcpplibs` 仅作兼容。
+- `MCPP_HOME` 优先；CLI 还可能按可执行文件位置确定自包含 home，扩展应使用 `self env` 的答案，不能合并多个安装的同名索引。
+- `mcpp add --help` 只提供 `--dev`。没有 `--build`，也不承诺在普通与开发分组之间迁移声明；扩展对这两类清单编辑提供 TOML 预览与打开文件入口。
+- 当前环境平台来自 extension host，不能称为工程交叉编译目标或完整 ABI 兼容性结论。

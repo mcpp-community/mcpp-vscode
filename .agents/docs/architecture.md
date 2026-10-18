@@ -1,6 +1,6 @@
 # mcpp-vscode 架构
 
-> 状态：0.4.0（mcppls 语言服务迁移之后）。本文记录**当前**结构；变动请同步更新。
+> 第 1–6 节保留 0.4.0 迁移背景；Libraries 的当前架构与边界见第 7 节（2026-10-18）。
 
 ## 1. 一句话定位
 
@@ -75,3 +75,15 @@ extension.ts                 VS Code 装配层：激活、命令注册、provide
   （build / restart）不符。
 
 具体建议见 `.agents/reviews/` 下的评审报告。
+
+
+## 7. Libraries（2026-10-18）
+
+- `library/indexLocator.ts`：显式索引路径或 CLI home 下的官方索引发现；新位置 `indices/mcpplibs` 优先，兼容 `registry/data/mcpplibs`。不默认收集 xim。缓存按源路径、平台、描述符 stat 和更新标记区分；项目状态是单独的 overlay。
+- `library/projectState.ts`：复用 TOML 解析器，区分普通、开发与构建声明、源码依赖、锁定结果和有歧义的短名；生成清单预览的目标 section/key。
+- `library/libraryView.ts` 与 `library/detailPanel.ts`：VS Code 生命周期和 CLI 编排；搜索响应绑定请求代次，添加操作绑定包、项目、页面代次，详情读取还单独校验渲染请求顺序。
+- `library/libraryHtml.ts`、`library/detailHtml.ts`：纯渲染器。初始文档只安装一次；mounted 仅请求重放最新数据，后续用 message 更新局部 DOM，保留查询、版本、依赖类型、折叠状态与焦点，不形成 reload loop。
+- `library/projectWatcher.ts`：只检查选中项目的 manifest/lock；与 VS Code watcher 一起保证外部写入能刷新。监听和计时器随窗口或项目切换释放。
+- `library/addDependency.ts`：普通和开发依赖由 `mcpp add` 修改，构建依赖/分组迁移只提供复制片段与打开清单。扩展不自行改写 TOML，也不将 lock-only 误称为已声明/已安装。
+
+本地真实 UI 验证入口：`tools/test-libraries-ui.mjs`；专用 profile 和产物均在 gitignored 的 `.dev-profile/`。

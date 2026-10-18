@@ -120,8 +120,8 @@ test("the detail page is a strict, self-contained webview", () => {
 test("the overview names the vocabulary the index site uses", () => {
   const html = renderDetailHtml(model(), ASSETS);
   assert.doesNotMatch(html, /<span class="badge">Registry:/);
-  assert.match(html, /<span class="badge">Use: #include<\/span>/);
-  assert.match(html, /<span class="badge">Standard: c\+\+23<\/span>/);
+  assert.match(html, /data-tag="surface" title="Use">#include/);
+  assert.match(html, /data-tag="standard" title="Standard">C\+\+23/);
   assert.match(html, /✓ Has examples/);
   assert.match(html, /China mirror/);
   assert.match(html, /openkal-compat/);
@@ -135,7 +135,7 @@ test("the overview names the vocabulary the index site uses", () => {
     html,
     /<button type="button" data-secondary data-open-url="https:\/\/mcpplibs\.github\.io\/mcpp-index\/packages\/compat\.argparse\/">Open on the index site<\/button>/,
   );
-  const actions = html.slice(html.indexOf('class="detail-actions"'), html.indexOf("</div>", html.indexOf('class="detail-actions"')));
+  const actions = html.slice(html.indexOf('class="detail-actions"'), html.indexOf("</section>", html.indexOf('class="detail-actions"')));
   assert.match(actions, /id="detail-add"/);
   assert.match(actions, /Open the repository/);
   assert.match(actions, /Open on the index site/);
@@ -210,10 +210,11 @@ test("an existing declaration is preserved by default, including dev group", () 
     projectState: { declared: true, declaredVersion: "3.2", resolvedVersion: "3.1", dev: true, sourceType: "registry", ambiguous: false },
   }), ASSETS);
   assert.match(html, /<option value="3\.2" selected>/);
-  assert.match(html, /id="detail-dev" type="checkbox" checked/);
+  assert.match(html, /aria-checked="true" data-kind="dev"/);
+  assert.doesNotMatch(html, /type="checkbox"/);
   assert.match(html, /id="detail-add" class="detail-add" disabled data-installed/);
   assert.match(html, /mcpp add compat\.argparse@3\.2 --dev/);
-  assert.match(html, /"declared":"3\.2"/);
+  assert.match(html, /"declaredVersion":"3\.2"/);
   assert.match(html, /"dev":true/);
 });
 
@@ -349,4 +350,16 @@ test("the client script is syntactically valid JavaScript", () => {
   assert.doesNotThrow(() => new Function(script[1]));
   assert.doesNotMatch(script[1], /innerHTML/);
   assert.match(script[1], /textContent/);
+});
+
+
+test("dependency kinds form a secondary menu; build dependencies expose an honest TOML preview", () => {
+  const html = renderDetailHtml(model({ dependencyKind: "build", projectRoot: "/project", manifestAvailable: true }), ASSETS);
+  assert.match(html, /id="detail-kind-toggle"[^>]*aria-haspopup="menu"/);
+  assert.match(html, /role="menuitemradio" aria-checked="true" data-kind="build"/);
+  assert.match(html, /\[build-dependencies\.compat\]/);
+  assert.match(html, /argparse = &quot;3\.2&quot;/);
+  assert.doesNotMatch(html, /type="checkbox"/);
+  assert.doesNotMatch(html, /mcpp add[^<]*--build/);
+  assert.ok(html.indexOf('class="project-context"') < html.indexOf('id="detail-main"'));
 });

@@ -1,7 +1,10 @@
 import type { DeclaredDependencyEntry, LockPackage } from "./indexModel";
 import { parseMcppToml, type TomlValueNode } from "../toml/parser";
 
+export type DependencyKind = "normal" | "dev" | "build";
+
 export interface ProjectDeclaration extends DeclaredDependencyEntry {
+  kind?: DependencyKind;
   source?: boolean;
   conditional?: boolean;
 }
@@ -10,25 +13,26 @@ export interface ProjectDeclaration extends DeclaredDependencyEntry {
 export function readProjectDeclarations(text: string): ProjectDeclaration[] {
   const out: ProjectDeclaration[] = [];
   let section: string[] = [];
-  const collect = (id: string, value: TomlValueNode | undefined, dev: boolean, conditional: boolean): void => {
+  const collect = (id: string, value: TomlValueNode | undefined, kind: DependencyKind, conditional: boolean): void => {
+    const dev = kind === "dev";
     if (!value) { return; }
-    if (value.kind === "string") { out.push({ id, version: value.text, dev, conditional }); return; }
+    if (value.kind === "string") { out.push({ id, version: value.text, dev, kind, conditional }); return; }
     const entries = value.entries ?? [];
     const source = entries.some((entry) => ["path", "git", "url"].includes(entry.keyPath[0]?.name));
     const version = entries.find((entry) => entry.keyPath[0]?.name === "version")?.value?.text;
     const specKeys = new Set(["version", "path", "git", "url", "branch", "rev", "tag", "features", "backend", "tools", "host-module", "reexport", "workspace"]);
     if (source || entries.some((entry) => specKeys.has(entry.keyPath[0]?.name))) {
-      out.push({ id, version, dev, source, conditional });
+      out.push({ id, version, dev, kind, source, conditional });
     } else if (entries.length) {
-      for (const entry of entries) { collect(`${id}.${entry.keyPath.map((key) => key.name).join(".")}`, entry.value, dev, conditional); }
-    } else { out.push({ id, dev, conditional }); }
+      for (const entry of entries) { collect(`${id}.${entry.keyPath.map((key) => key.name).join(".")}`, entry.value, kind, conditional); }
+    } else { out.push({ id, dev, kind, conditional }); }
   };
   for (const node of parseMcppToml(text.split(/\r?\n/)).nodes) {
     if (node.type === "section") { section = node.segments.map((segment) => segment.name); continue; }
-    const index = section.findIndex((part) => part === "dependencies" || part === "dev-dependencies");
+    const index = section.findIndex((part) => part === "dependencies" || part === "dev-dependencies" || part === "build-dependencies");
     if (index < 0 || section[0] === "workspace") { continue; }
     const id = [...section.slice(index + 1), ...node.keyPath.map((key) => key.name)].join(".");
-    collect(id, node.value, section[index] === "dev-dependencies", index !== 0);
+    collect(id, node.value, section[index] === "dev-dependencies" ? "dev" : section[index] === "build-dependencies" ? "build" : "normal", index !== 0);
   }
   return out;
 }
@@ -48,7 +52,9 @@ export function projectDependencyState(
   declarations: readonly ProjectDeclaration[],
   locked: readonly LockPackage[],
   catalog: readonly string[],
+  kind?: DependencyKind,
 ): ProjectDependencyState {
+  declarations = declarations.filter((entry) => kind === undefined ? entry.kind !== "build" : (entry.kind ?? (entry.dev ? "dev" : "normal")) === kind);
   const short = id.slice(id.lastIndexOf(".") + 1);
   const unique = new Set(catalog.filter((candidate) => candidate.slice(candidate.lastIndexOf(".") + 1) === short)).size === 1;
   const exact = declarations.filter((entry) => entry.id === id);
@@ -71,4 +77,15 @@ export function operationMatches(
   page: { key: string; projectRoot?: string; generation: number },
 ): boolean {
   return operation.key === page.key && operation.projectRoot === page.projectRoot && operation.generation === page.generation;
+}
+
+
+/** TOML preview only. The CLI currently cannot add build dependencies or migrate groups. */
+export function dependencyLocation(id: string, kind: DependencyKind): { table: string; name: string } {
+  const at = id.lastIndexOf(".");
+  const namespace = at < 0 ? "" : id.slice(0, at);
+  const name = at < 0 ? id : id.slice(at + 1);
+  const quote = (value: string) => /^[A-Za-z0-9_-]+$/.test(value) ? value : JSON.stringify(value);
+  const section = kind === "build" ? "build-dependencies" : kind === "dev" ? "dev-dependencies" : "dependencies";
+  return { table: !namespace || namespace === "mcpplibs" ? section : `${section}.${quote(namespace)}`, name: quote(name) };
 }

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { watchProjectFiles } from "../../src/library/projectWatcher";
-import { projectDependencyState, readProjectDeclarations, operationMatches } from "../../src/library/projectState";
+import { projectDependencyState, readProjectDeclarations, dependencyLocation, operationMatches } from "../../src/library/projectState";
 
 const loader = Module as unknown as { _load(request: string, parent: unknown, main: boolean): unknown };
 let configured = "";
@@ -132,4 +132,14 @@ test("selected-project fallback observes disk changes and stops on disposal", as
     await new Promise((resolve) => setTimeout(resolve, 100));
     assert.equal(changes, previous);
   } finally { watcher.dispose(); await fs.rm(root, { recursive: true, force: true }); }
+});
+
+
+test("build declarations have a separate identity and TOML destinations retain namespaces", () => {
+  const declarations = readProjectDeclarations('[dependencies.compat]\nargparse = "3.1"\n[build-dependencies.compat]\nargparse = "3.2"\n');
+  assert.equal(projectDependencyState("compat.argparse", declarations, [], ["compat.argparse"], "normal").declaredVersion, "3.1");
+  assert.equal(projectDependencyState("compat.argparse", declarations, [], ["compat.argparse"], "build").declaredVersion, "3.2");
+  assert.equal(projectDependencyState("compat.argparse", declarations, [], ["compat.argparse"], "dev").declared, false);
+  assert.deepEqual(dependencyLocation("compat.argparse", "build"), { table: "build-dependencies.compat", name: "argparse" });
+  assert.deepEqual(dependencyLocation("mcpplibs.cmdline", "dev"), { table: "dev-dependencies", name: "cmdline" });
 });

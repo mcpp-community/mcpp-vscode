@@ -1,3 +1,10 @@
+## Unreleased
+
+- Libraries now defaults to the official `mcpp-index` in `<mcpp home>/indices/mcpplibs`, with support for the old location. The xlings tool index is no longer substituted for the library catalog.
+- Package details put usage, standard and license tags beside the name, and project selection in the header. A split action chooses project, development or build dependencies. The CLI handles project/development additions; build dependencies and group migrations provide a TOML preview and a manifest editing entry point.
+- Search and detail updates preserve the document, selection and scroll state. Cross-registry hits have explicit limited previews. Stale searches and results from another package/project cannot update the current page.
+- Dependency state is refreshed independently from cached descriptors, including external file changes. Local rereads and index updates are separate actions; failures retain usable results.
+
 ## 0.7.0 - 2026-10-14
 
 `build.mcpp` is C++ again, compiled by C++ Modules as the build program it is, and the project

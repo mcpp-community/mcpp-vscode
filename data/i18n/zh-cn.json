@@ -533,5 +533,13 @@
   "Versions are from descriptor text; mcpp will confirm availability when adding.": "版本来自描述符文本，添加时将由 mcpp 确认可用性。",
   "Platforms and versions": "平台与版本",
   "Add dependency": "添加依赖",
-  "Usage": "用法"
+  "Usage": "用法",
+  "Dependency type": "依赖类型",
+  "Project dependency": "项目依赖",
+  "Development dependency": "开发依赖",
+  "Build dependency": "构建依赖",
+  "Add development dependency": "添加开发依赖",
+  "Build dependencies are used by the build script. Copy this entry into mcpp.toml; mcpp add does not support this group yet.": "构建依赖供构建脚本使用；当前 mcpp add 尚不支持此分组，请复制此项并编辑 mcpp.toml。",
+  "Changing this declaration requires a manifest edit. Copy the entry and update its dependency group in mcpp.toml.": "请复制声明并在 mcpp.toml 中调整依赖分组；已有声明不会自动迁移。",
+  "The dependency declaration changed. Review mcpp.toml before adding it.": "依赖声明已变化，请先检查 mcpp.toml 再添加。"
 }

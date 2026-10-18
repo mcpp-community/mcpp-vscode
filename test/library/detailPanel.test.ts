@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-type Payload = { type: string; state?: { key: string; generation: number; declared?: string }; html?: string };
+type Payload = { type: string; state?: { key: string; generation: number; declared?: string; groups?: { normal: { declared: boolean } } }; html?: string };
 let index = "";
 let receive: (message: unknown) => void;
 const messages: Payload[] = [];
@@ -86,7 +86,7 @@ else if(args[0]==='add'){fs.writeFileSync(path.join(__dirname,'started'),process
     await until(() => messages.at(-1)?.state?.key === b && messages.at(-1)?.html?.includes('aria-busy="false"') === true);
     assert.match(await fs.readFile(path.join(first, "mcpp.toml"), "utf8"), /a = "1.0"/);
     assert.doesNotMatch(await fs.readFile(path.join(second, "mcpp.toml"), "utf8"), /dependencies/);
-    assert.equal(messages.at(-1)?.state?.declared, undefined);
+    assert.equal(messages.at(-1)?.state?.groups?.normal.declared, false);
     assert.doesNotMatch(messages.at(-1)?.html ?? "", /Added compat\.a/);
     const count = messages.length;
     receive({ type: "add", version: "1.0", dev: false, pageKey: a, generation: state.generation });
