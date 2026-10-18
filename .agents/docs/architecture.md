@@ -83,7 +83,10 @@ extension.ts                 VS Code 装配层：激活、命令注册、provide
 - `library/projectState.ts`：复用 TOML 解析器，区分普通、开发与构建声明、源码依赖、锁定结果和有歧义的短名；生成清单预览的目标 section/key。
 - `library/libraryView.ts` 与 `library/detailPanel.ts`：VS Code 生命周期和 CLI 编排；搜索响应绑定请求代次，添加操作绑定包、项目、页面代次，详情读取还单独校验渲染请求顺序。
 - `library/libraryHtml.ts`、`library/detailHtml.ts`：纯渲染器。初始文档只安装一次；mounted 仅请求重放最新数据，后续用 message 更新局部 DOM，保留查询、版本、依赖类型、折叠状态与焦点，不形成 reload loop。
-- `library/projectWatcher.ts`：只检查选中项目的 manifest/lock；与 VS Code watcher 一起保证外部写入能刷新。监听和计时器随窗口或项目切换释放。
+- `library/projectWatcher.ts`：只比较选中项目的 manifest/lock 内容；详情实际读到的内容更新比较基线，保证短暂 lock 状态也能恢复。监听和计时器随窗口或项目切换释放。
 - `library/addDependency.ts`：普通和开发依赖由 `mcpp add` 修改，构建依赖/分组迁移只提供复制片段与打开清单。扩展不自行改写 TOML，也不将 lock-only 误称为已声明/已安装。
 
 本地真实 UI 验证入口：`tools/test-libraries-ui.mjs`；专用 profile 和产物均在 gitignored 的 `.dev-profile/`。
+
+- `library/examples.ts`：官方安装版索引未携带测试时，读取带来源提交的内置测试快照；checkout 的本地测试优先，自定义索引不使用此兜底。完整代码通过只读 `mcpp-example` 文档打开。
+- `projects/dependencyGraph.ts`：纯声明图遍历，最多三跳，处理路径包、共享节点和循环；lock 只补版本。`dependencyGraphPanel.ts` 负责只读文件编排和本地 Mermaid Webview。Mermaid 固定版本与许可证由编译脚本复制至 `dist/vendor`，无需 CDN。

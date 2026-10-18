@@ -22,10 +22,22 @@ manifest with an appropriate snippet; the extension does not silently duplicate
 or migrate it. Additions use exact versions. Existing declarations are preserved
 by default, and lockfile resolutions are shown separately from direct declarations.
 
-Usage examples are shown when verified local source is available. A packaged
-index may omit example projects; the repository and index-site buttons provide
-the next place to look. Platform versions, build information and source
+Usage shows the index's real test examples, preferring the package's own named
+test project. Local checkout tests take priority. Official packaged indexes often
+omit tests, so the extension includes a pinned upstream test snapshot for offline
+use, with its commit shown on the page. Open the complete source in a read-only
+editor; custom indexes only use their own tests. Packages without matching tests
+keep an explicit empty state. Platform versions, build information and source
 diagnostics can be expanded without leaving the page.
+
+In **Project → Basics → Dependencies**, use the graph icon to open the nearest
+three dependency levels as Mermaid. The palette command is **mcpp: Show Project
+Dependency Graph**. Relations come from project/local-path manifests and local
+index descriptors; lockfiles supply versions rather than parent edges. This is a
+declaration graph, so conditional or descriptor-level relations may differ from a
+resolved build. Missing local metadata is marked with a dashed node. The page
+supports zoom, refresh, opening the manifest and copying Mermaid source, and caps
+large graphs at 120 nodes or 240 edges.
 
 **Search other registries** is optional and off by default. Results from these
 registries appear in a separate group and open limited previews. They cannot be
