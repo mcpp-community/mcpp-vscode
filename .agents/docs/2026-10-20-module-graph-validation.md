@@ -1,6 +1,6 @@
 # Modules graph 0.9.0 validation and review
 
-Status: implementation and large-project verification complete locally; CI and released-artifact verification pending.
+Status: implementation and local review complete. The repository suite passes 725 tests; Chromium passes 11 interaction/export groups. Exact-head CI and released-artifact verification are final release gates.
 
 ## Review perspectives
 
@@ -9,7 +9,7 @@ Status: implementation and large-project verification complete locally; CI and r
 | Graph semantics | Test-root budget starvation; parent traversal bringing sibling dependencies; edge limits stranding nodes; library classification based on target spelling | Graph/model and module provider regressions; large-project projection |
 | Interaction | Click opening files; repeated expansion doing nothing; selected/focus/camera ambiguity; initial root centering overriding Fit | Chromium canvas tests; real VS Code fixture navigation |
 | Refresh and concurrency | Event bursts starting duplicate reads; lock changes querying Modules; hidden refreshes; old view publications arriving after a project switch | Refresh coordinator tests and the real host module under a controlled message transport |
-| Project state | Empty declarations removing the row; incomplete manifests clearing usable dependencies; delayed project switching exposing old actions | Dependency state tests; immediate cross-project update; real VS Code inspection |
+| Project state | Empty declarations removing the row; incomplete manifests clearing usable dependencies; delayed project switching exposing old actions | Dependency state tests; immediate cross-project update; real VS Code empty → ready → stale → ready checks with the installed VSIX |
 | Cache correctness | Identical SVGs in different projects retaining old node identities | Chromium test proves layout reuse with new event bindings |
 | Export | Theme variables missing offline; transformed/cropped drawing; excessive raster size | Light/dark standalone SVG and PNG, decoded dimensions, Unicode and marker inspection |
 | Compatibility | Shared Packages canvas, read-only source documents, old language service commands | Existing unit and five service-variant Extension Host suites; real source read-only checks |

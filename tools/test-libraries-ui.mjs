@@ -93,9 +93,9 @@ const page = browser.contexts()[0].pages()[0];
 await page.setViewportSize({ width: 1600, height: 1000 });
 await page.bringToFront();
 page.on('pageerror', (error) => console.error('renderer:', error.message));
-async function frameWith(selector) {
+async function frameWith(selector, projectName) {
   return eventually(async () => {
-    for (const frame of page.frames()) { if (await frame.locator(selector).count()) { return frame; } }
+    for (const frame of page.frames()) { if (await frame.locator(selector).count() && (!projectName || await frame.locator('#project-name').textContent() === projectName)) { return frame; } }
   }, Boolean, `frame ${selector}`);
 }
 async function palette(command) {
@@ -548,7 +548,7 @@ try {
     await page.locator('.quick-input-list .monaco-list-row').filter({visible:true}).first().click();
     await eventually(()=>page.locator('.monaco-editor:visible').allTextContents().then(text=>text.join(' ')),text=>text.includes('[package]'),'real manifest');
     await palette('mcpp: Show C++ Modules Dependency Graph');
-    const graph=await frameWith('#graph');
+    const graph=await frameWith('#graph','mcpp');
     await eventually(()=>graph.locator('#graph').innerText(),text=>text.includes('src/main.cpp')&&text.includes('mcpp.'),'large project graph',45000);
     assert.ok(await graph.locator('.edgePath,.flowchart-link').count()>0,'default entry has dependency edges');
     assert.ok(await graph.locator('.node').count()<=60,'visible node budget');
