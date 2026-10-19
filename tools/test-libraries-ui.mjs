@@ -559,6 +559,7 @@ try {
     const item=graph.locator('.node[data-node-key^="tests/"]').first();
     await item.click(); await graph.locator('[data-action=focus]').click();
     await eventually(()=>graph.locator('#focus-node').innerText(),text=>text.includes('tests/'),'focus selected test');
+    assert.equal(await graph.locator('#entry-next').isVisible(),false,'a focused entry leaves the group pager');
     await graph.locator('[data-action=locate]').click();
     await graph.locator('[data-zoom=fit]').click();
     await graph.locator('body').screenshot({path:path.join(artifacts,'large-project-tests.png')});

@@ -7,7 +7,7 @@ Status: implementation and local review complete. The repository suite passes 72
 | Perspective | Findings addressed | Evidence |
 | --- | --- | --- |
 | Graph semantics | Test-root budget starvation; parent traversal bringing sibling dependencies; edge limits stranding nodes; library classification based on target spelling | Graph/model and module provider regressions; large-project projection |
-| Interaction | Click opening files; repeated expansion doing nothing; selected/focus/camera ambiguity; initial root centering overriding Fit | Chromium canvas tests; real VS Code fixture navigation |
+| Interaction | Click opening files; repeated expansion doing nothing; selected/focus/camera ambiguity; initial root centering overriding Fit; test paging lingering after entry focus | Chromium canvas tests; real VS Code fixture navigation; host regression for leaving the pager and restoring its page with Back |
 | Refresh and concurrency | Event bursts starting duplicate reads; lock changes querying Modules; hidden refreshes; old view publications arriving after a project switch | Refresh coordinator tests and the real host module under a controlled message transport |
 | Project state | Empty declarations removing the row; incomplete manifests clearing usable dependencies; delayed project switching exposing old actions | Dependency state tests; immediate cross-project update; real VS Code empty → ready → stale → ready checks with the installed VSIX |
 | Cache correctness | Identical SVGs in different projects retaining old node identities | Chromium test proves layout reuse with new event bindings |

@@ -240,7 +240,7 @@ export function registerDependencyGraph(context: vscode.ExtensionContext, projec
       (upstream ? current.upstreamCollapsed : current.collapsed).delete(id);
     }
     else if (value.action === "collapse" || value.action === "collapseParents") { (value.action === "collapseParents" ? current.upstreamCollapsed : current.collapsed).add(id); }
-    else if (value.action === "focus" || value.action === "search") { remember(); current.focus = id; current.localDepth = new Map(); current.collapsed = new Set(); current.upstreamLocalDepth = new Map(); current.upstreamCollapsed = new Set(); }
+    else if (value.action === "focus" || value.action === "search") { remember(); current.focus = id; current.group = undefined; current.offset = 0; current.localDepth = new Map(); current.collapsed = new Set(); current.upstreamLocalDepth = new Map(); current.upstreamCollapsed = new Set(); }
     else { return; }
     await publish(value.action === "search", value.action === "focus");
   };
