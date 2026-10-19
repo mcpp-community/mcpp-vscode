@@ -72,10 +72,12 @@ test("real graph host coalesces file events, ignores lock-only events, defers hi
     receive({type:"action",action:"select",viewKey,id:"tests/test0.cpp"});
     receive({type:"action",action:"page",viewKey,next:true});await tick();
     assert.equal(messages.filter(message=>message.type==="graph").at(-1)?.selected,"@group/tests","paging clears a selection from the previous page");
-    receive({type:"action",action:"focus",viewKey,id:"tests/test20.cpp"});await tick();
+    const focusedEntry = messages.filter(message=>message.type==="snapshot").at(-1)?.groups.find((group: {id:string})=>group.id==="@group/tests").nodes[20];
+    assert.ok(focusedEntry);
+    receive({type:"action",action:"focus",viewKey,id:focusedEntry});await until(()=>messages.filter(message=>message.type==="graph").at(-1)?.focus===focusedEntry);
     assert.equal(messages.filter(message=>message.type==="graph").at(-1)?.group,undefined,"focusing one entry leaves the group pager");
     assert.equal(messages.filter(message=>message.type==="graph").at(-1)?.offset,0);
-    receive({type:"action",action:"back",viewKey});await tick();
+    receive({type:"action",action:"back",viewKey});await until(()=>messages.filter(message=>message.type==="graph").at(-1)?.group==="@group/tests");
     assert.equal(messages.filter(message=>message.type==="graph").at(-1)?.group,"@group/tests");
     assert.equal(messages.filter(message=>message.type==="graph").at(-1)?.offset,20,"Back restores the previous test page");
     for(let i=0;i<100;i++)fileEvents[0](uri(path.join(roots[0],"src/lib.cppm")));
