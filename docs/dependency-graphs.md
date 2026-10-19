@@ -2,7 +2,7 @@
 
 Open **Project → Basics → C++ Modules Deps** for imports, or use the graph action on the **Dependencies** row for package declarations. C++ parsing and resolution come from mcppls; package relationships come from manifests, with lock/index metadata supplementing them.
 
-The toolbar keeps entry selection and search visible. **View options** contains the two depth controls, **Locate focus** and **Back to project**. **Node actions** contains branch expansion/collapse, importer actions and source opening; double-click and the node plus control remain shortcuts. **Export** combines SVG, PNG and Mermaid copy in one menu. Menus close after an action, on outside click or with Escape.
+The toolbar keeps entry selection and search visible. **View options** contains the two depth controls, **Locate focus** and **Back to project**. Right-click a node for focus, locate, branch expansion/collapse, importer actions and source opening. Keyboard users can press Shift+F10 or the menu key, navigate with arrows, and press Escape to return to the node. Double-click and the node plus control remain shortcuts. **Export** combines SVG, PNG and Mermaid copy in one menu. Menus close after an action, on outside click or with Escape.
 
 Modules opens an active entry with three dependency levels and two importer levels. Main and Library entries follow explicit target/main and lib paths or the package defaults. Multiple tests are grouped under Tests using `[test].discover` (default `tests/**/*.cpp`); entry groups show twenty entries per page. Other keeps disconnected components accessible. External package modules stop after one hop. The importer control follows arrows backwards; dependency depth follows imports forwards.
 
@@ -21,3 +21,5 @@ Project Dependencies remains visible without a lock file: declarations are enoug
 **Export → Export SVG** and **Export → Export PNG** save the complete visible drawing, independent of pan and zoom. They preserve current labels, colors and folding, and include a partial-view description when appropriate. Exports do not expand the full project or query mcppls. PNG starts at 2× and reduces resolution to stay within 16 megapixels and 8192 pixels per side; SVG remains scalable. Both use the standard save dialog.
 
 For contributors, `npm run test:graphs-ui` runs the shipped canvas and Mermaid in Chromium, covering interaction, unchanged-layout reuse and offline SVG/PNG export. Install the browser once with `npx playwright install chromium`. The normal CI also runs this test and retains fixture screenshots and exports as artifacts.
+
+Refresh and Export use theme colors and a shared control height. Both depth selectors have equal widths. While the project sidebar is visible, a two-file metadata stamp check supplements editor save events and file watchers; unchanged stamps trigger no graph reads or layout.

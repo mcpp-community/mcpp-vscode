@@ -32,7 +32,7 @@ interface ViewState {
 const SOURCE_SCHEME = "mcpp-graph-source";
 
 /** Two providers, one persistent graph document. Expansion never re-runs the CLI. */
-export function registerDependencyGraph(context: vscode.ExtensionContext, project: () => ProjectSummary | undefined): void {
+export function registerDependencyGraph(context: vscode.ExtensionContext, project: () => ProjectSummary | undefined): (uri?: vscode.Uri) => void {
   let panel: vscode.WebviewPanel | undefined, current: ViewState | undefined, source = "", generation = 0, publication = 0, ready = false, loading = false;
   const views = new Map<string, ViewState>();
   const document = new WebviewDocument("dependencyGraph.css"), media = vscode.Uri.joinPath(context.extensionUri, "media"), vendor = vscode.Uri.joinPath(context.extensionUri, "dist", "vendor");
@@ -280,10 +280,12 @@ export function registerDependencyGraph(context: vscode.ExtensionContext, projec
       }
     }
   };
+  context.subscriptions.push(vscode.workspace.onDidSaveTextDocument(document => { if (/(?:mcpp\.(?:toml|lock)|\.(?:cpp|cc|cxx|cppm|ixx|mpp|ccm))$/.test(document.uri.fsPath)) invalidate(document.uri); }));
   const watcher = vscode.workspace.createFileSystemWatcher("**/{mcpp.toml,mcpp.lock,*.cpp,*.cc,*.cxx,*.cppm,*.ixx,*.mpp,*.ccm}");
   context.subscriptions.push(watcher, watcher.onDidChange(uri => invalidate(uri)), watcher.onDidCreate(uri => invalidate(uri)), watcher.onDidDelete(uri => invalidate(uri)),
     vscode.tasks.onDidEndTaskProcess(event => { const scope = event.execution.task.scope; if (scope && typeof scope === "object") { invalidate(scope.uri); } }),
     { dispose: () => { for (const view of views.values()) { view.coordinator?.dispose(); if (view.retry) { clearTimeout(view.retry); } } } });
   context.subscriptions.push(vscode.commands.registerCommand(TOOL_COMMANDS.dependencyGraph, argument => open("packages", argument)),
     vscode.commands.registerCommand(TOOL_COMMANDS.moduleDependencyGraph, argument => open("modules", argument)), { dispose: () => panel?.dispose() });
+  return invalidate;
 }

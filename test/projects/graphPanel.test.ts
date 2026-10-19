@@ -40,7 +40,7 @@ test("real graph host coalesces file events, ignores lock-only events, defers hi
     Uri:{file:uri,parse:uri,joinPath:(base: any,...parts: string[])=>uri(path.join(base.fsPath,...parts))},
     EventEmitter:class{event=()=>disposable;fire(){}dispose(){}},
     RelativePattern:class{constructor(public root: string,public pattern: string){}},ViewColumn:{Active:1,Beside:2},
-    workspace:{isTrusted:true,findFiles:async(pattern: {root: string})=>Array.from({length:25},(_,i)=>uri(path.join(pattern.root,`tests/test${i}.cpp`))),registerTextDocumentContentProvider:()=>disposable,
+    workspace:{isTrusted:true,onDidSaveTextDocument:()=>disposable,findFiles:async(pattern: {root: string})=>Array.from({length:25},(_,i)=>uri(path.join(pattern.root,`tests/test${i}.cpp`))),registerTextDocumentContentProvider:()=>disposable,
       createFileSystemWatcher:()=>({dispose(){},onDidChange(listener: (uri: any)=>void){fileEvents.push(listener);return disposable;},onDidCreate:()=>disposable,onDidDelete:()=>disposable})},
     window:{createWebviewPanel:()=>panel,showInformationMessage(){},showErrorMessage(error: string){throw new Error(error);}},
     extensions:{getExtension:()=>undefined},tasks:{onDidEndTaskProcess:()=>disposable},

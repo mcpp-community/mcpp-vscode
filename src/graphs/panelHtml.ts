@@ -33,12 +33,18 @@ export function graphPanelHtml(assets: WebviewAssets, renderer: string, script: 
   </div>
   <div class="graph-selection"><div class="graph-context"><span id="focus-node"></span><span id="selected-node">${escapeHtml(t("Select a node to explore its relationships."))}</span></div>
     <div class="graph-node-actions">${button("focus", t("Focus"))}${button("locate", t("Locate selected"))}
-      <details id="graph-node-menu" class="graph-menu"><summary>${escapeHtml(t("Node actions"))}</summary><div class="graph-menu-items">
-        ${button("expand", t("Expand next level"))}${button("collapse", t("Collapse"))}${button("expandParents", t("Expand importers"))}${button("collapseParents", t("Collapse importers"))}${button("open", t("Open source"))}
-      </div></details>
     </div></div>
   <main class="graph-stage"><div id="graph" tabindex="0" title="${escapeHtml(t("Scroll to zoom · drag to pan"))}" aria-label="${escapeHtml(t("Project dependency graph"))}"></div><div id="graph-state" role="status"></div>
     <div class="zoom"><button data-zoom="-" aria-label="${escapeHtml(t("Zoom out"))}">−</button><button data-zoom="fit">${escapeHtml(t("Fit"))}</button><button data-zoom="+" aria-label="${escapeHtml(t("Zoom in"))}">+</button></div></main>
+  <div id="graph-node-context" class="graph-menu-items graph-context-menu" role="menu" aria-label="${escapeHtml(t("Node actions"))}" hidden>
+    <button role="menuitem" tabindex="-1" data-context-action="focus">${escapeHtml(t("Focus"))}</button>
+    <button role="menuitem" tabindex="-1" data-context-action="locate">${escapeHtml(t("Locate selected"))}</button>
+    <button role="menuitem" tabindex="-1" data-context-action="open">${escapeHtml(t("Open source"))}</button>
+    <button role="menuitem" tabindex="-1" data-context-action="expand">${escapeHtml(t("Expand next level"))}</button>
+    <button role="menuitem" tabindex="-1" data-context-action="collapse">${escapeHtml(t("Collapse"))}</button>
+    <button role="menuitem" tabindex="-1" data-context-action="expandParents">${escapeHtml(t("Expand importers"))}</button>
+    <button role="menuitem" tabindex="-1" data-context-action="collapseParents">${escapeHtml(t("Collapse importers"))}</button>
+  </div>
   <p id="graph-notice" role="status" hidden></p>
   <details class="graph-help"><summary>${escapeHtml(t("Legend and source"))}</summary><div class="graph-legend"><span class="legend-project">${escapeHtml(t("Project"))}</span><span class="legend-path">path / partition</span><span class="legend-index">index / external</span><span class="legend-unknown">${escapeHtml(t("Unavailable"))}</span></div><p>${escapeHtml(t("Packages show declarations; modules show mcppls imports. External modules stop after one hop."))}</p>${button("manifest", t("Open mcpp.toml"))}<pre id="graph-source"></pre></details>
   <script id="graph-labels" type="application/json" nonce="${assets.nonce}">${JSON.stringify(labels).replace(/</g, "\\u003c")}</script>

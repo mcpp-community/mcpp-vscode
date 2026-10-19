@@ -50,6 +50,11 @@ try {
   await page.locator('[data-action="copy"]').click();
   assert.equal(await page.locator('[data-export="svg"]').isVisible(),false);
   await page.locator('#graph-view-menu summary').click();
+  const depths = await page.locator('#graph-view-menu select').evaluateAll(items => items.map(item => { const r=item.getBoundingClientRect(); return {left:r.left,width:r.width,height:r.height}; }));
+  assert.deepEqual(depths[0],depths[1]);
+  const header = await page.locator('.graph-header [data-action=refresh],#graph-export>summary').evaluateAll(items=>items.map(item=>{const r=item.getBoundingClientRect();return {top:r.top,height:r.height,color:getComputedStyle(item).color};}));
+  assert.equal(header[0].top,header[1].top); assert.equal(header[0].height,header[1].height); assert.notEqual(header[0].color,header[1].color);
+  await page.screenshot({path:path.join(artifacts,'view-options.png')});
   await page.locator('#graph-upstream').selectOption('3');
   assert.equal(await page.evaluate(()=>messages.filter(m=>m.action==='upstreamDepth').at(-1).depth),'3');
   assert.equal(await page.locator('#graph-depth').isVisible(),false);
@@ -62,6 +67,18 @@ try {
   assert.equal(await page.evaluate(()=>messages.filter(m=>m.action==='focus').at(-1).id),'a');
   await a.dblclick(); assert.equal(await page.evaluate(()=>messages.filter(m=>m.action==='open').length),1);
   checks.push('single click selects, double click opens once, Focus targets selection');
+  await a.click({button:'right'});
+  assert.equal(await page.locator('#graph-node-menu').count(),0);
+  await page.locator('[data-context-action="expand"]').click();
+  assert.equal(await page.evaluate(()=>messages.filter(m=>m.action==='expand').at(-1).id),'a');
+  await a.focus(); await page.keyboard.press('Shift+F10');
+  assert.equal(await page.locator('#graph-node-context').isVisible(),true);
+  await page.keyboard.press('ArrowDown');
+  assert.equal(await page.locator('[data-context-action="locate"]').evaluate(e=>document.activeElement===e),true);
+  await page.screenshot({path:path.join(artifacts,'node-context.png')});
+  await page.keyboard.press('Escape');
+  assert.equal(await a.evaluate(e=>document.activeElement===e),true);
+  checks.push('node context menu targets clicked node, supports keyboard navigation and restores focus; controls align and use theme colors');
   const renders=await page.evaluate(()=>renders.length);
   await page.locator('[data-action="locate"]').click();
   await page.locator('[data-zoom="+"]').click();
@@ -115,10 +132,10 @@ try {
   await emit({type:'graph',viewKey:'modules:groups',mode:'modules',name:'test entries',depth:'1',upstreamDepth:'2',group:'@group/tests',offset:20,
     ...mermaidGraph(grouped),nodes:grouped.nodes.map(node=>({id:node.id,label:node.label,virtual:!!node.virtual,hidden:grouped.hidden.get(node.id)||0})),selected:'@group/tests'});
   await page.waitForSelector('.node[data-node-key="@group/tests"]');
-  await page.locator('#graph-node-menu summary').click();
-  assert.equal(await page.locator('[data-action="open"]').isDisabled(),true);
-  assert.equal(await page.locator('[data-action="expandParents"]').isDisabled(),true);
-  assert.equal(await page.locator('[data-action="expand"]').isDisabled(),false);
+  await page.locator('.node[data-node-key="@group/tests"]').click({button:'right'});
+  assert.equal(await page.locator('[data-context-action="open"]').isDisabled(),true);
+  assert.equal(await page.locator('[data-context-action="expandParents"]').isDisabled(),true);
+  assert.equal(await page.locator('[data-context-action="expand"]').isDisabled(),false);
   await page.keyboard.press('Escape');
   checks.push('virtual entry groups offer applicable node actions and correct paging');
 

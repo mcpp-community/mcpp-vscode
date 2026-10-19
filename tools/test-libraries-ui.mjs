@@ -91,6 +91,7 @@ let browser;
 await eventually(async () => { browser = await chromium.connectOverCDP(endpoint); return true; }, Boolean, 'VS Code CDP startup');
 const page = browser.contexts()[0].pages()[0];
 await page.setViewportSize({ width: 1600, height: 1000 });
+await page.bringToFront();
 page.on('pageerror', (error) => console.error('renderer:', error.message));
 async function frameWith(selector) {
   return eventually(async () => {
@@ -497,6 +498,9 @@ try {
     const original=await fs.readFile(path.join(scratch,'module-project/src/l0.cppm'),'utf8');
     await graph.locator('.node[data-node-key="demo.l0"]').click();
     assert.equal(await page.locator('.monaco-editor:visible').filter({hasText:'export module demo.l0;'}).count(),0,'single click only selects');
+    await graph.locator('.node[data-node-key="demo.l0"]').click({button:'right'});
+    await graph.locator('[data-context-action=locate]').click();
+    assert.equal(await graph.locator('#graph-node-context').isVisible(),false,'node context menu closes after action');
     await graph.locator('.node[data-node-key="demo.l0"]').dblclick();
     const editor=page.locator('.monaco-editor:visible').filter({hasText:'export module demo.l0;'});
     await editor.waitFor();

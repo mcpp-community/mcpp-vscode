@@ -33,7 +33,34 @@
   for (const menu of menus) menu.addEventListener('toggle', () => { if (menu.open) closeMenus(menu); });
   document.addEventListener('click', event => { if (!event.target.closest('.graph-menu')) closeMenus(); });
   document.addEventListener('keydown', event => { if (event.key === 'Escape') { const active = menus.find(menu => menu.open); closeMenus(); active?.querySelector('summary').focus(); } });
-  document.getElementById('graph-node-menu').querySelector('summary').addEventListener('click', event => { if (!selected || busy) event.preventDefault(); });
+  const nodeMenu = document.getElementById('graph-node-context');
+  let menuOrigin, menuTarget;
+  function closeNodeMenu(restore = false) {
+    nodeMenu.hidden = true; const origin = menuOrigin; menuOrigin = menuTarget = undefined;
+    if (restore && origin?.isConnected) origin.focus();
+  }
+  function openNodeMenu(event, node, item, keyboard = false) {
+    if (busy) return;
+    event.preventDefault(); event.stopPropagation(); closeMenus(); choose(item.id);
+    menuOrigin = node; menuTarget = item.id;
+    for (const button of nodeMenu.querySelectorAll('button')) button.disabled = !!item.virtual && ['open','collapse','expandParents','collapseParents'].includes(button.dataset.contextAction);
+    nodeMenu.hidden = false;
+    const box = node.getBoundingClientRect();
+    nodeMenu.style.left = Math.max(4, Math.min(keyboard ? box.left : event.clientX, innerWidth - nodeMenu.offsetWidth - 4)) + 'px';
+    nodeMenu.style.top = Math.max(4, Math.min(keyboard ? box.bottom : event.clientY, innerHeight - nodeMenu.offsetHeight - 4)) + 'px';
+    nodeMenu.querySelector('button:not(:disabled)').focus();
+  }
+  document.addEventListener('pointerdown', event => { if (!nodeMenu.contains(event.target)) closeNodeMenu(); });
+  nodeMenu.addEventListener('keydown', event => {
+    const items = [...nodeMenu.querySelectorAll('button:not(:disabled)')], index = items.indexOf(document.activeElement);
+    if (event.key === 'Escape' || event.key === 'Tab') { closeNodeMenu(true); if (event.key === 'Escape') event.preventDefault(); return; }
+    const next = event.key === 'ArrowDown' ? (index + 1) % items.length : event.key === 'ArrowUp' ? (index + items.length - 1) % items.length : event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : undefined;
+    if (next !== undefined) { event.preventDefault(); items[next].focus(); }
+  });
+  nodeMenu.querySelectorAll('button').forEach(button => button.addEventListener('click', () => {
+    const id = menuTarget, action = button.dataset.contextAction; closeNodeMenu(true);
+    if (id && action === 'locate') locate(id); else if (id) send(action, { id });
+  }));
   function selectNode(id, center = false) {
     selected = id;
     graph.querySelectorAll('.node').forEach(node => {
@@ -44,7 +71,6 @@
     const item = data?.nodes.find(node => node.id === id);
     document.getElementById('selected-node').textContent = item ? `${labels.selectedPrefix}: ${item.label}` : labels.selected;
     document.getElementById('selected-node').hidden = !!data?.focus && id === data.focus;
-    document.getElementById('graph-node-menu').querySelector('summary').setAttribute('aria-disabled', String(!id || busy));
     document.getElementById('focus-node').hidden = !data?.focus;
     document.getElementById('focus-node').textContent = `${labels.focus}: ${snapshot().search.find(node => node.id === data?.focus)?.label || labels.group}`;
     for (const button of document.querySelectorAll('.graph-selection button')) button.disabled = !id || busy || (item?.virtual && ['open','collapse','expandParents','collapseParents'].includes(button.dataset.action));
@@ -136,7 +162,7 @@
     while (pending && !document.hidden) {
       const next = pending; pending = undefined;
       const viewChanged = currentKey !== next.viewKey;
-      saveView(); currentKey = next.viewKey; data = next; controls(next);
+      closeNodeMenu(); saveView(); currentKey = next.viewKey; data = next; controls(next);
       if (viewChanged) { search.value = ''; hiddenResult = undefined; document.getElementById('graph-search-focus').hidden = true; options(); }
       const dark = document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast');
       const signature = `${dark}:${next.source}`, binding = JSON.stringify([next.viewKey, next.nodes.map(node => node.id)]);
@@ -161,10 +187,13 @@
           const item = next.nodes[Number(match[1].slice(1))]; if (!item) return;
           node.dataset.nodeKey = item.id; node.setAttribute('tabindex', '0'); node.setAttribute('role', 'button'); node.setAttribute('aria-label', node.textContent);
           node.querySelectorAll('rect').forEach(rect => { rect.setAttribute('rx', '8'); rect.setAttribute('ry', '8'); });
+          node.setAttribute('aria-haspopup', 'menu');
+          node.addEventListener('contextmenu', event => openNodeMenu(event, node, item));
           node.addEventListener('click', () => choose(item.id));
           node.addEventListener('dblclick', () => { choose(item.id); send(item.virtual ? 'focus' : 'open', { id: item.id }); });
           node.addEventListener('keydown', event => {
             if (event.target !== node) return;
+            if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) { openNodeMenu(event, node, item, true); return; }
             if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(item.id); if (event.key === 'Enter') send(item.virtual ? 'focus' : 'open', { id: item.id }); }
           });
           if (item.hidden) {
@@ -219,7 +248,7 @@
     if (message.type === 'snapshot') { snapshots.delete(message.viewKey); snapshots.set(message.viewKey, message); trim(snapshots); if (message.viewKey === currentKey) options(); }
     if (message.type === 'graph') { pending = message; void draw(); }
     if (message.type === 'loading') {
-      saveView(); currentKey = message.viewKey; committed = undefined; baseWidth = 0; data = undefined; pending = undefined; busy = true;
+      closeNodeMenu(); saveView(); currentKey = message.viewKey; committed = undefined; baseWidth = 0; data = undefined; pending = undefined; busy = true;
       document.getElementById('project-name').textContent = message.name;
       search.value = ''; selectNode(undefined); setStatus(labels.loading, true);
     }

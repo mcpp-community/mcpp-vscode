@@ -45,6 +45,7 @@ const PURE_MODULES = [
   "src/graphs/refresh.ts",
   "src/graphs/export.ts",
   "src/projects/dependencyState.ts",
+  "src/projects/metadataWatch.ts",
   "src/graphs/panelHtml.ts",
   "src/cli/moduleGraph.ts",
   "src/webview/readOnlyDocuments.ts",

@@ -47,3 +47,25 @@ test("shell-path arguments are quoted so spaces and cmd metacharacters survive",
   assert.equal(quoteWindowsArgument("C:\\dir\\"), '"C:\\dir\\\\"');
   assert.equal(quoteWindowsArgument(""), '""');
 });
+
+test("aborting a provider read terminates its real child process", async () => {
+  const fs = await import("node:fs/promises"), os = await import("node:os"), path = await import("node:path");
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "graph-cancel-")), pidFile = path.join(directory,"pid");
+  const controller = new AbortController();
+  const running = runProcess(process.execPath, ["-e", 'require("node:fs").writeFileSync(process.argv[1],String(process.pid));setInterval(()=>{},1000)', pidFile], undefined, {signal:controller.signal,timeoutMs:10000});
+  try {
+    let pid: number | undefined;
+    for(let attempt=0;attempt<250;attempt++) {
+      try { pid=Number(await fs.readFile(pidFile,"utf8")); break; } catch { await new Promise(resolve=>setTimeout(resolve,20)); }
+    }
+    assert.ok(pid,"the child started before cancellation");
+    controller.abort(); const result=await running;
+    assert.notEqual(result.exitCode,0);
+    let exited=false;
+    for(let attempt=0;attempt<150;attempt++) {
+      try { process.kill(pid!,0); } catch { exited=true; break; }
+      await new Promise(resolve=>setTimeout(resolve,20));
+    }
+    assert.equal(exited,true,"the cancelled child must no longer exist");
+  } finally { controller.abort(); await running; await fs.rm(directory,{recursive:true,force:true}); }
+});

@@ -21,7 +21,9 @@ The mcpp baseline snapshot contains 343 retained nodes and 1,648 imports. Its ro
 
 Twenty fresh layouts using shipped Mermaid in Chromium measured median 163 ms and p95 171 ms for that real projection. These measurements include smaller budgets and removal of repeated import labels; they do not claim an equally sized layout algorithm became faster. Wide, shared and many-test synthetic samples also stay within the initial layout target.
 
-The simplified toolbar combines formats and Mermaid copy under Export, moves depth controls into View options, and groups advanced branch/source operations under Node actions. Chromium checks cover menu reachability, dismissal and keyboard focus restoration.
+The simplified toolbar combines formats and Mermaid copy under Export, moves depth controls into View options, and exposes node operations through the node context menu. Chromium checks cover right-click targeting, Shift+F10, arrow navigation, dismissal and focus restoration, plus control alignment and distinct theme colors.
+
+A local native watcher resource exhaustion reproduced missing file events. The sidebar now supplements watchers and editor saves with two metadata stamps every two seconds while visible. Unchanged stamps cause no CLI query or layout. A real subprocess cancellation check also verifies that aborting a provider read terminates the child process.
 
 Cold CLI queries still depend on mcppls indexing. No fan-speed or whole-editor power claim is made. Incomplete snapshots remain explicit; unchanged partial results stop automatic retrying.
 

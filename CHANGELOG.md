@@ -2,6 +2,9 @@
 
 ## 0.9.0 - 2026-10-20
 
+- Node operations use a keyboard-accessible right-click menu. Refresh/Export use theme colors, aligned chevrons and matching control heights; depth selectors align in View options.
+- Visible project metadata checks recover Dependencies updates when native file events are dropped, without repeated CLI reads for unchanged files.
+
 - Group module entries into Main, Library, Tests and Other, with paged test entries and a connected default view for large projects.
 - Separate selection, focus and camera navigation: click to select, double-click to open source, locate either selection or focus, and explore two importer levels alongside three dependency levels. Local expansion advances repeatedly and preserves shared branches.
 - Coalesce graph refresh events, cancel obsolete queries, reuse unchanged layouts and pause hidden graph work. Preserve dependency rows through transient manifest failures and show a status line when no declarations are available.

@@ -61,3 +61,12 @@ button:hover { background:var(--vscode-toolbar-hoverBackground);color:var(--vsco
 .graph-selection>.graph-node-actions { display:flex;flex-wrap:nowrap;align-items:center;gap:2px; }
 .graph-header nav { flex:none; } #graph-view-menu .graph-menu-items { left:0;right:auto; }
 @media(max-width:700px) { .graph-context { flex:1 1 100%; } .graph-menu-items { max-width:calc(100vw - 60px); } }
+/* Shared control geometry keeps labels and chevrons on the same baseline. */
+.graph-header button,.graph-menu>summary,.graph-tools input,.graph-tools select { box-sizing:border-box;height:28px; }
+.graph-menu>summary::after { content:'';width:5px;height:5px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:translateY(-2px) rotate(45deg);flex:none;margin-left:2px; }
+.graph-header [data-action=refresh] { color:var(--vscode-charts-blue,var(--vscode-textLink-foreground));min-width:28px;font-size:18px;padding:0 7px; }
+#graph-export>summary { color:var(--vscode-charts-green,var(--vscode-textLink-foreground)); }
+#graph-view-menu label { display:grid;grid-template-columns:1fr 72px; }
+#graph-view-menu label select { width:72px;min-width:72px; }
+.graph-context-menu { position:fixed;right:auto;top:0;z-index:50;max-height:calc(100vh - 8px);overflow-y:auto;box-sizing:border-box; }
+.graph-context-menu button:focus { outline:1px solid var(--vscode-focusBorder);background:var(--vscode-menu-selectionBackground,var(--vscode-toolbar-hoverBackground));color:var(--vscode-menu-selectionForeground,var(--vscode-foreground)); }
