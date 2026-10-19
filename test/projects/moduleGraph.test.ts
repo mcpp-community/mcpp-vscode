@@ -49,3 +49,20 @@ test("malformed and upstream-truncated graphs cannot masquerade as complete", ()
   const graph=buildModuleGraph(root,parseModuleGraph('{"modules":[],"imports":[],"truncated":true}'),new Set(),new Map());
   assert.equal(graph.truncated,true);
 });
+test("test discovery honors custom globs, exclusions and empty discover without inventing a library", () => {
+  const candidates = ["checks/a.cpp", "checks/deep/b.cpp", "checks/skip.cpp", "tests/default.cpp"].map(file => path.join(root, file));
+  const manifest = '[test]\ndiscover=["checks/**/*.cpp", "!checks/skip.cpp"]';
+  const entries = moduleEntries(root, manifest, "app", candidates);
+  assert.match(entries.get(candidates[0])!, /test/); assert.match(entries.get(candidates[1])!, /test/);
+  assert.equal(entries.get(candidates[2]), undefined); assert.equal(entries.get(candidates[3]), undefined);
+  assert.ok(!moduleEntries(root, '[test]\ndiscover=[]', "app", candidates).has(candidates[0]));
+  const graph = buildModuleGraph(root, {modules:[], imports:[]}, new Set(candidates), entries);
+  assert.deepEqual(graph.groups?.map(group => group.label), ["Tests"]); assert.equal(graph.groups?.[0].nodes.length, 2);
+});
+
+test("target names do not determine library roles and shared main files preserve target names", () => {
+  const entries = moduleEntries(root, '[targets.library-tool]\nmain="src/start.cpp"\n[targets.second]\nmain="src/start.cpp"', "app");
+  assert.match(entries.get(path.join(root,"src/start.cpp"))!, /library-tool.*second/);
+  const graph = buildModuleGraph(root, {modules:[],imports:[]}, new Set([path.join(root,"src/start.cpp")]), entries);
+  assert.deepEqual(graph.groups?.map(group => group.label), ["Main"]);
+});

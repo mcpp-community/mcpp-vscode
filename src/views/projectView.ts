@@ -13,6 +13,8 @@ import path from "node:path";
 
 import * as vscode from "vscode";
 
+import { RefreshCoordinator } from "../graphs/refresh";
+import { assertCompleteManifest, retainProjectDependencies } from "../projects/dependencyState";
 import { readProjectSummary } from "../projects/summary";
 import { MCPP_MANIFEST_GLOB } from "../projects/context";
 import type { McppProjectDiscovery } from "../projects/discovery";
@@ -52,6 +54,7 @@ export function summariseProject(project: McppProjectDiscovery | undefined): Pro
   }
   try {
     const text = readFileSync(project.manifestPath, "utf8");
+    assertCompleteManifest(text);
     const lines = text.split(/\r?\n/);
     const summary = readProjectSummary(project.root, lines);
     const dependencies = readDependencies(lines).map((entry) => {
@@ -116,33 +119,52 @@ export function registerProjectView(context: vscode.ExtensionContext, deps: Proj
 
   const reload = (freshSources: boolean): void => {
     const active = vscode.window.activeTextEditor;
-    const project = (!active || active.document.uri.scheme !== "file") && current.summary
+    let project = (!active || active.document.uri.scheme !== "file") && current.summary
       ? { root: current.summary.root, manifestPath: path.join(current.summary.root, "mcpp.toml") }
       : deps.currentProject();
-    current = snapshot(project, freshSources);
-    view.provider.refresh();
+    if (!project && current.summary && active?.document.uri.scheme === "file") {
+      const relative = path.relative(current.summary.root, active.document.uri.fsPath);
+      if (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)) {
+        project = { root: current.summary.root, manifestPath: path.join(current.summary.root, "mcpp.toml") };
+      }
+    }
+    const next = snapshot(project, freshSources);
+    next.summary = retainProjectDependencies(next.summary, current.summary);
+    const changed = JSON.stringify(next) !== JSON.stringify(current);
+    current = next;
+    if (changed) { view.provider.refresh(); }
   };
 
+  let freshSourcesRequested = false;
+  const refresh = new RefreshCoordinator(async () => { const fresh = freshSourcesRequested; freshSourcesRequested = false; reload(fresh); });
+  const schedule = (fresh = false): void => { freshSourcesRequested ||= fresh; void refresh.request(); };
+  context.subscriptions.push(refresh);
   const manifestWatcher = vscode.workspace.createFileSystemWatcher(MCPP_MANIFEST_GLOB);
   const lockWatcher = vscode.workspace.createFileSystemWatcher(LOCKFILE_GLOB);
   context.subscriptions.push(
     manifestWatcher,
     lockWatcher,
-    manifestWatcher.onDidCreate(() => reload(true)),
-    manifestWatcher.onDidChange(() => reload(true)),
-    manifestWatcher.onDidDelete(() => reload(true)),
-    lockWatcher.onDidCreate(() => reload(false)),
-    lockWatcher.onDidChange(() => reload(false)),
-    lockWatcher.onDidDelete(() => reload(false)),
-    vscode.window.onDidChangeActiveTextEditor(() => reload(false)),
+    manifestWatcher.onDidCreate(() => schedule(true)),
+    manifestWatcher.onDidChange(() => schedule(true)),
+    manifestWatcher.onDidDelete(() => schedule(true)),
+    lockWatcher.onDidCreate(() => schedule()),
+    lockWatcher.onDidChange(() => schedule()),
+    lockWatcher.onDidDelete(() => schedule()),
+    vscode.tasks.onDidEndTaskProcess(() => schedule()),
+    vscode.window.onDidChangeActiveTextEditor(() => {
+      const active = vscode.window.activeTextEditor;
+      if (active?.document.uri.scheme !== "file") { return; }
+      const project = deps.currentProject();
+      if (project?.root !== current.summary?.root) { reload(false); }
+    }),
     vscode.workspace.onDidChangeWorkspaceFolders(() => { current = snapshot(deps.currentProject(), true); view.provider.refresh(); }),
-    vscode.workspace.onDidGrantWorkspaceTrust(() => reload(true)),
+    vscode.workspace.onDidGrantWorkspaceTrust(() => schedule(true)),
   );
 
   if (bridge !== undefined) {
     const tree = view.view;
     context.subscriptions.push(
-      bridge.onDidChange(() => reload(false)),
+      bridge.onDidChange(() => view.provider.refresh()),
       // The folded block's poller only runs while this tree is on screen.
       tree.onDidChangeVisibility(() => bridge.setVisible(tree.visible)),
     );

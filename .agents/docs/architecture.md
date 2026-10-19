@@ -95,9 +95,13 @@ extension.ts                 VS Code 装配层：激活、命令注册、provide
 
 ## 8. Shared dependency canvas and C++ Modules graph
 
-- `graphs/model.ts` defines a provider-independent graph, component roots, depth/branch projection, 150-node/300-edge layout budgets and escaped Mermaid output. Complete module data is retained independently of the visible subgraph.
+- `graphs/model.ts` defines a provider-independent graph, component roots, depth/branch projection, 60-node/80-edge default layout budgets (150/300 model ceiling), importer/dependency traversal, virtual entry groups and escaped Mermaid output. Complete module data is retained independently of the visible subgraph.
 - `projects/dependencyGraphPanel.ts` owns one persistent Webview with separate per-project/per-kind graph and navigation states. `graphs/panelHtml.ts` and `media/graph.js` share rendering, wheel/pointer navigation, folding, focus, search and theme handling. Layouts are serialized; obsolete provider requests are discarded.
 - `cli/moduleGraph.ts` is a trust-gated, time/output-bounded consumer of mcppls CLI JSON. This extends the integration boundary with structured queries, without taking over C++ parsing, resolution, LSP ownership or mcppls settings. Prefer the installed dependency extension's payload, with PATH fallback when absent.
 - `projects/moduleGraph.ts` validates the result, reads manifest entry conventions and determines file ownership by the nearest project manifest. Preserve all internal edges and just the first hop into another package; `external=false` alone cannot identify project ownership. Generated sources outside the project boundary are conservatively treated as external.
 - `webview/readOnlyDocuments.ts` is the shared content-addressed virtual-document store used by examples and graph navigation; graph messages contain node identities, and the host opens only provider files attached to those identities.
 - Basics contains C++ Modules Deps; declared package Dependencies follow as a collapsed sibling before Common commands. Existing language-server module-graph forwarding commands remain compatible.
+
+- `graphs/refresh.ts` coalesces events with a bounded debounce, serializes cancellable reads and defers hidden work. File and task events invalidate provider snapshots; content signatures suppress redundant layouts. Partial CLI snapshots retry only while changing and within a finite budget.
+- `graphs/export.ts` bounds and validates SVG/PNG bytes before the host saves them. The browser inlines computed SVG styles and rasterizes the same drawing, independent of the camera.
+- `projects/dependencyState.ts` rejects incomplete manifests and retains the last usable dependency rows on transient errors. Successful empty declarations produce an information row instead of removing the Dependencies position.

@@ -110,6 +110,8 @@ export interface ProjectSummary {
   hasTests?: boolean;
   /** Declared in `[dependencies]` / `[dev-dependencies]`; absent when there are none. */
   dependencies?: readonly DependencyDeclaration[];
+  dependencyState?: "loading" | "ready" | "empty" | "stale" | "error";
+  dependencyError?: string;
   /** Source files counted under the project root; absent when not measured. */
   sourceFiles?: number;
   /** Set when `mcpp.toml` could not be read; the tree then says so instead of lying. */
@@ -526,6 +528,7 @@ export function buildProjectTree(project: ProjectSummary | undefined, options: P
         icon: "error",
         contextValue: "mcppProjectError",
       },
+      ...dependencyNodes(project, options),
     ];
   }
 
@@ -649,7 +652,10 @@ function commandNodes(options: ProjectTreeOptions): TreeNode[] {
 function dependencyNodes(project: ProjectSummary, options: ProjectTreeOptions): TreeNode[] {
   const declared = project.dependencies ?? [];
   if (declared.length === 0) {
-    return [];
+    const failed = project.dependencyState === "error" || project.dependencyState === "stale" || !!project.error;
+    return [{ id: "project.dependencies", icon: failed ? "warning" : "info",
+      label: plain(failed ? "Dependencies unavailable — click to retry" : project.dependencyState === "loading" ? "Reading dependencies…" : "This project declares no dependencies"),
+      ...(failed ? { command: { command: "mcpp.internal.refreshProjectView", title: plain("Refresh") }, tooltip: plain(project.dependencyError ?? project.error ?? "") } : {}) }];
   }
   const lock = options.lock ?? [];
   const dev = declared.filter((entry) => entry.dev === true).length;
@@ -658,9 +664,9 @@ function dependencyNodes(project: ProjectSummary, options: ProjectTreeOptions): 
       id: "project.dependencies",
       contextValue: "mcppProjectDependencies",
       label: { key: "Dependencies ({0})", args: [declared.length] },
-      ...(dev === 0 ? {} : { description: { key: "{0} dev", args: [dev] } }),
+      ...(project.dependencyState === "stale" ? { description: plain("Refresh pending") } : dev === 0 ? {} : { description: { key: "{0} dev", args: [dev] } }),
       icon: "library",
-      tooltip: plain("Declared in mcpp.toml; the resolved version comes from mcpp.lock."),
+      tooltip: plain(project.dependencyError ?? "Declared in mcpp.toml; the resolved version comes from mcpp.lock."),
       expanded: false,
       children: declared.map((entry) => dependencyNode(entry, lock, project.root)),
     },

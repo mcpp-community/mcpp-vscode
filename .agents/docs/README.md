@@ -8,7 +8,8 @@
 | [`architecture.md`](architecture.md) | mcpp-vscode 的分层结构、模块职责与扩展点 | 现状 |
 | [`mcpp-integration.md`](mcpp-integration.md) | 与 `mcpp-community/mcpp`（mcpp CLI）的接口契约 | 现状 |
 | [`mcppls-integration.md`](mcppls-integration.md) | 与 `sunrisepeak.mcpp-language-server`（mcppls）的依赖与命令桥接契约 | 现状 |
-
+| [`2026-10-20-module-graph-interaction-performance-design.md`](2026-10-20-module-graph-interaction-performance-design.md) | Modules 根分组、选择/焦点、局部展开、性能、Dependencies 状态与刷新、SVG/PNG 导出 | 0.9.0 实施中 |
+| [`2026-10-20-module-graph-validation.md`](2026-10-20-module-graph-validation.md) | 0.9.0 多视角 review、性能与发布验收记录 | 验证中 |
 
 边界：
 

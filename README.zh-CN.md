@@ -21,6 +21,8 @@ C++ 模块语义——诊断、补全、悬停、定义、引用、模块图—�
 | [mcpp-language-server](https://github.com/Sunrisepeak/mcpp-language-server) | C++ Modules 语言服务；本扩展的硬依赖 | [Marketplace](https://marketplace.visualstudio.com/items?itemName=sunrisepeak.mcpp-language-server) · [Open VSX](https://open-vsx.org/extension/sunrisepeak/mcpp-language-server) |
 | mcpp-vscode（本扩展） | VS Code 前端 | [Marketplace](https://marketplace.visualstudio.com/items?itemName=mcpp-community.mcpp-vscode) · [Open VSX](https://open-vsx.org/extension/mcpp-community/mcpp-vscode) · [Releases](https://github.com/mcpp-community/mcpp-vscode/releases) |
 
+模块入口分组、父节点深度、局部展开、刷新和 SVG/PNG 导出见 [依赖图使用说明](docs/dependency-graphs.md)。
+
 ## 安装
 
 三个渠道装到的是同一个扩展：
@@ -71,8 +73,8 @@ C++ 模块语义——诊断、补全、悬停、定义、引用、模块图—�
 不会碰你自己的）。
 
 发布：把 `package.json` 与 `package-lock.json` 的版本号改好并提交，推送与版本完全一致的
-tag。工作流会跑测试、打包同一只 VSIX，并把它发到 GitHub Releases 与 Open VSX——Marketplace
-在配置了 token 时同样自动发布。
+tag。工作流会跑测试、打包同一只 VSIX，并发布到 GitHub Releases 与 Open VSX。官方 Marketplace
+使用 Release 中的同一 VSIX 手动上传。
 
 ## 许可证
 

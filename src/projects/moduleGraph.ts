@@ -23,12 +23,18 @@ export function sourcePath(root: string, file: string): string {
   return file.startsWith("file:") ? fileURLToPath(file) : path.resolve(root, file);
 }
 /** Read entry configuration only; C++ syntax and module resolution remain owned by mcppls. */
-export function moduleEntries(root: string, manifest: string, packageName: string): Map<string, string> {
-  const entries = new Map<string, string>();
+export interface ModuleEntries extends Map<string, string> { roles: Map<string, "main" | "library" | "test">; }
+export function moduleEntries(root: string, manifest: string, packageName: string, candidates: readonly string[] = []): ModuleEntries {
+  const entries = new Map<string, string>() as ModuleEntries; entries.roles = new Map();
+  let explicitLib = false;
+  const add = (file: string, label: string, role: "main" | "library" | "test"): void => {
+    const previous = entries.get(file);
+    entries.set(file, previous && previous !== label ? `${previous} / ${label}` : label); entries.roles.set(file, role);
+  };
   let hasTargets = false;
   let section: string[] = [], target: string | undefined, kind: string | undefined, main: string | undefined;
   const flush = (): void => {
-    if (target && (!kind || kind === "bin")) { entries.set(path.resolve(root, main ?? "src/main.cpp"), target); }
+    if (target && (!kind || kind === "bin")) { add(path.resolve(root, main ?? "src/main.cpp"), target, "main"); }
     target = kind = main = undefined;
   };
   for (const node of parseMcppToml(manifest.split(/\r?\n/)).nodes) {
@@ -37,15 +43,49 @@ export function moduleEntries(root: string, manifest: string, packageName: strin
       if (section.length === 2 && section[0] === "targets") { target = section[1]; hasTargets = true; }
     } else if (node.value?.kind === "string") {
       const key = node.keyPath.map(part => part.name).join(".");
-      if (section.length === 1 && section[0] === "lib" && key === "path") { entries.set(path.resolve(root, node.value.text!), "lib"); }
+      if (section.length === 1 && section[0] === "lib" && key === "path") { explicitLib = true; add(path.resolve(root, node.value.text!), "lib", "library"); }
       if (target && key === "kind") { kind = node.value.text; }
       if (target && key === "main") { main = node.value.text; }
     }
   }
   flush();
-  if (![...entries.values()].includes("lib")) { entries.set(path.resolve(root, `src/${packageName.split(".").at(-1)}.cppm`), "lib · default"); }
-  if (!hasTargets) { entries.set(path.resolve(root, "src/main.cpp"), "default"); }
+  if (!explicitLib) { add(path.resolve(root, `src/${packageName.split(".").at(-1)}.cppm`), "lib · default", "library"); }
+  if (!hasTargets) { add(path.resolve(root, "src/main.cpp"), "default", "main"); }
+  const patterns = testDiscovery(manifest);
+  for (const file of candidates) {
+    const relative = path.relative(root, file).split(path.sep).join("/");
+    if (isTestSource(relative, patterns)) { add(file, "test · configuration", "test"); }
+  }
   return entries;
+}
+
+/** mcpp path-glob vocabulary: * stays within a segment; ** crosses segments. */
+export function matchesSourceGlob(relative: string, pattern: string): boolean {
+  let expression = "^";
+  for (let i = 0; i < pattern.length; i++) {
+    if (pattern[i] === "*" && pattern[i + 1] === "*") {
+      expression += ".*"; i++; if (pattern[i + 1] === "/") { i++; }
+    } else if (pattern[i] === "*") { expression += "[^/]*"; }
+    else { expression += pattern[i].replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+  }
+  return new RegExp(expression + "$").test(relative);
+}
+export function testDiscovery(manifest: string): string[] {
+  let section = "";
+  for (const node of parseMcppToml(manifest.split(/\r?\n/)).nodes) {
+    if (node.type === "section") { section = node.segments.map(segment => segment.name).join("."); }
+    else if (section === "test" && node.keyPath.map(part => part.name).join(".") === "discover") {
+      if (node.value?.kind !== "array" || node.value.open || node.value.elements?.some(value => value.kind !== "string" || !value.text)) {
+        throw new Error("Invalid test discovery patterns");
+      }
+      return node.value.elements?.map(value => value.text!) ?? [];
+    }
+  }
+  return ["tests/**/*.cpp"];
+}
+export function isTestSource(relative: string, patterns: readonly string[]): boolean {
+  return !relative.startsWith("../") && patterns.some(pattern => !pattern.startsWith("!") && matchesSourceGlob(relative, pattern))
+    && !patterns.some(pattern => pattern.startsWith("!") && matchesSourceGlob(relative, pattern.slice(1)));
 }
 
 /** Map already-resolved source paths to project ownership, including nested path packages. */
@@ -87,13 +127,14 @@ export function buildModuleGraph(root: string, raw: ModuleGraphJson, owned: Read
     nodes.set(edge.from, { id: edge.from, label: path.relative(root, file), lines: [entry ? `entry · ${entry}` : "source"], kind: "project", files: [file], entry: !!entry });
     internal.add(edge.from);
   }
+  const representedFiles = new Set([...nodes.values()].flatMap(node => node.files ?? []));
   for (const [file, entry] of entries) {
-    if (!owned.has(file) || [...nodes.values()].some(node => node.files?.includes(file))) { continue; }
+    if (!owned.has(file) || representedFiles.has(file)) { continue; }
     const id = path.relative(root, file);
     nodes.set(id, { id, label: id, lines: [`entry · ${entry}`], kind: "project", files: [file], entry: true });
     internal.add(id);
   }
-  const edges = raw.imports.filter(edge => internal.has(edge.from)).map(edge => ({ from: edge.from, to: edge.to, label: "import" }));
+  const edges = raw.imports.filter(edge => internal.has(edge.from)).map(edge => ({ from: edge.from, to: edge.to }));
   for (const edge of edges) { if (!nodes.has(edge.to)) { nodes.set(edge.to, { id: edge.to, label: edge.to, lines: ["unavailable"], kind: "unknown" }); } }
   const needed = new Set([...internal, ...edges.map(edge => edge.to)]);
   const retained = [...nodes.values()].filter(node => needed.has(node.id));
@@ -101,5 +142,17 @@ export function buildModuleGraph(root: string, raw: ModuleGraphJson, owned: Read
   const counts = new Map<string, Set<string>>();
   for (const edge of edges) { const targets = counts.get(edge.from) ?? new Set(); targets.add(edge.to); counts.set(edge.from, targets); }
   for (const node of retained) { node.lines.push(`imports ${counts.get(node.id)?.size ?? 0}`); }
-  return { nodes: retained, edges, roots: graphRoots(retained, edges, retained.filter(node => node.entry).map(node => node.id)), truncated: !!raw.truncated || !!raw.snapshot?.indexing || !!raw.snapshot?.preparing };
+  const buckets = new Map<string, string[]>([["Main", []], ["Library", []], ["Tests", []], ["Other", []]]);
+  for (const node of retained) {
+    const entry = node.files?.map(file => entries.get(file)).find(Boolean);
+    if (entry) {
+      const role = node.files?.map(file => (entries as Partial<ModuleEntries>).roles?.get(file)).find(Boolean);
+      buckets.get(role === "test" || (!role && entry.startsWith("test ·")) ? "Tests" : role === "library" || (!role && (entry === "lib" || entry === "lib · default")) ? "Library" : "Main")!.push(node.id);
+    }
+  }
+  const roots = graphRoots(retained, edges, retained.filter(node => node.entry).map(node => node.id));
+  const classified = new Set([...buckets.values()].flat());
+  buckets.set("Other", roots.filter(id => !classified.has(id)));
+  const groups = [...buckets].filter(([, ids]) => ids.length).map(([label, ids]) => ({ id: `@group/${label.toLowerCase()}`, label, nodes: ids.sort() }));
+  return { nodes: retained, edges, roots, groups, truncated: !!raw.truncated || !!raw.snapshot?.indexing || !!raw.snapshot?.preparing };
 }

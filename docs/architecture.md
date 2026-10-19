@@ -128,3 +128,7 @@ mismatch, an untranslated runtime string or a stale snapshot fails before any te
 
 `docs/` is excluded from the VSIX by `.vscodeignore`, so these links work on GitHub and in the
 repository but not inside an installed extension.
+
+## Graph canvas
+
+Graph providers retain data separately from bounded visible projections. Entry grouping, two-way traversal and local folds live in `src/graphs/model.ts`; file/build events use a cancellable refresh coordinator. The canvas caches layouts and keeps camera/selection updates independent. SVG/PNG exports use the committed visible drawing. See [Dependency graphs](dependency-graphs.md).

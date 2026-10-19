@@ -10,6 +10,7 @@ export interface ProcessResult {
 }
 
 export interface ProcessRunOptions {
+  signal?: AbortSignal;
   timeoutMs?: number;
   /** `mcpp.runtime.maxOutputMiB`; the default matches what the extension shipped before it was configurable. */
   maxBufferMiB?: number;
@@ -68,6 +69,7 @@ export async function runProcess(
         encoding: "utf8",
         maxBuffer: Math.max(1, options.maxBufferMiB ?? 16) * 1024 * 1024,
         timeout: options.timeoutMs,
+        signal: options.signal,
         ...(needsShell ? { shell: true } : {}),
       },
     );

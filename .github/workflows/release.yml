@@ -84,10 +84,8 @@ jobs:
               --generate-notes
           fi
 
-      # 两个市场收到的都是刚上传给 GitHub Release 的同一只 VSIX（SHA-256 对得上）。
-      # 分工是作者定的：Open VSX 是本流水线的必发目标——缺 token 显式失败，不静默跳过；
-      # Marketplace 机会发布——没配 token 就打一行说明跳过，Release 本身不因此失败。
-      # secret 名即仓库已配置的 OPENVSX_TOKEN；--pat 显式传入，不依赖 CLI 的环境变量约定。
+      # Open VSX receives the exact VSIX attached to the GitHub Release.
+      # Marketplace upload uses that same artifact through the publisher portal.
       - name: 发布到 Open VSX
         shell: bash
         env:
@@ -102,14 +100,6 @@ jobs:
           fi
           npx ovsx publish "mcpp-vscode-${PACKAGE_VERSION}.vsix" --pat "$OPENVSX_TOKEN"
 
-      - name: 发布到 Visual Studio Marketplace（未配置 token 则跳过）
-        shell: bash
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: |
-          set -euo pipefail
-          if [ -z "${VSCE_PAT:-}" ]; then
-            echo "未配置 VSCE_PAT：跳过 Marketplace 发布（Open VSX 与 GitHub Release 不受影响）。"
-            exit 0
-          fi
-          npx vsce publish --packagePath "mcpp-vscode-${PACKAGE_VERSION}.vsix"
+      # The signed-off VSIX is uploaded manually to Visual Studio Marketplace.
+      - name: Marketplace upload artifact
+        run: echo "Upload the GitHub Release VSIX manually to Visual Studio Marketplace."

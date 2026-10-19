@@ -1,5 +1,14 @@
 ## Unreleased
 
+## 0.9.0 - 2026-10-20
+
+- Group module entries into Main, Library, Tests and Other, with paged test entries and a connected default view for large projects.
+- Separate selection, focus and camera navigation: click to select, double-click to open source, locate either selection or focus, and explore two importer levels alongside three dependency levels. Local expansion advances repeatedly and preserves shared branches.
+- Coalesce graph refresh events, cancel obsolete queries, reuse unchanged layouts and pause hidden graph work. Preserve dependency rows through transient manifest failures and show a status line when no declarations are available.
+- Keep entry/search controls visible and group export formats, view settings and node actions into compact menus.
+- Export the visible graph as offline SVG or bounded PNG without expanding or querying the full project. Add Chromium coverage for graph interaction, layout reuse and exports.
+- Release VSIX remains available on GitHub and Open VSX; Visual Studio Marketplace upload is manual.
+
 ## 0.8.0 - 2026-10-19
 
 - Package details use the available editor width on fullscreen displays, with bounded side gutters and a compact metadata column.

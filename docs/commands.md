@@ -129,3 +129,7 @@ title.
   `src/cli/controller.ts` and is shown only while a project is found.
 - `mcpp.internal.refreshProjectView` is registered by the project view but is **not**
   contributed, so it never appears in the palette.
+
+## Project graph navigation
+
+The project package/module graph canvas supports independent selection and focus, importer depth, entry groups and SVG/PNG export. See [Dependency graphs](dependency-graphs.md). Existing forwarded mcppls graph commands remain separate.

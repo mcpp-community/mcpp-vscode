@@ -230,3 +230,22 @@ jobs:
           VERSION=$(printf '%s\n' "$LIST" | sed -n 's/^sunrisepeak\.mcpp-language-server@//p')
           echo "resolved mcppls $VERSION"
           echo "resolved mcppls \`$VERSION\`" >> "$GITHUB_STEP_SUMMARY"
+
+  graph-browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Render and interact with the shipped graph in Chromium
+        run: npm run test:graphs-ui
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: graph-browser-evidence
+          path: .dev-profile/graph-ui-artifacts
+          if-no-files-found: warn

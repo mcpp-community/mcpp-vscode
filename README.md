@@ -21,6 +21,8 @@ its own and only **forwards** to it ([docs/architecture.md](docs/architecture.md
 | [mcpp-language-server](https://github.com/Sunrisepeak/mcpp-language-server) | The C++ Modules language service; a hard dependency of this extension | [Marketplace](https://marketplace.visualstudio.com/items?itemName=sunrisepeak.mcpp-language-server) · [Open VSX](https://open-vsx.org/extension/sunrisepeak/mcpp-language-server) |
 | mcpp-vscode (this extension) | The VS Code front end | [Marketplace](https://marketplace.visualstudio.com/items?itemName=mcpp-community.mcpp-vscode) · [Open VSX](https://open-vsx.org/extension/mcpp-community/mcpp-vscode) · [Releases](https://github.com/mcpp-community/mcpp-vscode/releases) |
 
+See [dependency graph navigation and exports](docs/dependency-graphs.md) for entry groups, importer depth, refresh behavior and SVG/PNG export.
+
 ## Install
 
 Any of the three channels installs the same extension:
@@ -73,8 +75,7 @@ that never touches your real one.
 
 Release: bump the version in `package.json` and `package-lock.json`, commit, and push a tag
 matching the version exactly. The workflow runs the tests, packages one VSIX, and publishes that
-same artifact to GitHub Releases and Open VSX — and to the Marketplace when its token is
-configured.
+same artifact to GitHub Releases and Open VSX. Upload that VSIX manually through the Visual Studio Marketplace publisher portal.
 
 ## License
 

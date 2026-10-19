@@ -56,7 +56,7 @@ test("the project view is two labelled sections: commands open, basics folded", 
     targets: [{ name: "greet", kind: "bin" }],
     sourceFiles: 87,
   });
-  assert.deepEqual(ids(tree), ["project.section.basic", "project.section.commands"]);
+  assert.deepEqual(ids(tree), ["project.section.basic", "project.dependencies", "project.section.commands"]);
   assert.equal(find(tree, "project.section.basic")?.label.key, "Basics");
   assert.equal(find(tree, "project.section.commands")?.label.key, "Common commands");
   // The sidebar opens on what can be *done*; 「基本信息」 is one click away.
@@ -90,10 +90,10 @@ test("a project without a toolchain says host default rather than inventing one"
   assert.equal(find(tree, "project.target"), undefined);
 });
 
-test("a project with no declared dependency has no dependency group", () => {
-  assert.equal(find(buildProjectTree({ root: "/w" }), "project.dependencies"), undefined);
-  assert.equal(
-    find(buildProjectTree({ root: "/w", dependencies: [] }), "project.dependencies"),
-    undefined,
-  );
+test("a project with no declared dependency keeps one non-collapsible status row", () => {
+  for (const dependencies of [undefined, []]) {
+    const row = find(buildProjectTree({ root: "/w", dependencies }), "project.dependencies");
+    assert.equal(row?.label.key, "This project declares no dependencies");
+    assert.equal(row?.children, undefined);
+  }
 });
