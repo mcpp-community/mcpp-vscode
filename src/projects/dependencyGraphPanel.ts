@@ -209,11 +209,11 @@ export function registerDependencyGraph(context: vscode.ExtensionContext, projec
     if (value.action === "overview" || value.action === "group") {
       remember(); current.focus = undefined;
       current.group = typeof value.group === "string" && current.graph.groups?.some(group => group.id === value.group) ? value.group : undefined;
-      current.offset = 0; await publish(false, true); return;
+      current.offset = 0; current.selected = current.group; await publish(false, true); return;
     }
     if (value.action === "page") {
       const group = current.graph.groups?.find(group => group.id === current!.group);
-      if (group) { current.offset = Math.max(0, Math.min(Math.floor((group.nodes.length - 1) / 20) * 20, current.offset + (value.next ? 20 : -20))); await publish(false, true); } return;
+      if (group) { current.offset = Math.max(0, Math.min(Math.floor((group.nodes.length - 1) / 20) * 20, current.offset + (value.next ? 20 : -20))); current.selected = current.group; await publish(false, true); } return;
     }
     if (value.action === "export") {
       const payload = decodeGraphExport(value.format, value.data);
@@ -223,7 +223,7 @@ export function registerDependencyGraph(context: vscode.ExtensionContext, projec
     const id = typeof value.id === "string" ? value.id : undefined;
     if (!id) { return; }
     if (current.graph.groups?.some(group => group.id === id)) {
-      if (["focus", "expand", "open"].includes(String(value.action))) { remember(); current.focus = undefined; current.group = id; current.offset = 0; await publish(false, true); }
+      if (["focus", "expand", "open"].includes(String(value.action))) { remember(); current.focus = undefined; current.group = id; current.offset = 0; current.selected = id; await publish(false, true); }
       return;
     }
     if (!current.graph.nodes.some(node => node.id === id)) { return; }

@@ -111,6 +111,17 @@ try {
   const grouped=visibleGraph(groupedGraph(wide,'@group/tests',20),{depth:1,upstreamDepth:2,expanded:new Set(),collapsed:new Set()},INITIAL_GRAPH_BUDGET);
   assert.equal(grouped.edges.filter(edge=>edge.containment).length,20); assert.ok(grouped.edges.some(edge=>edge.to==='dep'));
   checks.push('151 test entries page without starving dependencies');
+  await emit({type:'snapshot',viewKey:'modules:groups',search:wide.nodes,groups:wide.groups});
+  await emit({type:'graph',viewKey:'modules:groups',mode:'modules',name:'test entries',depth:'1',upstreamDepth:'2',group:'@group/tests',offset:20,
+    ...mermaidGraph(grouped),nodes:grouped.nodes.map(node=>({id:node.id,label:node.label,virtual:!!node.virtual,hidden:grouped.hidden.get(node.id)||0})),selected:'@group/tests'});
+  await page.waitForSelector('.node[data-node-key="@group/tests"]');
+  await page.locator('#graph-node-menu summary').click();
+  assert.equal(await page.locator('[data-action="open"]').isDisabled(),true);
+  assert.equal(await page.locator('[data-action="expandParents"]').isDisabled(),true);
+  assert.equal(await page.locator('[data-action="expand"]').isDisabled(),false);
+  await page.keyboard.press('Escape');
+  checks.push('virtual entry groups offer applicable node actions and correct paging');
+
   assert.deepEqual(errors,[]);
   await page.screenshot({path:path.join(artifacts,'canvas.png')});
   const report={checks,renderMs:await page.evaluate(()=>renders)};

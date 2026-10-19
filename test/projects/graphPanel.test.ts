@@ -18,6 +18,8 @@ test("real graph host coalesces file events, ignores lock-only events, defers hi
   for (const root of roots) {
     await mkdir(path.join(root, "src"), {recursive:true});
     await writeFile(path.join(root, "mcpp.toml"), `[package]\nname="${path.basename(root)}"\n`);
+    await mkdir(path.join(root, "tests"));
+    await Promise.all(Array.from({length:25},(_,i)=>writeFile(path.join(root,`tests/test${i}.cpp`), "int main(){}\n")));
     await writeFile(path.join(root, "src/main.cpp"), "int main(){}\n");
     await writeFile(path.join(root, "src/lib.cppm"), "export module app;\n");
   }
@@ -37,8 +39,8 @@ test("real graph host coalesces file events, ignores lock-only events, defers hi
   const vscode = {
     Uri:{file:uri,parse:uri,joinPath:(base: any,...parts: string[])=>uri(path.join(base.fsPath,...parts))},
     EventEmitter:class{event=()=>disposable;fire(){}dispose(){}},
-    RelativePattern:class{},ViewColumn:{Active:1,Beside:2},
-    workspace:{isTrusted:true,findFiles:async()=>[],registerTextDocumentContentProvider:()=>disposable,
+    RelativePattern:class{constructor(public root: string,public pattern: string){}},ViewColumn:{Active:1,Beside:2},
+    workspace:{isTrusted:true,findFiles:async(pattern: {root: string})=>Array.from({length:25},(_,i)=>uri(path.join(pattern.root,`tests/test${i}.cpp`))),registerTextDocumentContentProvider:()=>disposable,
       createFileSystemWatcher:()=>({dispose(){},onDidChange(listener: (uri: any)=>void){fileEvents.push(listener);return disposable;},onDidCreate:()=>disposable,onDidDelete:()=>disposable})},
     window:{createWebviewPanel:()=>panel,showInformationMessage(){},showErrorMessage(error: string){throw new Error(error);}},
     extensions:{getExtension:()=>undefined},tasks:{onDidEndTaskProcess:()=>disposable},
@@ -65,6 +67,11 @@ test("real graph host coalesces file events, ignores lock-only events, defers hi
     assert.equal(messages.find(message=>message.type==="graph")?.center,false,"initial view keeps Fit instead of centering the root");
     const viewKey=`modules:${roots[0]}`;
     receive({type:"action",action:"select",viewKey,id:"app.a"});await tick();assert.equal(queries,1);
+    receive({type:"action",action:"group",viewKey,group:"@group/tests"});await tick();
+    assert.equal(messages.filter(message=>message.type==="graph").at(-1)?.selected,"@group/tests");
+    receive({type:"action",action:"select",viewKey,id:"tests/test0.cpp"});
+    receive({type:"action",action:"page",viewKey,next:true});await tick();
+    assert.equal(messages.filter(message=>message.type==="graph").at(-1)?.selected,"@group/tests","paging clears a selection from the previous page");
     for(let i=0;i<100;i++)fileEvents[0](uri(path.join(roots[0],"src/lib.cppm")));
     await until(()=>queries===2);await tick(300);assert.equal(queries,2);
     fileEvents[0](uri(path.join(roots[0],"mcpp.lock")));await tick(250);assert.equal(queries,2);

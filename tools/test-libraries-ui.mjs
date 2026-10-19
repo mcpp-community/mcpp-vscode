@@ -518,6 +518,23 @@ try {
     assert.equal(await transform(),before,'module viewport survives view switch');
     await page.screenshot({path:path.join(artifacts,'module-source-readonly.png')});
   });
+  await check('module source dependency status refreshes without hiding or clearing usable rows', async()=>{
+    const graph=await frameWith('#graph');
+    await graph.locator('[data-mode=packages]').click();
+    await eventually(()=>graph.locator('[data-mode=packages]').getAttribute('aria-pressed'),state=>state==='true','package mode for dependency state');
+    const manifest=path.join(scratch,'module-project/mcpp.toml'), original=await fs.readFile(manifest,'utf8');
+    const dependencyGroup=()=>page.getByRole('treeitem').filter({hasText:'Dependencies (1)'});
+    try {
+      await fs.writeFile(manifest,original.replace(/\[dependencies\][\s\S]*$/,''));
+      const empty=page.getByRole('treeitem',{name:'This project declares no dependencies',exact:true});
+      await empty.waitFor();assert.equal(await empty.getAttribute('aria-expanded'),null,'empty dependency status is one plain row');
+      await fs.writeFile(manifest,original);await dependencyGroup().waitFor();
+      await fs.writeFile(manifest,original+'\n[dev-dependencies]\nincomplete=');
+      await eventually(()=>dependencyGroup().innerText(),text=>text.includes('Refresh pending'),'last dependencies preserved during incomplete manifest');
+      await page.screenshot({path:path.join(artifacts,'dependency-state-stale.png')});
+    } finally { await fs.writeFile(manifest,original); }
+    await eventually(()=>dependencyGroup().innerText(),text=>!text.includes('Refresh pending'),'dependencies recover automatically');
+  });
   if (process.env.MCPP_UI_REAL_PROJECT) await check('real mcppls modules graph navigates the large project and pages tests', async()=>{
     const realRoot=path.resolve(process.env.MCPP_UI_REAL_PROJECT);
     run(code, ['--extensions-dir', extensions, '--user-data-dir', userData, '--add', realRoot]);

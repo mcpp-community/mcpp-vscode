@@ -45,8 +45,9 @@
     document.getElementById('selected-node').textContent = item ? `${labels.selectedPrefix}: ${item.label}` : labels.selected;
     document.getElementById('selected-node').hidden = !!data?.focus && id === data.focus;
     document.getElementById('graph-node-menu').querySelector('summary').setAttribute('aria-disabled', String(!id || busy));
+    document.getElementById('focus-node').hidden = !data?.focus;
     document.getElementById('focus-node').textContent = `${labels.focus}: ${snapshot().search.find(node => node.id === data?.focus)?.label || labels.group}`;
-    for (const button of document.querySelectorAll('.graph-selection button')) button.disabled = !id || busy || (button.dataset.action === 'open' && item?.virtual);
+    for (const button of document.querySelectorAll('.graph-selection button')) button.disabled = !id || busy || (item?.virtual && ['open','collapse','expandParents','collapseParents'].includes(button.dataset.action));
     if (center) locate(id);
   }
   function choose(id) { selectNode(id); send('select', { id }); }
