@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
-import { buildModuleGraph, moduleEntries, moduleOwnership, parseModuleGraph, type ModuleGraphJson } from "../../src/projects/moduleGraph";
+import { matchesSourceGlob, testCandidateGlob, buildModuleGraph, moduleEntries, moduleOwnership, parseModuleGraph, type ModuleGraphJson } from "../../src/projects/moduleGraph";
 import { visibleGraph } from "../../src/graphs/model";
 
 const root = path.resolve("workspace/app");
@@ -65,4 +65,16 @@ test("target names do not determine library roles and shared main files preserve
   assert.match(entries.get(path.join(root,"src/start.cpp"))!, /library-tool.*second/);
   const graph = buildModuleGraph(root, {modules:[],imports:[]}, new Set([path.join(root,"src/start.cpp")]), entries);
   assert.deepEqual(graph.groups?.map(group => group.label), ["Main"]);
+});
+
+test("mcpp glob matching is bounded and candidates include character-based double-star matches", () => {
+  assert.equal(matchesSourceGlob("tests/not-test.cpp", "tests/**/test.cpp"),true);
+  assert.equal(matchesSourceGlob("tests/nested/test.cpp", "tests/*.cpp"),false);
+  assert.equal(matchesSourceGlob("tests/test.cpp", "tests/**/*.cpp"),true);
+  assert.equal(matchesSourceGlob("a".repeat(1000), "**".repeat(100)+"b"),false);
+  assert.equal(testCandidateGlob("tests/**/test.cpp"),"tests/**/*");
+  assert.equal(testCandidateGlob("checks/a*.cc"),"checks/**/*");
+  assert.equal(testCandidateGlob("check.cpp"),"check.cpp");
+  assert.equal(testCandidateGlob("checks/test[1].cpp"),"checks/**/*");
+  assert.equal(matchesSourceGlob("checks/test[1].cpp","checks/test[1].cpp"),true);
 });

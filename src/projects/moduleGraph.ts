@@ -61,14 +61,31 @@ export function moduleEntries(root: string, manifest: string, packageName: strin
 
 /** mcpp path-glob vocabulary: * stays within a segment; ** crosses segments. */
 export function matchesSourceGlob(relative: string, pattern: string): boolean {
-  let expression = "^";
+  let positions = new Uint8Array(relative.length + 1); positions[0] = 1;
   for (let i = 0; i < pattern.length; i++) {
-    if (pattern[i] === "*" && pattern[i + 1] === "*") {
-      expression += ".*"; i++; if (pattern[i + 1] === "/") { i++; }
-    } else if (pattern[i] === "*") { expression += "[^/]*"; }
-    else { expression += pattern[i].replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+    const next = new Uint8Array(relative.length + 1);
+    if (pattern[i] === "*") {
+      const across = pattern[i + 1] === "*";
+      if (across) { i++; if (pattern[i + 1] === "/") { i++; } }
+      let reachable = false;
+      for (let at = 0; at <= relative.length; at++) {
+        reachable ||= !!positions[at];
+        if (reachable) { next[at] = 1; }
+        if (!across && relative[at] === "/") { reachable = false; }
+      }
+    } else {
+      for (let at = 0; at < relative.length; at++) { if (positions[at] && relative[at] === pattern[i]) { next[at + 1] = 1; } }
+    }
+    positions = next;
   }
-  return new RegExp(expression + "$").test(relative);
+  return !!positions[relative.length];
+}
+/** Candidate generation must be a superset of mcpp's character-based ** semantics. */
+export function testCandidateGlob(pattern: string): string {
+  const wildcard = pattern.search(/[*?{\[]/);
+  if (wildcard < 0) { return pattern; }
+  const slash = pattern.lastIndexOf("/", wildcard);
+  return (slash < 0 ? "" : pattern.slice(0, slash + 1)) + "**/*";
 }
 export function testDiscovery(manifest: string): string[] {
   let section = "";

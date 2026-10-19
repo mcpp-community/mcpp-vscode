@@ -14,9 +14,10 @@ import { graphPanelHtml } from "../graphs/panelHtml";
 import { groupedGraph, INITIAL_GRAPH_BUDGET, mermaidGraph, visibleGraph, type VisibleGraph, type VisualGraph } from "../graphs/model";
 import { RefreshCoordinator } from "../graphs/refresh";
 import { decodeGraphExport } from "../graphs/export";
+import { assertCompleteManifest } from "./dependencyState";
 import { readProjectSummary } from "./summary";
 import { buildDependencyGraph } from "./dependencyGraph";
-import { buildModuleGraph, moduleEntries, moduleOwnership, sourcePath, testDiscovery, isTestSource } from "./moduleGraph";
+import { buildModuleGraph, moduleEntries, moduleOwnership, sourcePath, testDiscovery, isTestSource, testCandidateGlob } from "./moduleGraph";
 
 interface ViewState {
   root: string; mode: "packages" | "modules"; name: string; graph?: VisualGraph;
@@ -73,6 +74,7 @@ export function registerDependencyGraph(context: vscode.ExtensionContext, projec
       view.metrics.reads++;
       const manifest = await read(path.join(view.root, "mcpp.toml"));
       if (manifest === undefined) { throw new Error(t("The project manifest is missing or unreadable.")); }
+      assertCompleteManifest(manifest);
       view.name = readProjectSummary(view.root, manifest.split(/\r?\n/)).name ?? path.basename(view.root);
       let graph: VisualGraph;
       if (view.mode === "modules") {
@@ -82,9 +84,9 @@ export function registerDependencyGraph(context: vscode.ExtensionContext, projec
         const raw = await queryModuleGraph(vscode.workspace.isTrusted, executable, view.root, undefined, signal);
         const patterns = testDiscovery(manifest);
         const discovered = new Set<string>(); let discoveryLimited = false;
-        for (const pattern of patterns.filter(pattern => !pattern.startsWith("!"))) {
+        for (const pattern of new Set(patterns.filter(pattern => !pattern.startsWith("!")).map(testCandidateGlob))) {
           // Search is only a candidate generator; the pure mcpp matcher decides membership.
-          const candidates = await vscode.workspace.findFiles(new vscode.RelativePattern(view.root, pattern), "**/{.git,.mcpp,node_modules,build}/**", 10000, signal ? { isCancellationRequested: signal.aborted, onCancellationRequested: listener => { const abort = () => listener(undefined); signal.addEventListener("abort", abort); return { dispose: () => signal.removeEventListener("abort", abort) }; } } : undefined);
+          const candidates = await vscode.workspace.findFiles(new vscode.RelativePattern(view.root, pattern), "**/{.git,.mcpp,node_modules,build,target}/**", 10000, signal ? { isCancellationRequested: signal.aborted, onCancellationRequested: listener => { const abort = () => listener(undefined); signal.addEventListener("abort", abort); return { dispose: () => signal.removeEventListener("abort", abort) }; } } : undefined);
           discoveryLimited ||= candidates.length >= 10000;
           for (const file of candidates) { if (isTestSource(path.relative(view.root, file.fsPath).split(path.sep).join("/"), patterns)) { discovered.add(file.fsPath); } }
         }
