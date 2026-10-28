@@ -6,6 +6,13 @@
 
 English | [简体中文](README.zh-CN.md)
 
+> **This repository is superseded by [mcpp-ide](https://github.com/mcpp-community/mcpp-ide).**
+> The extension keeps its identity (`mcpp-community.mcpp-vscode`) and is built from
+> [mcpp-ide/vscode](https://github.com/mcpp-community/mcpp-ide/tree/main/vscode) from version 1.0.0 on:
+> one backend, `mcpp-ide serve`, answers VS Code and CLion alike, and the extension carries it as one
+> ok-image bundle for every system. Issues and pull requests belong there; 0.9.0 is the last release
+> built from this repository, which is kept read-only for its history.
+
 The VS Code front end for the [mcpp](https://github.com/mcpp-community/mcpp) C++23 build tool:
 project discovery, `mcpp build` / `run` / `test` / `clean` as VS Code tasks, toolchain management,
 `mcpp.toml` and `build.mcpp` editing help, the package library view, and cache views with graded

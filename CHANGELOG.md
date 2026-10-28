@@ -1,5 +1,8 @@
 ## Unreleased
 
+- The extension moves to [mcpp-ide](https://github.com/mcpp-community/mcpp-ide), which builds it
+  under the same identity from 1.0.0 on; this repository is kept read-only.
+
 ## 0.9.0 - 2026-10-20
 
 - Node operations use a keyboard-accessible right-click menu. Refresh/Export use theme colors, aligned chevrons and matching control heights; depth selectors align in View options.

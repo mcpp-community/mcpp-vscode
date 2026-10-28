@@ -6,6 +6,12 @@
 
 [English](README.md) | 简体中文
 
+> **本仓库由 [mcpp-ide](https://github.com/mcpp-community/mcpp-ide) 取代。**
+> 扩展保持原有标识（`mcpp-community.mcpp-vscode`），自 1.0.0 起由
+> [mcpp-ide/vscode](https://github.com/mcpp-community/mcpp-ide/tree/main/vscode) 构建：一个后端
+> `mcpp-ide serve` 同时服务 VS Code 与 CLion，扩展以一个 ok 映像包携带它，服务所有系统。问题与合并请求请提交到
+> 该仓库；0.9.0 是本仓库构建的最后一个版本，本仓库保留为只读历史。
+
 [mcpp](https://github.com/mcpp-community/mcpp)（C++23 构建工具）的 VS Code 前端：发现 mcpp
 工程，把 `mcpp build` / `run` / `test` / `clean` 作为 VS Code 任务运行，管理工具链，为
 `mcpp.toml` 与 `build.mcpp` 提供编辑帮助，浏览包库生态，并展示构建缓存的占用与分级清理。
