@@ -1,3 +1,7 @@
+
+
+# [ --> mcpp-ide ](https://github.com/mcpp-community/mcpp-ide)
+
 <p align="center">
   <img src="media/logo.png" width="160" alt="mcpp logo">
 </p>
